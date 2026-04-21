@@ -1,0 +1,25 @@
+System:
+  name: conveyor_handoff
+  plcs:
+    - id: plc_a
+      role: upstream
+    - id: plc_b
+      role: downstream
+  comm: modbus_tcp
+
+Plant:
+  belt_speed: 0.5m/s
+  sensor_trigger_threshold: 0.1m
+  actuator_latency: 50ms
+
+Behavior:
+  plc_a:
+    owns: [belt_a, sensor_a_exit]
+    on: part_detected_at_exit -> signal_handoff
+  plc_b:
+    owns: [belt_b, sensor_b_entry]
+    on: handoff_signal -> enable_belt_b
+
+Assertions:
+  - EVENTUALLY(part_at_b, within: 500ms)
+  - PRECEDES(handoff_signal, belt_b_enable)
