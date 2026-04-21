@@ -15,11 +15,11 @@ Plant:
 Behavior:
   plc_a:
     owns: [belt_a, sensor_a_exit]
-    on: part_detected_at_exit -> signal_handoff
+    "on": part_detected_at_exit -> signal_handoff
   plc_b:
     owns: [belt_b, sensor_b_entry]
-    on: handoff_signal -> enable_belt_b
+    "on": handoff_signal -> enable_belt_b
 
 Assertions:
-  - EVENTUALLY(part_at_b, within: 500ms)
-  - PRECEDES(handoff_signal, belt_b_enable)
+  - "EVENTUALLY(part_at_b, within: 500ms)"
+  - "PRECEDES(handoff_signal, belt_b_enable)"

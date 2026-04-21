@@ -32,11 +32,18 @@ def evaluate_assertion(assertion: str, trace: TraceLog) -> AssertionResult:
     return AssertionResult(assertion=assertion, passed=False, reason=f"unrecognized assertion form: {assertion}")
 
 
+def _signal_value(record, name: str):
+    out = record.outputs.get(name)
+    if out:
+        return out
+    return record.io.get(name)
+
+
 def _check_eventually(
     assertion: str, signal_name: str, within_ms: float, trace: TraceLog
 ) -> AssertionResult:
     for record in trace.records:
-        value = record.outputs.get(signal_name)
+        value = _signal_value(record, signal_name)
         if value and record.clock.elapsed_ms <= within_ms:
             return AssertionResult(assertion=assertion, passed=True, reason=f"signal '{signal_name}' true at {record.clock.elapsed_ms:.1f}ms")
     return AssertionResult(
@@ -53,9 +60,9 @@ def _check_precedes(
     second_ms: float | None = None
 
     for record in trace.records:
-        if first_ms is None and record.outputs.get(first):
+        if first_ms is None and _signal_value(record, first):
             first_ms = record.clock.elapsed_ms
-        if second_ms is None and record.outputs.get(second):
+        if second_ms is None and _signal_value(record, second):
             second_ms = record.clock.elapsed_ms
 
     if first_ms is None:

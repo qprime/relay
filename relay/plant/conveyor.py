@@ -36,7 +36,6 @@ class PlantState:
 @dataclass(frozen=True)
 class PlantOutputs:
     sensor_a_exit_triggered: bool
-    sensor_b_entry_triggered: bool
     part_at_b: bool
 
 
@@ -93,12 +92,10 @@ class ConveyorPlant:
         sensor_a_exit = (
             abs(new_pos - self.BELT_A_LENGTH_M) < self._config.sensor_trigger_threshold_m
         )
-        sensor_b_entry = on_belt_b and new_pos < self.BELT_B_START_M + self._config.sensor_trigger_threshold_m
         part_at_b = on_belt_b
 
         return PlantOutputs(
             sensor_a_exit_triggered=sensor_a_exit,
-            sensor_b_entry_triggered=sensor_b_entry,
             part_at_b=part_at_b,
         )
 

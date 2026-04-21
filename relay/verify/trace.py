@@ -1,16 +1,19 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from relay.runtime.clock import SimClock
+
+if TYPE_CHECKING:
+    from relay.runtime.plc import IOImage
 
 
 @dataclass(frozen=True)
 class ScanRecord:
     plc_id: str
     clock: SimClock
-    io: Any
-    outputs: Any
+    io: "IOImage"
+    outputs: "IOImage"
 
 
 @dataclass

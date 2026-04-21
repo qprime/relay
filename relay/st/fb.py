@@ -27,14 +27,8 @@ class FunctionBlock:
 
         execute(self.source, self._ctx, dt_ms)
 
-        new_io = io
-        for key, value in self._ctx.variables.items():
-            new_io = new_io.with_value(key, value)
+        outputs = IOImage.empty()
+        for key in self._ctx.assigned:
+            outputs = outputs.with_value(key, self._ctx.variables[key])
 
-        outgoing: list[tuple[str, str, Any]] = []
-        pending_out = self._ctx.get("_outgoing")
-        if isinstance(pending_out, list):
-            outgoing = pending_out
-            self._ctx.set("_outgoing", [])
-
-        return new_io, outgoing
+        return outputs, []
