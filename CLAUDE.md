@@ -129,7 +129,15 @@ docs/invariants/     # Subsystem invariants
 
 ## Invariants
 
-See `docs/invariants/` for project invariants.
+Project-level structural rules live in `docs/invariants/`. Check the index in `docs/invariants/README.md` before modifying subsystems they cover.
+
+| File | Scope | Summary |
+|------|-------|---------|
+| [pluggable_subsystems.md](docs/invariants/pluggable_subsystems.md) | framework-wide | Pluggable subsystems use `Protocol` + registry, selected by explicit task-spec field |
+| [comm_bus_only_inter_plc_channel.md](docs/invariants/comm_bus_only_inter_plc_channel.md) | `relay/runtime/`, scenarios | All inter-PLC coordination flows through `CommBus`; no side channels |
+| [verification_path_purity.md](docs/invariants/verification_path_purity.md) | `relay/verify/` | `verify/` has a closed import set — no LLM, no I/O |
+| [scan_phase_isolation.md](docs/invariants/scan_phase_isolation.md) | runtime / st / plants / comm | Per-scan phase order is fixed; ST execution is pure |
+| [simclock_only_time_source.md](docs/invariants/simclock_only_time_source.md) | execution-path modules | All time derives from injected `SimClock` or `dt_ms` |
 
 ---
 
@@ -141,5 +149,6 @@ See `docs/invariants/` for project invariants.
 - Put PLCopen XML in the core pipeline — ST is the emission target; XML is a future export concern only
 - Extend the ST interpreter beyond what the generator actually emits
 - Read wall clock in any PLC executor — clock is always injected via `SimClock`
+- Branch on a strategy or plant name in framework code — resolve through the registry (see [pluggable_subsystems.md](docs/invariants/pluggable_subsystems.md))
 - Create new files when editing existing ones works
 - Add inline comments or TODO comments (use issues)
