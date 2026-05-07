@@ -1,0 +1,279 @@
+schema_version: 1
+patterns:
+  primary: compiler
+language: python
+python_version: '3.11'
+toolchain:
+  test: pytest
+  lint: ruff
+  type_check: pyright
+  build: hatchling
+  package_manager: uv
+commands:
+- architect
+- debug
+- engineer
+- review
+- spec
+- close-out
+project_context:
+  description: Intent-driven PLC simulation framework — NL intent to IEC 61131-3 Structured
+    Text to deterministic simulation to trace-based verification.
+  vocabulary:
+  - task spec
+  - function block
+  - scan
+  - I/O image
+  - comm buffer
+  - SimClock
+  - plant model
+  - trace log
+  - EVENTUALLY
+  - PRECEDES
+  load_bearing_subsystems:
+  - relay/runtime
+  - relay/plant
+  - relay/st
+  - relay/spec
+  - relay/generator
+  - relay/verify
+resolution:
+  baseline_version: '2026-05-07'
+  commands_dir: .claude/commands/
+  conventions_dir: docs/
+project:
+  architect:
+    slots:
+      PERSONA_DOMAIN: intent-driven PLC simulation and IEC 61131-3 structured text
+        generation
+      PERSONA_UNDERSTANDING: how natural-language intent compiles through task specs
+        and function blocks into deterministic scan-cycle simulation, and why trace-based
+        post-verification (EVENTUALLY, PRECEDES) is the correctness mechanism rather
+        than static analysis of the generated ST
+      PERSONA_MENTAL_MODEL: task specs, function blocks, scans, I/O images, plant
+        models, trace logs, and temporal assertions
+    inserts:
+      context-discovery-extras: '7. `relay/spec/` — task spec schema and validation
+        (the compiler''s input language)
+
+        8. `relay/verify/` — trace assertion semantics (EVENTUALLY, PRECEDES contracts)
+
+        9. `relay/plant/` — plant model definitions and I/O image contracts
+
+        '
+      investigate-anchors: 'Project subsystems and their compiler-layer roles:
+
+
+        - **Input**: `relay/spec/` (task spec parsing, validation)
+
+        - **IR / ST model**: `relay/st/` (function block IR)
+
+        - **Codegen**: `relay/generator/` (ST synthesis)
+
+        - **Runtime**: `relay/runtime/` (scan-cycle engine, SimClock, I/O images)
+
+        - **Plant**: `relay/plant/` (plant models, comm buffers)
+
+        - **Verification**: `relay/verify/` (trace assertions — EVENTUALLY, PRECEDES)
+
+
+        Runtime, plant, and verify sit *after* the compiler pipeline. A codegen change
+        that alters scan-cycle structure or I/O image layout has consequences in all
+        three — treat these as a coupled surface.
+
+        '
+  debug:
+    inserts:
+      working-style-extras: '**Respect scan-cycle determinism.** PLC simulation bugs
+        often depend on scan count or SimClock state, not wall-clock time. When reproducing:
+
+        1. Record the SimClock value and scan number at failure
+
+        2. Reproduce at the same scan count — if the bug disappears, you have a non-determinism
+        leak
+
+        3. Check whether plant-model feedback loops amplify or mask the symptom
+
+        '
+      do-bullets: '- Check trace logs first — EVENTUALLY / PRECEDES assertion failures
+        name the exact scan where behavior diverged from the temporal contract
+
+        - Inspect I/O image snapshots at scan boundaries — the I/O image is the contract
+        surface between `relay/runtime/` and `relay/plant/`; mismatches here cause
+        downstream phantom failures
+
+        - Verify task spec validity in `relay/spec/` — a spec that passes schema validation
+        but carries semantic errors produces legal-looking but wrong ST
+
+        - Check comm buffer state between runtime and plant model — desync across
+        the buffer boundary is a common source of intermittent failures
+
+        '
+      dont-bullets: '- Don''t assume function block execution order from ST source
+        order — the runtime scheduler in `relay/runtime/` determines scan-cycle sequencing
+
+        - Don''t bypass SimClock with wall-clock timing or sleeps — it breaks deterministic
+        reproduction and makes the bug unreproducible
+
+        - Don''t hand-edit generated ST to "fix" a bug — generated code is an output;
+        fix the generator (`relay/generator/`) or the task spec (`relay/spec/`), not
+        the artifact
+
+        '
+      domain-debugging: '## Relay-Specific Debugging
+
+
+        When debugging relay pipeline issues, check:
+
+        - **Task spec parsing** (`relay/spec/`) — validate the spec against the schema
+        first; a malformed spec can silently produce wrong IR. Entry point: spec validation
+        tests.
+
+        - **ST generation** (`relay/generator/`) — dump generated ST for the failing
+        spec and diff against a known-good case. Look for missing function block instances
+        or wrong variable bindings.
+
+        - **Scan-cycle engine** (`relay/runtime/`) — if the bug is timing-dependent,
+        log SimClock value and scan count. Check I/O image layout matches what the
+        generated ST expects.
+
+        - **Plant model interaction** (`relay/plant/`) — comm buffer mismatches between
+        runtime and plant model cause state desync. Verify I/O image field names and
+        types match on both sides of the boundary.
+
+        - **Trace verification** (`relay/verify/`) — if an EVENTUALLY or PRECEDES
+        assertion fails, the trace log contains the falsifying scan window. Read the
+        window, not just the assertion name.
+
+        '
+      invariant-files-extras: '- `relay/spec/` schema definitions — canonical shape
+        of a valid task spec (the compiler''s input contract)
+
+        - `relay/runtime/` I/O image layout — field names, types, and scan-boundary
+        guarantees between runtime and plant
+
+        - `relay/verify/` temporal assertion definitions — semantics of EVENTUALLY
+        and PRECEDES contracts
+
+        '
+  engineer:
+    slots:
+      PROJECT_DESCRIPTION: an intent-driven PLC simulation framework — NL intent to
+        IEC 61131-3 Structured Text to deterministic simulation to trace-based verification
+      ENGINEER_UNDERSTANDING: how structured-text generation composes with scan-cycle
+        simulation and post-oracle verification, why the refinement loop must remain
+        bounded, and how I/O image contracts bind the runtime–plant boundary
+    inserts:
+      working-style-extras: '**Respect scan-cycle determinism.** All timing flows
+        through SimClock. If you need to sequence events, express them in scan counts,
+        not wall-clock delays. A non-deterministic test is a bug, not flakiness.
+
+        '
+      do-bullets: '- Treat the I/O image as the contract surface between `relay/runtime/`
+        and `relay/plant/` — field names, types, and scan-boundary semantics must
+        match on both sides
+
+        - Validate task specs against the schema in `relay/spec/` before assuming
+        generator input is well-formed — a schema-valid but semantically wrong spec
+        produces legal-looking but incorrect ST
+
+        - Express correctness as EVENTUALLY / PRECEDES assertions in `relay/verify/`
+        — if behavior can''t be stated as a temporal contract, the spec is underspecified
+
+        '
+      dont-bullets: '- Don''t hand-edit generated ST — it''s a build artifact; fix
+        the generator (`relay/generator/`) or the task spec (`relay/spec/`)
+
+        - Don''t bypass SimClock with wall-clock timing or `time.sleep` — it breaks
+        deterministic reproduction and makes failures unreproducible
+
+        - Don''t assume function block execution order from ST source order — `relay/runtime/`
+        schedules scan-cycle sequencing independently
+
+        '
+      testing-extras: '- Drive scan-cycle tests at fixed scan counts via SimClock
+        — never wall-clock sleeps
+
+        - Assert temporal contracts (EVENTUALLY, PRECEDES) over trace logs rather
+        than checking only final-state snapshots
+
+        - When a generated-ST test fails, diff against a known-good golden output
+        before investigating the generator
+
+        '
+  review:
+    inserts:
+      code-review-extras: '- **I/O image contract** — verify field names, types, and
+        scan-boundary semantics match on both sides of the `relay/runtime/` ↔ `relay/plant/`
+        boundary; mismatches cause downstream phantom failures
+
+        - **SimClock discipline** — flag any use of wall-clock timing or `time.sleep`
+        in scan-cycle paths; all timing must flow through SimClock for deterministic
+        reproduction
+
+        - **Generated ST integrity** — hand-edits to generated ST are defects; if
+        generated output is wrong, the fix belongs in `relay/generator/` or `relay/spec/`
+
+        - **Temporal contract coverage** — if behavior can be stated as an EVENTUALLY
+        or PRECEDES assertion but isn''t, flag the gap in test coverage
+
+        '
+      architectural-review-extras: '- **Coupled surface** — `relay/runtime/`, `relay/plant/`,
+        and `relay/verify/` form a coupled surface downstream of codegen; a change
+        to scan-cycle structure or I/O image layout in one subsystem must be checked
+        against the other two
+
+        - **Spec–generator coherence** — a task spec change that alters semantic meaning
+        must propagate through `relay/generator/` to the generated ST; review both
+        sides of the boundary, not just the changed file
+
+        '
+  spec:
+    slots:
+      INVARIANT_READ_TARGETS: the task spec schema in `relay/spec/`, I/O image layout
+        in `relay/runtime/`, and temporal assertion definitions in `relay/verify/`
+    inserts:
+      process-extras: '6. **Trace the pipeline path.** Identify which stages of the
+        relay pipeline (spec parsing → ST generation → scan-cycle simulation → trace
+        verification) the change touches. If the change crosses a stage boundary,
+        verify the contract on both sides before drafting the design.
+
+        '
+      design-extras: '- **I/O image impact**: if the change touches `relay/runtime/`
+        or `relay/plant/`, state whether the I/O image layout (field names, types,
+        scan-boundary semantics) changes. A layout change is a coupled-surface change
+        and must be reflected on both sides of the runtime↔plant boundary.
+
+        - **SimClock / scan-cycle impact**: state whether the change alters scan-cycle
+        timing, scheduling, or SimClock semantics. If it does, explain how determinism
+        is preserved.
+
+        - **Temporal contract impact**: if the change affects observable behavior,
+        state which EVENTUALLY / PRECEDES contracts in `relay/verify/` are affected
+        or need to be added.
+
+        '
+      testing-strategy-extras: '- **Scan-cycle determinism**: drive timing-sensitive
+        tests at fixed scan counts via SimClock — never wall-clock sleeps or `time.sleep`.
+        A non-deterministic test is a bug.
+
+        - **Temporal assertion coverage**: assert behavioral correctness as EVENTUALLY
+        / PRECEDES contracts over trace logs, not just final-state snapshots.
+
+        - **Golden ST diffing**: when a generated-ST test fails, include a golden-output
+        comparison test so regressions are caught by diff, not manual inspection.
+
+        '
+      quality-checks-extras: '- [ ] I/O image field names and types match on both
+        sides of the `relay/runtime/` ↔ `relay/plant/` boundary
+
+        - [ ] No `time.sleep` or wall-clock timing in scan-cycle test paths — all
+        timing flows through SimClock
+
+        - [ ] Every behavioral change is covered by at least one EVENTUALLY or PRECEDES
+        assertion
+
+        - [ ] Generated ST is never hand-edited — fixes target `relay/generator/`
+        or `relay/spec/`
+
+        '
