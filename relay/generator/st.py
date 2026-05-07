@@ -15,7 +15,8 @@ Rules for the ST subset:
 - Variables: simple assignments (name := expr;)
 - Conditionals: IF <expr> THEN ... END_IF;
 - Timers: TON instances with IN := <bool>, PT := T#<N>ms
-- Communication output: set variable _outgoing to a JSON-like list of [target_plc, key, value] triples
+- Communication output: assign _send_<target_plc>_<key> := <value> for each message to send
+  (one assignment per (target_plc, key) pair; the runtime routes these to bus.send)
 - No WHILE, no CASE, no arrays, no function calls except TON/TOF
 - Keep it minimal — only what's needed to implement the Behavior section
 """

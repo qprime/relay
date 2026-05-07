@@ -89,11 +89,17 @@ badly instead of two protocols correctly.
 
 ## Examples in this codebase
 
-- **Comm strategies** (planned): `relay/runtime/comm/strategies/{tag,address}.py`,
-  registry in `relay/runtime/comm/__init__.py`, selected by `Comm.strategy` in
-  the task spec.
-- **Plant models** (planned): `relay/plant/{conveyor,...}.py`, registry in
-  `relay/plant/__init__.py`, selected by `Plant.type` in the task spec.
+- **Comm strategies**: registry in [relay/strategies/comm.py](../../relay/strategies/comm.py)
+  (`get_comm_strategy`), selected by `System.comm` in the task spec; raises on
+  unknown. Currently `modbus_tcp` only, registered as a stub. The registry
+  lives in `relay/strategies/` (a leaf module) rather than `relay/runtime/`
+  so `relay/spec/` can import it for validation without violating
+  [pipeline_direction_imports.md](pipeline_direction_imports.md).
+  **(Planned)** Split into `relay/strategies/comm/{tag,address}.py` with
+  per-module self-registration when a second strategy lands.
+- **Plant models** (planned): registry in `relay/strategies/plant.py`,
+  selected by `Plant.type` in the task spec; concrete physics in
+  `relay/plant/{conveyor,...}.py`.
 
 ## Related
 

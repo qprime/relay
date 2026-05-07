@@ -24,6 +24,7 @@ simulation fidelity, determinism, or the verification guarantee.
 | [verification_path_purity.md](verification_path_purity.md) | `relay/verify/` | `verify/` has a closed import set — no LLM, no I/O, no transitive dependencies on either |
 | [scan_phase_isolation.md](scan_phase_isolation.md) | `relay/runtime/`, `relay/st/`, plants, comm strategies | Per-scan phase order is fixed; ST execution is a pure function of its inputs |
 | [simclock_only_time_source.md](simclock_only_time_source.md) | execution-path modules | All time in execution-path code derives from injected `SimClock` or `dt_ms` |
+| [pipeline_direction_imports.md](pipeline_direction_imports.md) | all pipeline stages | Imports follow pipeline data flow; backward edges across stages are forbidden |
 
 ## Adding an invariant
 

@@ -20,8 +20,8 @@ class CommBuffer:
     def with_value(self, key: str, value: Any) -> CommBuffer:
         return CommBuffer(pending={**self.pending, key: value})
 
-    def promote(self) -> tuple[Mapping[str, Any], CommBuffer]:
-        return MappingProxyType(dict(self.pending)), CommBuffer.empty()
+    def promote(self) -> Mapping[str, Any]:
+        return MappingProxyType(dict(self.pending))
 
 
 class CommBus:

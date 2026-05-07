@@ -31,6 +31,7 @@ The project's first end-to-end scenario: a two-PLC conveyor with a part handoff 
 
 ```yaml
 System:
+  name: conveyor_handoff
   plcs:
     - { id: plc_a, role: upstream }
     - { id: plc_b, role: downstream }

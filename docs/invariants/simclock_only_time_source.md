@@ -36,15 +36,17 @@ longer reproduce — without any test going red.
 
 ## What this looks like
 
-1. **`SimClock` is constructed by the harness** ([relay/runtime/clock.py](../../relay/runtime/clock.py)),
+1. **`SimClock` is constructed by the harness** ([relay/clock.py](../../relay/clock.py)),
    advanced by the harness, and passed into each PLC's executor as the
    `clock` argument.
 2. **`dt_ms` is the only other time-flowing input** to the executor.
    It is what the harness chose for this scan period; the executor takes
    it as given.
-3. **The ST interpreter advances `STContext.elapsed_ms` from the injected
-   `dt_ms`** ([relay/st/interpreter.py:52](../../relay/st/interpreter.py#L52)),
-   not from a clock read. TON timers tick by `dt_ms`, not by wall time.
+3. **The ST interpreter advances all timer state from the injected `dt_ms`**
+   ([relay/st/interpreter.py](../../relay/st/interpreter.py)), not from a
+   clock read. TON timer accumulators tick by `dt_ms`. `STContext` does not
+   hold its own elapsed-time field; if execution-path code needs elapsed
+   time it reads `SimClock.elapsed_ms` from the injected clock.
 4. **Plant models advance physics by the injected `elapsed_ms`** parameter
    ([relay/plant/conveyor.py:50](../../relay/plant/conveyor.py#L50)). They
    do not measure how long their own `step()` took.
@@ -108,12 +110,14 @@ here is approximately what happens, mostly*.
 
 ## Examples in this codebase
 
-- **`SimClock`** ([relay/runtime/clock.py](../../relay/runtime/clock.py))
+- **`SimClock`** ([relay/clock.py](../../relay/clock.py))
   — frozen, holds `tick` and `elapsed_ms`, advances via explicit method.
 - **`PLCCoroutine.run`** ([relay/runtime/plc.py:54](../../relay/runtime/plc.py#L54))
   — receives clock from a queue, never reads wall time.
-- **`STContext`** ([relay/st/interpreter.py:8-22](../../relay/st/interpreter.py#L8-L22))
-  — `elapsed_ms` is a field set externally; the context never queries
+- **`STContext`** ([relay/st/interpreter.py](../../relay/st/interpreter.py))
+  — holds variables, timers, and the per-scan `assigned` set. The context
+  carries no elapsed-time field of its own; per-scan time always arrives
+  as the `dt_ms` argument to `execute(...)`. The context never queries
   the clock.
 - **`ConveyorPlant.step`** ([relay/plant/conveyor.py:50](../../relay/plant/conveyor.py#L50))
   — takes `elapsed_ms` as a parameter, advances physics by that amount.

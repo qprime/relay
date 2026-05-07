@@ -5,13 +5,14 @@ from typing import Any
 
 import pytest
 
-from relay.runtime.clock import SimClock
+from relay.clock import SimClock
+from relay.io_image import IOImage
 from relay.runtime.comm import CommBus, CommBuffer
-from relay.runtime.plc import IOImage, FBExecutor, PLCCoroutine
-from relay.verify.trace import TraceLog
+from relay.runtime.fb import FunctionBlock
+from relay.runtime.plc import FBExecutor, PLCCoroutine
+from relay.trace import TraceLog
 from relay.verify.assertions import evaluate_assertion
 from relay.plant.conveyor import ConveyorConfig, ConveyorPlant
-from relay.st.fb import FunctionBlock
 from relay.spec.schema import load_spec
 
 

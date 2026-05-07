@@ -109,12 +109,12 @@ silently false for any scenario the generator chose to use the new primitive.
 
 ## Examples in this codebase
 
-- **`PLCCoroutine.run`** ([relay/runtime/plc.py:53-72](../../relay/runtime/plc.py#L53-L72))
+- **`PLCCoroutine.run`** ([relay/runtime/plc.py](../../relay/runtime/plc.py))
   — the canonical 8-phase loop.
-- **`FunctionBlock.scan`** ([relay/st/fb.py:16-34](../../relay/st/fb.py#L16-L34))
+- **`FunctionBlock.scan`** ([relay/runtime/fb.py](../../relay/runtime/fb.py))
   — reads inputs into context, executes, harvests `assigned` as outputs.
   No I/O, no bus access.
-- **`STContext.assign`** ([relay/st/interpreter.py:20-22](../../relay/st/interpreter.py#L20-L22))
+- **`STContext.assign`** ([relay/st/interpreter.py](../../relay/st/interpreter.py))
   — the only path by which a name becomes an output. The interpreter has
   no other effect surface.
 
@@ -123,7 +123,7 @@ silently false for any scenario the generator chose to use the new primitive.
 - A test that drives `FunctionBlock.scan` twice with identical inputs and
   asserts identical outputs. Same inputs → same outputs proves no hidden
   state or I/O is being read.
-- A grep over `relay/st/` and `relay/runtime/plc.py` for forbidden imports
+- A grep over `relay/st/` and `relay/runtime/` for forbidden imports
   (`asyncio.sleep`, `time.*`, `socket`, `requests`).
 
 ## Related

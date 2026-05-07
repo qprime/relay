@@ -78,6 +78,7 @@ See [docs/invariants/](docs/invariants/) for project invariants. Check the index
 - **verification_path_purity:** `verify/` has a closed import set — no LLM, no I/O
 - **scan_phase_isolation:** Per-scan phase order is fixed; ST execution is pure
 - **simclock_only_time_source:** All time derives from injected SimClock or `dt_ms`
+- **pipeline_direction_imports:** Imports follow pipeline data flow; backward edges across stages are forbidden
 
 ## Don't
 
@@ -89,6 +90,7 @@ See [docs/invariants/](docs/invariants/) for project invariants. Check the index
 - Read wall clock in any PLC executor — clock is always injected via SimClock
 - Branch on a strategy or plant name in framework code — resolve through the registry
 - Hand-edit generated ST — fix the generator or the task spec, not the artifact
+- Add a backward-edge import across pipeline stages — extract a leaf module under `relay/strategies/` instead
 
 ## When Stuck
 

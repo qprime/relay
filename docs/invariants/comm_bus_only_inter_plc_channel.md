@@ -92,9 +92,13 @@ simulation" guarantee silently false for an entire class of signals.
   IOImages. The hand-rolled `_wire` helper is acceptable because it observes
   *its own PLC's* outputs and routes via `bus.send`; it does not read
   another PLC's state.
-- **(Planned)** Comm strategies under `relay/runtime/comm/strategies/` are
-  the only producers of inter-PLC routing decisions; the harness calls
-  `strategy.route(...)` and feeds results to `bus.send`.
+- **Comm strategy registry** ([relay/strategies/comm.py](../../relay/strategies/comm.py))
+  — `get_comm_strategy(name)` resolves the strategy named in the spec; the
+  harness raises on unknown values. The registry lives in `relay/strategies/`
+  rather than `relay/runtime/` so that `relay/spec/` can import it for
+  spec-time validation without violating
+  [pipeline_direction_imports.md](pipeline_direction_imports.md). Today only
+  `modbus_tcp` is registered as a stub.
 
 ## Related
 

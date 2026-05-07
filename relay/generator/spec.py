@@ -11,7 +11,9 @@ Given a natural language description of a control task, produce a structured YAM
 Output ONLY valid YAML. No explanation, no markdown fences.
 
 The YAML must have these top-level keys: System, Plant, Behavior, Assertions.
+System.name is a short identifier (snake_case) for the scenario.
 System.plcs is a list of {id, role}.
+System.comm names the inter-PLC comm strategy (e.g. modbus_tcp).
 Plant describes physical parameters.
 Behavior maps each PLC id to: owns (list of I/O names), on (event → action rules as strings).
 Assertions is a list of strings using EVENTUALLY(signal, within: Nms) or PRECEDES(a, b) forms.

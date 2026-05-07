@@ -4,11 +4,11 @@
 
 ## Statement
 
-`relay/verify/*` may import only Python standard library, `relay.runtime.clock`,
-and `relay.runtime.plc` (the latter solely for the `IOImage` type, under
-`TYPE_CHECKING`). It may NOT import any LLM client, network library, file or
-process I/O, or any other module of `relay/` whose transitive dependencies
-include such things.
+`relay/verify/*` may import only Python standard library and leaf modules
+under `relay/` (`relay.clock`, `relay.io_image`, `relay.trace`,
+`relay.strategies.*`). It may NOT import any pipeline stage, LLM client,
+network library, file or process I/O, or any other module whose transitive
+dependencies include such things.
 
 The verification path — assertion evaluation against the trace log — is a
 pure function of `(TraceLog, list[assertion_string]) → list[AssertionResult]`.
@@ -34,12 +34,14 @@ at the import boundary.
 
 1. **Allowlist, enforced mechanically.** `relay/verify/*` may import:
    - Python stdlib (`re`, `dataclasses`, `typing`, `pathlib`, etc.)
-   - `relay.runtime.clock` (for `SimClock` type)
-   - `relay.runtime.plc` (under `TYPE_CHECKING` only, for `IOImage` type)
+   - leaf modules under `relay/` (`relay.clock`, `relay.io_image`,
+     `relay.trace`, `relay.strategies.*`) — these are stage-neutral
+     shared types; see [pipeline_direction_imports.md](pipeline_direction_imports.md)
 2. **Denylist, exhaustive at the obvious tier:** `anthropic`, `openai`,
    `requests`, `httpx`, `urllib`, `http`, `socket`, `subprocess`, `os.system`,
-   `relay.generator.*`, `relay.spec.*`, `relay.plant.*`, `relay.runtime.comm.*`,
-   `relay.st.*`. None of these may appear in `relay/verify/`.
+   any pipeline stage (`relay.spec.*`, `relay.generator.*`, `relay.st.*`,
+   `relay.runtime.*`, `relay.plant.*`). None of these may appear in
+   `relay/verify/`.
 3. **Assertions are pure Python.** New assertion forms are added by extending
    the regex/grammar in `relay/verify/assertions.py` and the evaluator
    functions. The grammar may not include LLM calls, prompts, or external
@@ -93,10 +95,11 @@ LLM is in there, it is no longer that place.
 ## Examples in this codebase
 
 - **`relay/verify/assertions.py`** ([relay/verify/assertions.py](../../relay/verify/assertions.py))
-  — imports `re`, `dataclasses`, and `relay.verify.trace`. Nothing else.
-- **`relay/verify/trace.py`** ([relay/verify/trace.py](../../relay/verify/trace.py))
-  — imports `dataclasses`, `typing`, and `relay.runtime.clock`. `IOImage`
-  imported under `TYPE_CHECKING` only.
+  — imports `re`, `dataclasses`, and `relay.trace` (a leaf). Nothing else.
+- **`relay/trace.py`** ([relay/trace.py](../../relay/trace.py))
+  — leaf module holding `TraceLog` and `ScanRecord`. Imports `relay.clock`
+  and `relay.io_image` (other leaves) and stdlib only. Owned by neither
+  `runtime/` (the writer) nor `verify/` (the reader).
 
 ## Enforcement (suggested mechanical check)
 

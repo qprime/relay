@@ -8,7 +8,6 @@ from typing import Any
 class STContext:
     variables: dict[str, Any] = field(default_factory=dict)
     timers: dict[str, _Timer] = field(default_factory=dict)
-    elapsed_ms: float = 0.0
     assigned: set[str] = field(default_factory=set)
 
     def get(self, name: str) -> Any:
@@ -49,7 +48,6 @@ _ENDIF_RE = re.compile(r"END_IF\s*;?", re.IGNORECASE)
 
 
 def execute(source: str, ctx: STContext, dt_ms: float) -> None:
-    ctx.elapsed_ms += dt_ms
     ctx.assigned.clear()
     lines = [line.strip() for line in source.splitlines() if line.strip()]
     _exec_block(lines, 0, len(lines), ctx, dt_ms)

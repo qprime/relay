@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from relay.verify.trace import TraceLog
+from relay.trace import TraceLog
 
 
 @dataclass(frozen=True)
@@ -33,9 +33,8 @@ def evaluate_assertion(assertion: str, trace: TraceLog) -> AssertionResult:
 
 
 def _signal_value(record, name: str):
-    out = record.outputs.get(name)
-    if out:
-        return out
+    if name in record.outputs.values:
+        return record.outputs.values[name]
     return record.io.get(name)
 
 
