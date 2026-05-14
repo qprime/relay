@@ -51,7 +51,7 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 | function block | ST program unit that executes each scan; holds internal timer state |
 | scan | One execution cycle: promote comm → snapshot I/O → execute FB → write outputs → publish |
 | I/O image | Immutable snapshot of PLC inputs taken at scan top; stable during execution |
-| comm buffer | Pending inter-PLC messages promoted each scan; simulates Modbus TCP latency |
+| comm buffer | Pending inter-PLC messages promoted each scan; models the per-scan latency a real fieldbus would impose (today's strategy is tag-based; address-based / Modbus TCP is planned) |
 | SimClock | External tick counter and elapsed_ms; injected, never read from wall clock |
 | plant model | Minimal physics: belt speed, sensor thresholds, actuator latency |
 | trace log | Scan-by-scan record of I/O snapshots and outputs for all PLCs |
@@ -99,5 +99,5 @@ See [docs/invariants/](docs/invariants/) for project invariants. Check the index
 | Scan-cycle bug | Read the trace log — EVENTUALLY/PRECEDES failures name the exact divergence scan |
 | I/O mismatch | Check field names and types on both sides of the runtime↔plant boundary |
 | Wrong generated ST | Diff against a known-good golden output; fix `relay/generator/` or `relay/spec/`, not the ST |
-| Pipeline flow | spec parsing → ST generation → scan-cycle simulation → trace verification |
+| Pipeline flow | `spec → generator → st → {runtime, plant} → verify`; shared types and registries live in `relay/strategies/` as stage-neutral leaves |
 | Invariant questions | [docs/invariants/](docs/invariants/) — read the index first |

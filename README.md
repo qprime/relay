@@ -21,6 +21,8 @@ Each simulated PLC runs as an `asyncio` coroutine executing a conventional scan 
 promote comm buffer → snapshot I/O → execute function block → write outputs → publish
 ```
 
+Coordination between PLCs is modeled by a pluggable **comm strategy** — a registered implementation of how inter-PLC signals get routed and when they become visible at the receiver. The conveyor demo uses the `tag` strategy: each tag is declared in the task spec (producer + consumers), and the runtime promotes pending tag values into the consumer's I/O image at the top of the next scan, paying a one-scan latency cost that mirrors a real network. An `address` strategy (intended to model Modbus TCP register maps) is registered as a stub today and raises `NotImplementedError`; address-based comm is aspirational, not implemented. The framework's identity as a multi-protocol simulator is intentional, but only the tag strategy is live.
+
 ### Conveyor handoff example
 
 The project's first end-to-end scenario: a two-PLC conveyor with a part handoff between belts.
@@ -35,25 +37,38 @@ System:
   plcs:
     - { id: plc_a, role: upstream }
     - { id: plc_b, role: downstream }
-  comm: modbus_tcp
+
+Comm:
+  strategy: tag
+  tags:
+    - { name: handoff_signal, produced_by: plc_a, consumed_by: [plc_b] }
 
 Plant:
-  belt_speed: 0.5m/s
-  sensor_trigger_threshold: 0.1m
-  actuator_latency: 50ms
+  type: conveyor
+  config:
+    belt_speed_m_per_s: 0.5
+    sensor_trigger_threshold_m: 0.1
+    actuator_latency_ms: 50.0
+  routes:
+    - { sensor: sensor_a_exit_triggered, to_plc: plc_a, as_key: sensor_a_exit, trigger: edge }
+    - { sensor: part_at_b,               to_plc: plc_b, as_key: part_at_b,     trigger: level }
+  actuators:
+    - { from_plc: plc_b, key: belt_b_enable, as: belt_b_enable_signal }
 
 Behavior:
   plc_a:
     owns: [belt_a, sensor_a_exit]
-    on: part_detected_at_exit -> signal_handoff
+    "on": part_detected_at_exit -> signal_handoff
   plc_b:
     owns: [belt_b, sensor_b_entry]
-    on: handoff_signal -> enable_belt_b
+    "on": handoff_signal -> enable_belt_b
 
 Assertions:
-  - EVENTUALLY(part_at_b, within: 500ms)
-  - PRECEDES(handoff_signal, belt_b_enable)
+  - "EVENTUALLY(part_at_b, within: 500ms)"
+  - "PRECEDES(handoff_signal, belt_b_enable)"
 ```
+
+The `Comm` block selects a comm strategy (currently `tag`; see below) and declares the inter-PLC signals it routes. The `Plant` block selects a plant model (currently `conveyor`) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching.
 
 **Verification** (from [`tests/test_conveyor.py`](tests/test_conveyor.py)):
 
@@ -75,7 +90,7 @@ Four invariants make the simulation deterministic and the verification trustwort
 |-----------|-----------|
 | External clock | `SimClock` is injected into every scan. No PLC reads the wall clock. |
 | Immutable I/O image | The snapshot taken at scan-top is frozen for the duration of execution — inputs can't shift mid-scan. |
-| No shared PLC state | All coordination flows through a simulated Modbus TCP comm bus with per-scan message promotion. |
+| No shared PLC state | All coordination flows through `CommBus` via a pluggable comm strategy with per-scan message promotion. The current strategy (`tag`) routes named signals from producer to consumer; address-based routing (Modbus TCP-style) is planned. |
 | Trace-based verification | Every scan's I/O snapshot and outputs are recorded. Assertions evaluate against the log, not a live system. |
 
 If a handoff works in the trace, it works because the messages actually moved through the comm bus at the right scan boundaries.
@@ -114,7 +129,10 @@ relay/
 ├── generator/     LLM passes — NL → task spec, task spec → ST
 ├── st/            Structured Text subset interpreter and function blocks
 ├── runtime/       PLC coroutine, scan loop, I/O image, comm bus, SimClock
+│   └── harness.py  Simulation entry point: wires plant + comm + PLCs and drives the scan loop
 ├── plant/         Plant physics models (currently: conveyor)
+├── strategies/    Stage-neutral leaf modules: comm registry, plant registry,
+│                  assertion grammar parser, ST static-syntax helpers
 └── verify/        Trace log and assertion evaluator (EVENTUALLY, PRECEDES)
 specs/              Task spec YAML examples
 tests/              End-to-end scenario tests
@@ -122,6 +140,8 @@ docs/invariants/    Subsystem invariants
 ```
 
 The pipeline flows left-to-right through the subsystem list: `spec/` → `generator/` → `st/` → `runtime/` + `plant/` → `verify/`. The `runtime/`, `plant/`, and `verify/` subsystems form a coupled surface — a change to scan-cycle structure or I/O image layout in one must be checked against the other two.
+
+`relay/strategies/` sits outside that pipeline as a stage-neutral leaf layer. It holds registries and small parsing helpers that more than one stage needs to import — the comm strategy registry (used by both the spec validator and the runtime harness), the plant registry (same), the assertion grammar parser, and ST static-syntax helpers shared by the generator and interpreter. Routing these through a leaf module keeps imports flowing strictly forward through the pipeline; see [docs/invariants/pipeline_direction_imports.md](docs/invariants/pipeline_direction_imports.md). The simulation entry point is `relay/runtime/harness.py:simulate(spec, st_blocks)` — this is what the conveyor test calls.
 
 ## Scope boundaries
 
