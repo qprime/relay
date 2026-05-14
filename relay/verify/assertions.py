@@ -1,7 +1,7 @@
 from __future__ import annotations
-import re
 from dataclasses import dataclass
 
+from relay.strategies.assertions import parse_assertion
 from relay.trace import TraceLog
 
 
@@ -13,23 +13,18 @@ class AssertionResult:
 
 
 def evaluate_assertion(assertion: str, trace: TraceLog) -> AssertionResult:
-    assertion = assertion.strip()
-
-    eventually_m = re.match(
-        r"EVENTUALLY\((\w+),\s*within:\s*(\d+(?:\.\d+)?)ms\)", assertion, re.IGNORECASE
-    )
-    if eventually_m:
-        signal_name = eventually_m.group(1)
-        within_ms = float(eventually_m.group(2))
-        return _check_eventually(assertion, signal_name, within_ms, trace)
-
-    precedes_m = re.match(r"PRECEDES\((\w+),\s*(\w+)\)", assertion, re.IGNORECASE)
-    if precedes_m:
-        first_signal = precedes_m.group(1)
-        second_signal = precedes_m.group(2)
-        return _check_precedes(assertion, first_signal, second_signal, trace)
-
-    return AssertionResult(assertion=assertion, passed=False, reason=f"unrecognized assertion form: {assertion}")
+    parsed = parse_assertion(assertion)
+    if parsed is None:
+        return AssertionResult(
+            assertion=assertion.strip(),
+            passed=False,
+            reason=f"unrecognized assertion form: {assertion.strip()}",
+        )
+    if parsed.form == "EVENTUALLY":
+        return _check_eventually(
+            assertion.strip(), parsed.signals[0], parsed.within_ms or 0.0, trace
+        )
+    return _check_precedes(assertion.strip(), parsed.signals[0], parsed.signals[1], trace)
 
 
 def _signal_value(record, name: str):

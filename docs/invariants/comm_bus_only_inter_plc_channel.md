@@ -84,21 +84,27 @@ simulation" guarantee silently false for an entire class of signals.
 
 ## Examples in this codebase
 
-- **`PLCCoroutine.run`** ([relay/runtime/plc.py:53-72](../../relay/runtime/plc.py#L53-L72))
+- **`PLCCoroutine.run`** ([relay/runtime/plc.py:24-52](../../relay/runtime/plc.py#L24-L52))
   — the only place inter-PLC data enters a coroutine is `await bus.drain(...)`
-  followed by `comm.promote()` into the IOImage.
-- **Conveyor scenario harness** ([tests/test_conveyor.py:97-100](../../tests/test_conveyor.py#L97-L100))
-  — plant outputs are routed via `bus.send`, not by directly mutating PLC
-  IOImages. The hand-rolled `_wire` helper is acceptable because it observes
-  *its own PLC's* outputs and routes via `bus.send`; it does not read
-  another PLC's state.
+  followed by `comm.promote()` into the IOImage at the top of each scan.
+- **Simulation harness** ([relay/runtime/harness.py](../../relay/runtime/harness.py))
+  — the per-scan loop (`harness.py:94-115`) routes plant sensors to PLCs via
+  `bus.send(target, key, value)` after `plant.route_to_plcs(...)`, and routes
+  inter-PLC tags via `bus.send(...)` after the comm strategy's `route(...)`
+  call. No path writes another PLC's IOImage directly. The end-to-end
+  conveyor test ([tests/test_conveyor.py](../../tests/test_conveyor.py))
+  exercises this harness — it calls `simulate(spec, blocks, ...)` rather than
+  wiring PLCs itself, so all inter-PLC routing decisions flow through the
+  harness's `bus.send` calls.
 - **Comm strategy registry** ([relay/strategies/comm.py](../../relay/strategies/comm.py))
-  — `get_comm_strategy(name)` resolves the strategy named in the spec; the
-  harness raises on unknown values. The registry lives in `relay/strategies/`
-  rather than `relay/runtime/` so that `relay/spec/` can import it for
-  spec-time validation without violating
-  [pipeline_direction_imports.md](pipeline_direction_imports.md). Today only
-  `modbus_tcp` is registered as a stub.
+  — `build_comm_strategy(name, comm_block)` resolves the strategy named in
+  the spec's `Comm.strategy` field; the registry raises on unknown values.
+  The registry lives in `relay/strategies/` rather than `relay/runtime/` so
+  that `relay/spec/` can import it for spec-time validation without violating
+  [pipeline_direction_imports.md](pipeline_direction_imports.md). Today the
+  registry contains `tag` (live; used by the conveyor demo) and `address`
+  (a stub that raises `NotImplementedError`, reserved for a future
+  Modbus TCP-style implementation).
 
 ## Related
 

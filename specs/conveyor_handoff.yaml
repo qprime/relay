@@ -5,12 +5,33 @@ System:
       role: upstream
     - id: plc_b
       role: downstream
-  comm: modbus_tcp
+
+Comm:
+  strategy: tag
+  tags:
+    - name: handoff_signal
+      produced_by: plc_a
+      consumed_by: [plc_b]
 
 Plant:
-  belt_speed: 0.5m/s
-  sensor_trigger_threshold: 0.1m
-  actuator_latency: 50ms
+  type: conveyor
+  config:
+    belt_speed_m_per_s: 0.5
+    sensor_trigger_threshold_m: 0.1
+    actuator_latency_ms: 50.0
+  routes:
+    - sensor: sensor_a_exit_triggered
+      to_plc: plc_a
+      as_key: sensor_a_exit
+      trigger: edge
+    - sensor: part_at_b
+      to_plc: plc_b
+      as_key: part_at_b
+      trigger: level
+  actuators:
+    - from_plc: plc_b
+      key: belt_b_enable
+      as: belt_b_enable_signal
 
 Behavior:
   plc_a:

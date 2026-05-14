@@ -3,6 +3,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from relay.strategies.st_syntax import _ASSIGN_RE, _ENDIF_RE, _IF_RE, _TON_RE
+
 
 @dataclass
 class STContext:
@@ -37,14 +39,6 @@ class _Timer:
             self.running = False
             self.accumulated_ms = 0.0
             self.done = False
-
-
-_TON_RE = re.compile(
-    r"(\w+)\s*\(\s*IN\s*:=\s*(.+?)\s*,\s*PT\s*:=\s*T#(\d+(?:\.\d+)?)ms\s*\)", re.IGNORECASE
-)
-_IF_RE = re.compile(r"IF\s+(.+?)\s+THEN", re.IGNORECASE)
-_ASSIGN_RE = re.compile(r"(\w+)\s*:=\s*(.+)")
-_ENDIF_RE = re.compile(r"END_IF\s*;?", re.IGNORECASE)
 
 
 def execute(source: str, ctx: STContext, dt_ms: float) -> None:

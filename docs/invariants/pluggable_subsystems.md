@@ -90,16 +90,25 @@ badly instead of two protocols correctly.
 ## Examples in this codebase
 
 - **Comm strategies**: registry in [relay/strategies/comm.py](../../relay/strategies/comm.py)
-  (`get_comm_strategy`), selected by `System.comm` in the task spec; raises on
-  unknown. Currently `modbus_tcp` only, registered as a stub. The registry
-  lives in `relay/strategies/` (a leaf module) rather than `relay/runtime/`
-  so `relay/spec/` can import it for validation without violating
+  (`build_comm_strategy` / `get_comm_strategy`), selected by `Comm.strategy` in
+  the task spec; raises on unknown. Today two strategies are registered:
+  `tag` (live; used by the conveyor demo) and `address` (a stub whose
+  `validate_config` and `route` raise `NotImplementedError`, reserved for a
+  future Modbus TCP-style register-map implementation). The registry lives in
+  `relay/strategies/` (a leaf module) rather than `relay/runtime/` so
+  `relay/spec/` can import it for validation without violating
   [pipeline_direction_imports.md](pipeline_direction_imports.md).
   **(Planned)** Split into `relay/strategies/comm/{tag,address}.py` with
-  per-module self-registration when a second strategy lands.
-- **Plant models** (planned): registry in `relay/strategies/plant.py`,
-  selected by `Plant.type` in the task spec; concrete physics in
-  `relay/plant/{conveyor,...}.py`.
+  per-module self-registration if a third strategy lands.
+- **Plant models**: registry in
+  [relay/strategies/plant.py](../../relay/strategies/plant.py)
+  (`register_plant` / `get_plant`), selected by `Plant.type` in the task
+  spec. Concrete physics lives in `relay/plant/<name>.py` and self-registers
+  at import time — see `register_plant("conveyor", ...)` at the bottom of
+  [relay/plant/conveyor.py](../../relay/plant/conveyor.py). The harness in
+  `relay/runtime/harness.py` imports `relay.plant` to trigger registration,
+  then calls `get_plant(spec.plant_type)`. Additional plant types are
+  aspirational; only `conveyor` is live today.
 
 ## Related
 
