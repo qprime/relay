@@ -2,7 +2,7 @@
 
 **Compile natural-language control intent into deterministic, verified PLC simulations.**
 
-Relay takes a description of what a factory cell should do and runs it through a four-stage pipeline: intent → task spec → IEC 61131-3 Structured Text → scan-cycle simulation → trace-based verification. The LLM generates the code; verification is plain Python against a deterministic trace log — so when a test passes, it passes for reasons you can inspect.
+Relay takes a description of what a factory cell should do and runs it through a four-stage pipeline: intent → task spec → IEC 61131-3 Structured Text → scan-cycle simulation → trace-based verification. The task spec is a hand-authorable semantic IR; verification is plain Python against a deterministic trace log — so when a test passes, it passes for reasons you can inspect. The target architecture is a deterministic compiler from spec to ST, with a single LLM hop at the front (intent → spec). Today the spec → ST stage still uses an LLM as a transitional step; [issue #5](https://github.com/qprime/relay/issues/5) replaces it with the deterministic compiler.
 
 ## What this is
 
@@ -10,10 +10,10 @@ Relay is a compiler-shaped framework for prototyping PLC control strategies with
 
 1. **Intent** — a natural-language description of a control task ("when a part reaches the end of belt A, hand it off to belt B").
 2. **Task spec** — a YAML intermediate representation that captures the semantic meaning of the intent. Everything downstream reads from this.
-3. **Structured Text generation** — the task spec compiles into IEC 61131-3 Structured Text function blocks, the same language real PLCs run.
+3. **Structured Text generation** — the task spec compiles into IEC 61131-3 Structured Text function blocks, the same language real PLCs run. The target is a deterministic compiler from a structured Behavior IR; today this stage still uses an LLM as a transitional step, so edge/level/debounce semantics are LLM-chosen rather than specified in the spec. [Issue #5](https://github.com/qprime/relay/issues/5) closes this gap — after it lands, intent → spec is the only LLM hop in the pipeline.
 4. **Simulation and verification** — the generated code executes against a plant physics model, and the resulting scan-by-scan trace is checked against temporal assertions (`EVENTUALLY`, `PRECEDES`) written in Python.
 
-The LLM sits on the front half of the pipeline (stages 1–3). It is deliberately excluded from the verification path — assertions are evaluated against a deterministic trace log, not by asking an LLM whether the output looks right.
+The LLM sits on the front half of the pipeline (stages 1 and 3 today; stage 1 only after [issue #5](https://github.com/qprime/relay/issues/5)). It is deliberately excluded from the verification path — assertions are evaluated against a deterministic trace log, not by asking an LLM whether the output looks right.
 
 Each simulated PLC runs as an `asyncio` coroutine executing a conventional scan loop:
 
@@ -95,6 +95,34 @@ Four invariants make the simulation deterministic and the verification trustwort
 
 If a handoff works in the trace, it works because the messages actually moved through the comm bus at the right scan boundaries.
 
+## Validation chain
+
+The four-stage pipeline above (intent → spec → ST → sim → verify) is the **inner pipeline**. It produces a verdict on the spec in a single, deterministic environment. The **outer pipeline** carries that verdict outward through progressively less-controlled environments — each one introducing one new class of complexity the previous environment could not certify.
+
+The principle: each stage is the contract for the next. The Python sim plays the role of **oracle** — it runs the spec under injected clock and in-process plant, then writes the assertions it certified into an expectations artifact at `specs/expectations/<system_name>.expected.json`. Every downstream stage runs the same spec in its own environment, emits its own trace, and is judged by the same verifier (`relay/verify/`) against that same artifact. The contract does not change as you walk the chain; only the evidence does.
+
+This is what makes failures cheap to localize. When stage N satisfies the expectations and stage N+1 does not, the bug lives in whatever N+1 newly introduced — wall-clock pacing, an inter-process boundary, physical I/O. You never debug two new variables at once.
+
+```
+spec ──> Python sim ──> C++ host             ──> C++ host         ──> C++ host
+         (oracle)       (in-process,             (Python plant         (real
+                         stub plant)              over socket)          fieldbus)
+
+           ↓                ↓                       ↓                     ↓
+       expectations    same assertions         same assertions       same assertions
+       artifact        re-evaluated            re-evaluated          re-evaluated
+                       against host trace      against host trace    against host trace
+```
+
+| Stage | New complexity it adds | What it certifies | Status |
+|-------|------------------------|-------------------|--------|
+| Python sim (oracle) | Deterministic in-process execution under `SimClock` | The spec is realizable: generated ST plus plant model produce a trace where the assertions hold | ✅ |
+| C++ host, in-process stub plant | Wall-clock-paced coroutine scheduling; C++ ST interpreter and scan executor | The generated ST and scan semantics survive a wall-clock runtime without violating the assertions | 🚧 [issue #4](https://github.com/qprime/relay/issues/4) |
+| C++ host, Python plant over socket | Inter-process boundary; network framing and latency | The runtime composes correctly with an out-of-process plant | 💭 |
+| C++ host, real fieldbus | Physical I/O and real hardware timing | The control strategy works against the actual physical system | 💭 |
+
+Today only the oracle stage exists. The C++ host is designed (issue #4) but not implemented; socket plant and real-hardware stages are aspirational and have no implementation work scheduled. The chain above is the project's structure, not its status.
+
 ## How to use
 
 ### 1. Install
@@ -163,7 +191,7 @@ The pipeline flows left-to-right through the subsystem list: `spec/` → `genera
 
 ## License
 
-Copyright © 2026 Sean Quinlan. All rights reserved.
+Copyright © 2026 Stephen S. Quinlan. All rights reserved.
 
 This repository is published for portfolio and review purposes. No license is granted to use, copy, modify, or distribute this code or its contents. If you're interested in using any part of this work, please get in touch.
 
