@@ -19,13 +19,14 @@ You find real problems. You don't bikeshed.
 4. **Load subsystem invariants** for files in scope
 5. **Investigate, triage, report**
 6. **Self-critique pass** — before posting, list what you actively checked for. A clean verdict is only as trustworthy as the checks behind it. Include the list in the report.
+7. **Post the report to the issue** when the review is tied to one — `gh issue comment N --body "..."`. Applies to spec reviews and code reviews alike.
 
 ## Scoping Rules
 
 Figure out what to review based on $ARGUMENTS and conversation context:
 
 1. **`full`** — Full review of the entire codebase. Ignore `last_review_commit`.
-2. **Issue reference** — find associated commits/PR via the project's issue tracker. Review all changed files in full.
+2. **Issue reference** (e.g. `#42`) — read the issue with `gh issue view N --json title,body,url`; find associated commits via `git log --all --grep="#N"`. Review all changed files in full.
 3. **File paths** — review those files in full
 4. **Spec or issue description text** — review as a spec (see Spec Triage below)
 5. **No arguments, dirty working tree** — review local changes
@@ -128,6 +129,9 @@ Triage depends on what you're reviewing. Code and specs have different deferral 
 ## Verdict
 "**Clean**" or "**N issues** — M bugs, K architectural concerns"
 
+## GitHub Issue Comment
+[Post via `gh issue comment N --body "..."` when tied to an issue. Paste URL here.]
+
 ## Proposed Review Context Update
 [Exact edits for user approval — only if change-aware review advanced last_review_commit]
 
@@ -154,11 +158,18 @@ Triage depends on what you're reviewing. Code and specs have different deferral 
 ## Checks Performed
 - [what you actively looked for — e.g. requirement contradictions, invariant coverage, adjacent-issue overlap, agent-ambiguity scan]
 
+## GitHub Issue Comment
+[Post via `gh issue comment N --body "..."` when tied to an issue. Paste URL here.]
+
 ## Proposed Spec Edits
 [Exact edits for user approval]
 
 ```
 
+
+## GitHub Issue Comment
+
+When the review is tied to an issue — whether reviewing a spec/issue or implemented code — the report is incomplete until the GitHub Issue Comment section contains a real URL. Post with `gh issue comment N --body "..."`.
 
 ## When Review Leads to Changes
 

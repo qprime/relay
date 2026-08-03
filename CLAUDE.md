@@ -27,7 +27,7 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 
 **GitHub-Integration** — Post implementation summaries to issues. Reference issues in commits. Design lives in issues, not code comments. Use `gh issue view N --json title,body,url`.
 
-**Close-Out-Rigor** — Tests pass. Lint clean. Specific file staging. Structured commits.
+**Close-Out-Rigor** — Tests pass. Lint clean. Specific file staging — one `git add <path>` per file, never `git add -A`. A failing check blocks the commit; nothing is "pre-existing". Structured commits.
 
 **Verification-Determinism** — No LLM in the verification path. Assertions are Python invariants evaluated against the trace log. An LLM-judges-LLM loop produces plausible results, not verified ones.
 
@@ -69,7 +69,6 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 | Implement a feature or fix | `/engineer` |
 | Review code, specs, or system | `/review` |
 | Write an implementation spec | `/spec` |
-| Close out and commit | `/close-out` |
 
 ## Invariants
 

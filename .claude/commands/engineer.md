@@ -60,4 +60,25 @@ When choosing between a "safe" solution and the architecturally superior solutio
 
 - Working code — if tests fail, diagnose before fixing
 - Clean, minimal diffs that do exactly what was asked
+- Every check that ran must pass before committing — zero failures, zero errors. Never classify a failure as "pre-existing"; if it fails, it blocks the commit.
+- Stage explicitly: one `git add <path>` per file, never `git add -A` or `git add .`. If `git status` shows changes you did not make this session, ask before staging them.
+
+## Issue Comment on Completion
+
+After completing implementation associated with a GitHub issue, post a summary comment with `gh issue comment N --body "..."`:
+
+```
+## Implementation Summary
+
+<1-2 sentence description>
+
+### Changes
+
+| File | Change |
+|------|--------|
+| `path/to/file.py` | Description |
+
+### Notes
+- Key decisions (omit if none)
+```
 
