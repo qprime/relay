@@ -168,6 +168,39 @@ class TestBehaviorSchema:
         spec = _spec_with_trigger(**{"emit": {"output": "_send_plc_b_x", "mode": "latched"}})
         assert any("reserved prefix" in i for i in _issues_for(spec))
 
+    def test_rejects_emit_output_colliding_with_plant_route_key(self):
+        spec = _minimal_spec()
+        spec.raw["Behavior"]["plc_b"]["triggers"].append(
+            {
+                "id": "shadow",
+                "when": {"signal": "t", "edge": "level"},
+                "emit": {"output": "part_at_b", "mode": "latched"},
+            }
+        )
+        assert any("collides with a Plant route as_key" in i for i in _issues_for(spec))
+
+    def test_rejects_emit_output_colliding_with_declared_tag(self):
+        spec = _minimal_spec()
+        spec.raw["Behavior"]["plc_b"]["triggers"].append(
+            {
+                "id": "shadow",
+                "when": {"signal": "t", "edge": "level"},
+                "emit": {"output": "t", "mode": "latched"},
+            }
+        )
+        assert any("collides with a declared Comm tag" in i for i in _issues_for(spec))
+
+    def test_rejects_plant_route_collision_from_a_plc_that_never_reads_it(self):
+        spec = _minimal_spec()
+        spec.raw["Behavior"]["plc_a"]["triggers"].append(
+            {
+                "id": "fabricate",
+                "when": {"signal": "sensor_a_exit", "edge": "level"},
+                "emit": {"output": "part_at_b", "mode": "steady"},
+            }
+        )
+        assert any("collides with a Plant route as_key" in i for i in _issues_for(spec))
+
     def test_rejects_pulse_mode_without_duration(self):
         spec = _spec_with_trigger(**{"emit.mode": "pulse"})
         assert any("duration_ms is required for mode 'pulse'" in i for i in _issues_for(spec))

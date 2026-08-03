@@ -47,25 +47,3 @@ def static_parse_errors(source: str) -> list[str]:
     if depth != 0:
         errors.append(f"unbalanced IF blocks (depth={depth} at end of source)")
     return errors
-
-
-def assignment_lhs(source: str) -> list[str]:
-    names: list[str] = []
-    for line in source.splitlines():
-        stripped = line.strip().rstrip(";")
-        m = _ASSIGN_RE.match(stripped)
-        if not m:
-            continue
-        if _TON_RE.match(stripped):
-            continue
-        names.append(m.group(1))
-    return names
-
-
-def ton_presets(source: str) -> list[tuple[str, float]]:
-    found: list[tuple[str, float]] = []
-    for line in source.splitlines():
-        m = _TON_RE.search(line.strip())
-        if m:
-            found.append((m.group(1), float(m.group(3))))
-    return found

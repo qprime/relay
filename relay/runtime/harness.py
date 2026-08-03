@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import warnings
 from typing import Any
 
 import relay.plant  # noqa: F401  -- ensure plant registrations are loaded
@@ -14,6 +15,32 @@ from relay.strategies.plant import get_plant
 from relay.trace import TraceLog
 
 
+def _warn_on_subscan_timings(spec: TaskSpec, scan_period_ms: float) -> None:
+    for plc_id, entry in (spec.behavior or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        for trigger in entry.get("triggers") or []:
+            if not isinstance(trigger, dict):
+                continue
+            where = f"Behavior.{plc_id}.triggers[{trigger.get('id')}]"
+            debounce = (trigger.get("when") or {}).get("debounce_ms") or 0
+            if 0 < debounce < scan_period_ms:
+                warnings.warn(
+                    f"{where}.when.debounce_ms is {debounce}ms, shorter than the "
+                    f"{scan_period_ms:g}ms scan period; timers advance only at scan "
+                    "boundaries, so this debounce is a no-op",
+                    UserWarning,
+                )
+            duration = (trigger.get("emit") or {}).get("duration_ms") or 0
+            if 0 < duration < scan_period_ms:
+                warnings.warn(
+                    f"{where}.emit.duration_ms is {duration}ms, shorter than the "
+                    f"{scan_period_ms:g}ms scan period; the pulse cannot deassert "
+                    "before the next scan boundary",
+                    UserWarning,
+                )
+
+
 async def simulate(
     spec: TaskSpec,
     st_blocks: dict[str, str],
@@ -26,6 +53,8 @@ async def simulate(
     missing = set(plc_ids) - block_ids
     if missing:
         raise ValueError(f"missing ST blocks for plc_ids: {sorted(missing)}")
+
+    _warn_on_subscan_timings(spec, scan_period_ms)
 
     plant_factory = get_plant(spec.plant_type)
     plant = plant_factory(spec.plant_block)

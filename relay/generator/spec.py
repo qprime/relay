@@ -1,11 +1,8 @@
 from __future__ import annotations
 import re
-import warnings
 
 import anthropic
 import yaml
-
-from relay.clock import DEFAULT_SCAN_PERIOD_MS
 
 from relay.generator.errors import (
     SpecGenerationFailed,
@@ -258,6 +255,22 @@ def _tag_index(spec: TaskSpec) -> tuple[dict[str, set[str]], dict[str, set[str]]
     return produced, consumed
 
 
+def _all_plant_route_keys(spec: TaskSpec) -> set[str]:
+    return {
+        r.get("as_key")
+        for r in spec.plant_block.get("routes", []) or []
+        if isinstance(r, dict) and r.get("as_key")
+    }
+
+
+def _all_tag_names(spec: TaskSpec) -> set[str]:
+    return {
+        t.get("name")
+        for t in spec.comm_block.get("tags", []) or []
+        if isinstance(t, dict) and t.get("name")
+    }
+
+
 def _validate_behavior(
     spec: TaskSpec, plc_ids: tuple[str, ...], issues: list[str]
 ) -> set[str]:
@@ -269,6 +282,8 @@ def _validate_behavior(
 
     routes_by_plc = _plant_route_keys(spec)
     produced_by_plc, consumed_by_plc = _tag_index(spec)
+    plant_signals = _all_plant_route_keys(spec)
+    tag_names = _all_tag_names(spec)
     valid_ids = set(plc_ids)
 
     for plc_id, entry in behavior.items():
@@ -305,8 +320,8 @@ def _validate_behavior(
                 issues.append(f"{where} must be a mapping")
                 continue
             _validate_trigger(
-                raw, where, readable, producible, seen_ids, seen_targets,
-                emit_targets, issues,
+                raw, where, readable, producible, plant_signals, tag_names,
+                seen_ids, seen_targets, emit_targets, issues,
             )
 
     return emit_targets
@@ -317,6 +332,8 @@ def _validate_trigger(
     where: str,
     readable: set[str],
     producible: set[str],
+    plant_signals: set[str],
+    tag_names: set[str],
     seen_ids: set[str],
     seen_targets: set[str],
     emit_targets: set[str],
@@ -351,13 +368,6 @@ def _validate_trigger(
         debounce = when.get("debounce_ms", 0)
         if not isinstance(debounce, int) or isinstance(debounce, bool) or debounce < 0:
             issues.append(f"{where}.when.debounce_ms must be an integer >= 0, got {debounce!r}")
-        elif 0 < debounce < DEFAULT_SCAN_PERIOD_MS:
-            warnings.warn(
-                f"{where}.when.debounce_ms is {debounce}ms, shorter than the "
-                f"{DEFAULT_SCAN_PERIOD_MS:g}ms scan period; the timer can only be "
-                "evaluated at scan boundaries, so this debounce is a no-op",
-                UserWarning,
-            )
 
     emit = raw.get("emit")
     if not isinstance(emit, dict):
@@ -389,6 +399,18 @@ def _validate_trigger(
             )
         elif not _NAME_RE.fullmatch(output):
             issues.append(f"{where}.emit.output {output!r} must match [a-z][a-z0-9_]*")
+        elif output in plant_signals:
+            issues.append(
+                f"{where}.emit.output {output!r} collides with a Plant route as_key; "
+                "the verifier resolves assertion signals across every PLC's outputs "
+                "before falling back to the I/O image, so this output would mask the "
+                "plant sensor and assertions would pass on the emitted value"
+            )
+        elif output in tag_names:
+            issues.append(
+                f"{where}.emit.output {output!r} collides with a declared Comm tag; "
+                f"use 'tag: {output}' if this PLC produces it, or rename the output"
+            )
         else:
             _note_target(output, where, seen_targets, emit_targets, issues)
 
@@ -401,13 +423,6 @@ def _validate_trigger(
             issues.append(
                 f"{where}.emit.duration_ms is required for mode 'pulse' and must be > 0, "
                 f"got {duration!r}"
-            )
-        elif duration < DEFAULT_SCAN_PERIOD_MS:
-            warnings.warn(
-                f"{where}.emit.duration_ms is {duration}ms, shorter than the "
-                f"{DEFAULT_SCAN_PERIOD_MS:g}ms scan period; the pulse cannot deassert "
-                "before the next scan boundary",
-                UserWarning,
             )
     elif duration is not None:
         issues.append(f"{where}.emit.duration_ms is only valid for mode 'pulse'")
@@ -434,16 +449,8 @@ def _note_target(
 def _validate_assertion_coverage(
     spec: TaskSpec, emit_targets: set[str], issues: list[str]
 ) -> None:
-    plant_keys = {
-        r.get("as_key")
-        for r in spec.plant_block.get("routes", []) or []
-        if isinstance(r, dict) and r.get("as_key")
-    }
-    tag_names = {
-        t.get("name")
-        for t in spec.comm_block.get("tags", []) or []
-        if isinstance(t, dict) and t.get("name")
-    }
+    plant_keys = _all_plant_route_keys(spec)
+    tag_names = _all_tag_names(spec)
     for signal in sorted(spec.assertion_signals):
         if signal not in emit_targets and signal not in plant_keys and signal not in tag_names:
             issues.append(
