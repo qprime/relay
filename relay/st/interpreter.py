@@ -30,6 +30,10 @@ class _Timer:
     running: bool = False
     done: bool = False
 
+    @property
+    def q(self) -> bool:
+        return self.done
+
     def tick(self, dt_ms: float, enable: bool) -> None:
         if enable:
             self.running = True
@@ -39,6 +43,9 @@ class _Timer:
             self.running = False
             self.accumulated_ms = 0.0
             self.done = False
+
+
+_TIMER_ATTRS = frozenset({"preset_ms", "accumulated_ms", "running", "done", "q"})
 
 
 def execute(source: str, ctx: STContext, dt_ms: float) -> None:
@@ -226,9 +233,18 @@ class _Parser:
             if "." in text:
                 obj_name, attr = text.split(".", 1)
                 timer = self._ctx.timers.get(obj_name)
-                if timer is not None:
-                    return getattr(timer, attr.lower(), False)
-                return False
+                if timer is None:
+                    known = ", ".join(sorted(self._ctx.timers)) or "(none)"
+                    raise ValueError(
+                        f"{text!r} references {obj_name!r}, which is not a declared "
+                        f"timer instance; known timers: {known}"
+                    )
+                if attr.lower() not in _TIMER_ATTRS:
+                    raise ValueError(
+                        f"unknown timer attribute {attr!r} on {obj_name!r}; "
+                        f"known attributes: {', '.join(sorted(_TIMER_ATTRS))}"
+                    )
+                return getattr(timer, attr.lower())
             return self._ctx.get(text)
         raise ValueError(f"unexpected token {tok!r}")
 

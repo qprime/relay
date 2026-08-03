@@ -2,6 +2,10 @@ from __future__ import annotations
 import re
 
 
+SEND_PREFIX = "_send_"
+SCRATCH_PREFIX = "_scratch_"
+
+
 _TON_RE = re.compile(
     r"(\w+)\s*\(\s*IN\s*:=\s*(.+?)\s*,\s*PT\s*:=\s*T#(\d+(?:\.\d+)?)ms\s*\)", re.IGNORECASE
 )

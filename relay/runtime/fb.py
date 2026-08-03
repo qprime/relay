@@ -6,9 +6,7 @@ from relay.clock import SimClock
 from relay.io_image import IOImage
 from relay.runtime.comm import CommBuffer
 from relay.st.interpreter import STContext, execute
-
-
-_SEND_PREFIX = "_send_"
+from relay.strategies.st_syntax import SCRATCH_PREFIX, SEND_PREFIX
 
 
 @dataclass
@@ -35,7 +33,9 @@ class FunctionBlock:
         outgoing: list[tuple[str, str, Any]] = []
         for key in self._ctx.assigned:
             value = self._ctx.variables[key]
-            if key.startswith(_SEND_PREFIX):
+            if key.startswith(SCRATCH_PREFIX):
+                continue
+            if key.startswith(SEND_PREFIX):
                 target, msg_key = self._parse_send(key)
                 outgoing.append((target, msg_key, value))
             else:
@@ -44,7 +44,7 @@ class FunctionBlock:
         return outputs, outgoing
 
     def _parse_send(self, name: str) -> tuple[str, str]:
-        rest = name[len(_SEND_PREFIX):]
+        rest = name[len(SEND_PREFIX):]
         match = max(
             (plc_id for plc_id in self.plc_ids if rest.startswith(f"{plc_id}_")),
             key=len,
