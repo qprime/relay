@@ -48,6 +48,8 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 | Term | Meaning |
 |------|---------|
 | task spec | YAML intermediate representation between NL intent and generated ST |
+| trigger | Atomic unit of `Behavior`: `when` (signal + edge + debounce) → `emit` (tag/output + mode). Compiles to one ST stanza |
+| scratch variable | Compiler bookkeeping (`_scratch_*`) for edge/latch/pulse state; suppressed from the output image so it never reaches the trace or verifier |
 | function block | ST program unit that executes each scan; holds internal timer state |
 | scan | One execution cycle: promote comm → snapshot I/O → execute FB → write outputs → publish |
 | I/O image | Immutable snapshot of PLC inputs taken at scan top; stable during execution |
@@ -56,7 +58,7 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 | plant model | Minimal physics: belt speed, sensor thresholds, actuator latency |
 | trace log | Scan-by-scan record of I/O snapshots and outputs for all PLCs |
 | EVENTUALLY | Assertion: signal becomes true within N ms from simulation start |
-| PRECEDES | Assertion: signal A becomes true before signal B |
+| PRECEDES | Assertion: signal A becomes true no later than signal B. Non-strict — same-scan is a pass, since within one scan there is no observable ordering |
 
 ## Skill Routing
 

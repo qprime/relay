@@ -1,8 +1,11 @@
 from __future__ import annotations
 import re
+import warnings
 
 import anthropic
 import yaml
+
+from relay.clock import DEFAULT_SCAN_PERIOD_MS
 
 from relay.generator.errors import (
     SpecGenerationFailed,
@@ -348,6 +351,13 @@ def _validate_trigger(
         debounce = when.get("debounce_ms", 0)
         if not isinstance(debounce, int) or isinstance(debounce, bool) or debounce < 0:
             issues.append(f"{where}.when.debounce_ms must be an integer >= 0, got {debounce!r}")
+        elif 0 < debounce < DEFAULT_SCAN_PERIOD_MS:
+            warnings.warn(
+                f"{where}.when.debounce_ms is {debounce}ms, shorter than the "
+                f"{DEFAULT_SCAN_PERIOD_MS:g}ms scan period; the timer can only be "
+                "evaluated at scan boundaries, so this debounce is a no-op",
+                UserWarning,
+            )
 
     emit = raw.get("emit")
     if not isinstance(emit, dict):
@@ -391,6 +401,13 @@ def _validate_trigger(
             issues.append(
                 f"{where}.emit.duration_ms is required for mode 'pulse' and must be > 0, "
                 f"got {duration!r}"
+            )
+        elif duration < DEFAULT_SCAN_PERIOD_MS:
+            warnings.warn(
+                f"{where}.emit.duration_ms is {duration}ms, shorter than the "
+                f"{DEFAULT_SCAN_PERIOD_MS:g}ms scan period; the pulse cannot deassert "
+                "before the next scan boundary",
+                UserWarning,
             )
     elif duration is not None:
         issues.append(f"{where}.emit.duration_ms is only valid for mode 'pulse'")

@@ -50,6 +50,15 @@ def _check_eventually(
 def _check_precedes(
     assertion: str, first: str, second: str, trace: TraceLog
 ) -> AssertionResult:
+    """PRECEDES is non-strict: `first_ms <= second_ms`.
+
+    Within one scan there is no observable ordering — a tag promotes, the FB
+    executes, and outputs fold in a single step sharing one ScanRecord.clock.
+    Two signals that become true in the same scan therefore satisfy this
+    assertion. It asserts 'not after', not 'strictly before'.
+
+    Bounding the gap between two signals is not expressible in this grammar.
+    """
     first_ms: float | None = None
     second_ms: float | None = None
 

@@ -2,6 +2,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+DEFAULT_SCAN_PERIOD_MS = 10.0
+
+
 @dataclass(frozen=True)
 class SimClock:
     tick: int

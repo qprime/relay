@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from relay.clock import SimClock
+from relay.clock import DEFAULT_SCAN_PERIOD_MS, SimClock
 from relay.io_image import IOImage
 from relay.runtime.comm import CommBuffer, CommBus
 from relay.trace import TraceLog, ScanRecord
@@ -19,7 +19,7 @@ FBExecutor = Callable[
 class PLCCoroutine:
     plc_id: str
     executor: FBExecutor
-    scan_period_ms: float = 10.0
+    scan_period_ms: float = DEFAULT_SCAN_PERIOD_MS
 
     async def run(
         self,

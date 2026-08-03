@@ -120,9 +120,18 @@ silently false for any scenario the generator chose to use the new primitive.
 
 ## Enforcement (suggested mechanical check)
 
-- A test that drives `FunctionBlock.scan` twice with identical inputs and
-  asserts identical outputs. Same inputs → same outputs proves no hidden
-  state or I/O is being read.
+- A test that drives two **fresh** `FunctionBlock` instances through the same
+  input *sequence* and asserts the two output *sequences* are identical.
+  Same history → same outputs proves no I/O or nondeterminism is being read.
+
+  Compare sequences, not single scans, and construct a new `FunctionBlock`
+  per run. `FunctionBlock` owns `_ctx` as instance state, and phase 5 is pure
+  *given the prior `STContext`* — not stateless. Driving one instance twice
+  with identical inputs and expecting identical outputs tests statelessness,
+  which this invariant never claimed and which correct ST does not have: a
+  latch (`IF x AND NOT latched THEN latched := TRUE`) emits on its first
+  scan and goes quiet on the second, by design. That check fails against
+  correct code.
 - A grep over `relay/st/` and `relay/runtime/` for forbidden imports
   (`asyncio.sleep`, `time.*`, `socket`, `requests`).
 

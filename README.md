@@ -2,7 +2,7 @@
 
 **Compile natural-language control intent into deterministic, verified PLC simulations.**
 
-Relay takes a description of what a factory cell should do and runs it through a four-stage pipeline: intent → task spec → IEC 61131-3 Structured Text → scan-cycle simulation → trace-based verification. The task spec is a hand-authorable semantic IR; verification is plain Python against a deterministic trace log — so when a test passes, it passes for reasons you can inspect. The target architecture is a deterministic compiler from spec to ST, with a single LLM hop at the front (intent → spec). Today the spec → ST stage still uses an LLM as a transitional step; [issue #5](https://github.com/qprime/relay/issues/5) replaces it with the deterministic compiler.
+Relay takes a description of what a factory cell should do and runs it through a four-stage pipeline: intent → task spec → IEC 61131-3 Structured Text → scan-cycle simulation → trace-based verification. The task spec is a hand-authorable semantic IR; verification is plain Python against a deterministic trace log — so when a test passes, it passes for reasons you can inspect. There is a single LLM hop, at the front (intent → spec). Everything downstream of the task spec is a deterministic compiler.
 
 ## What this is
 
@@ -10,10 +10,10 @@ Relay is a compiler-shaped framework for prototyping PLC control strategies with
 
 1. **Intent** — a natural-language description of a control task ("when a part reaches the end of belt A, hand it off to belt B").
 2. **Task spec** — a YAML intermediate representation that captures the semantic meaning of the intent. Everything downstream reads from this.
-3. **Structured Text generation** — the task spec compiles into IEC 61131-3 Structured Text function blocks, the same language real PLCs run. The target is a deterministic compiler from a structured Behavior IR; today this stage still uses an LLM as a transitional step, so edge/level/debounce semantics are LLM-chosen rather than specified in the spec. [Issue #5](https://github.com/qprime/relay/issues/5) closes this gap — after it lands, intent → spec is the only LLM hop in the pipeline.
+3. **Structured Text generation** — the task spec's `Behavior` block is a structured trigger IR (edge/level detection, debounce, latch/pulse/steady emission), which a deterministic Python compiler translates into IEC 61131-3 Structured Text function blocks, the same language real PLCs run. Every timing and edge semantic is written in the spec and inspectable there, not chosen downstream.
 4. **Simulation and verification** — the generated code executes against a plant physics model, and the resulting scan-by-scan trace is checked against temporal assertions (`EVENTUALLY`, `PRECEDES`) written in Python.
 
-The LLM sits on the front half of the pipeline (stages 1 and 3 today; stage 1 only after [issue #5](https://github.com/qprime/relay/issues/5)). It is deliberately excluded from the verification path — assertions are evaluated against a deterministic trace log, not by asking an LLM whether the output looks right.
+The LLM sits at the very front of the pipeline (stage 1 only). It is strictly upstream of the IR: once the task spec exists, every downstream artifact — ST, simulation trace, verdict — is deterministically derived from it. The LLM is deliberately excluded from the verification path — assertions are evaluated against a deterministic trace log, not by asking an LLM whether the output looks right.
 
 Each simulated PLC runs as an `asyncio` coroutine executing a conventional scan loop:
 
@@ -57,11 +57,15 @@ Plant:
 
 Behavior:
   plc_a:
-    owns: [belt_a, sensor_a_exit]
-    "on": part_detected_at_exit -> signal_handoff
+    triggers:
+      - id: handoff_on_exit
+        when: { signal: sensor_a_exit, edge: rising }
+        emit: { tag: handoff_signal, mode: latched }
   plc_b:
-    owns: [belt_b, sensor_b_entry]
-    "on": handoff_signal -> enable_belt_b
+    triggers:
+      - id: belt_on_handoff
+        when: { signal: handoff_signal, edge: level }
+        emit: { output: belt_b_enable, mode: latched }
 
 Assertions:
   - "EVENTUALLY(part_at_b, within: 500ms)"
@@ -69,6 +73,19 @@ Assertions:
 ```
 
 The `Comm` block selects a comm strategy (currently `tag`; see below) and declares the inter-PLC signals it routes. The `Plant` block selects a plant model (currently `conveyor`) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching.
+
+The `Behavior` block is the trigger IR the ST compiler reads. Each PLC declares a list of triggers, and each trigger compiles to one ST stanza:
+
+| Field | Values | Meaning |
+|-------|--------|---------|
+| `when.signal` | string | A `Plant.routes[].as_key` targeting this PLC, or a `Comm.tags[]` entry it consumes |
+| `when.edge` | `rising` \| `falling` \| `level` | Transition to detect; `level` fires while the signal is true |
+| `when.debounce_ms` | int ≥ 0 | Source must hold stable this long before the trigger fires |
+| `emit.tag` \| `emit.output` | string (exactly one) | A tag this PLC produces, or a local output name |
+| `emit.mode` | `latched` \| `pulse` \| `steady` | `latched` sets once and holds; `steady` follows the condition down; `pulse` asserts for `duration_ms` |
+| `emit.duration_ms` | int > 0 | Required when `mode: pulse`, rejected otherwise |
+
+Because edge, debounce, and pulse width are spec fields rather than downstream inferences, an under-specified scenario fails at validation instead of quietly simulating the wrong behavior. Validation resolves every `when.signal` and `emit.tag` against the `Plant` and `Comm` blocks, so a trigger cannot reference a signal no PLC can read or emit a tag it does not produce.
 
 **Verification** (from [`tests/test_conveyor.py`](tests/test_conveyor.py)):
 
@@ -147,14 +164,14 @@ This runs the two-PLC conveyor handoff end-to-end: generates Structured Text fro
 uv run pytest
 ```
 
-Generator passes (stages 1 and 3) require an `ANTHROPIC_API_KEY` in your environment. Simulation and verification stages do not call out to any LLM.
+Only the intent → task spec pass (stage 1) requires an `ANTHROPIC_API_KEY` in your environment. ST compilation, simulation, and verification do not call out to any LLM — starting from a hand-authored task spec, the whole pipeline runs offline.
 
 ## Project structure
 
 ```
 relay/
 ├── spec/          Task spec loader and validation
-├── generator/     LLM passes — NL → task spec, task spec → ST
+├── generator/     NL → task spec (LLM), task spec → ST (deterministic compiler)
 ├── st/            Structured Text subset interpreter and function blocks
 ├── runtime/       PLC coroutine, scan loop, I/O image, comm bus, SimClock
 │   └── harness.py  Simulation entry point: wires plant + comm + PLCs and drives the scan loop

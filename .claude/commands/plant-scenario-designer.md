@@ -73,9 +73,20 @@ Plant:
 
 Behavior:
   <plc_id>:
-    owns: [<actuator_or_sensor>, ...]
-    "on": <trigger> -> <action>
+    triggers:
+      - id: <snake_case, unique within this PLC>
+        when:
+          signal: <a Plant route as_key targeting this PLC, or a Comm tag it consumes>
+          edge: rising | falling | level
+          debounce_ms: <int >= 0, optional>
+        emit:
+          tag: <a Comm tag this PLC produces>    # exactly one of tag / output
+          output: <snake_case local output name>
+          mode: latched | pulse | steady
+          duration_ms: <int > 0, required iff mode is pulse>
 ```
+
+`Behavior` is a structured trigger IR compiled directly to ST — there is no free-form rule text, and no `owns` list. Every timing decision the scenario depends on (edge vs level, debounce window, pulse width) must be written here explicitly; if a scenario needs a primitive these fields can't express, that's a framework extension, not something to describe in prose. `when.signal` and `emit.tag` are cross-validated against the `Plant` and `Comm` blocks, so they must name signals those blocks actually declare.
 
 Design-time annotations go **next to** the task spec, not inside it (the loader ignores unknown top-level keys but keep the consumed shape clean):
 
@@ -99,9 +110,11 @@ Scenario:
 Assertions are strings in the DSL that `relay.verify.assertions.evaluate_assertion` recognizes. Current grammar:
 
 - `EVENTUALLY(<signal>, within: <N>ms)` — signal becomes true within N ms of sim start.
-- `PRECEDES(<a>, <b>)` — signal `a` becomes true before signal `b`.
+- `PRECEDES(<a>, <b>)` — signal `a` becomes true no later than signal `b`. **Non-strict:** both becoming true in the same scan is a pass, because within one scan there is no observable ordering. Don't rely on `PRECEDES` to prove causation between signals that resolve in the same scan — it can't distinguish that from coincidence.
 
 Signal names must be identifiers (`\w+`) present in the PLC output image. If a scenario needs a form the evaluator doesn't support (e.g. `ALWAYS`, `NEVER`, `WITHIN`), call that out explicitly — it's a framework extension, not a spec extension.
+
+Note there is currently **no form that bounds the gap between two signals** — the thing you'd want for asserting pulse widths or debounce windows. If a scenario needs that, it's a framework extension.
 
 ```yaml
 Assertions:
@@ -142,7 +155,7 @@ Flag explicitly when composition requires runtime work that doesn't exist yet (e
 
 6. Verify every assertion is expressible in the current DSL (`EVENTUALLY`, `PRECEDES`). If not, name the framework extension required and keep it out of the spec until built.
 
-7. Verify every signal named in assertions will actually appear in the PLC output image given the `Behavior` block. Assertions that reference signals no PLC emits pass silently as framework bugs but fail as scenario bugs.
+7. Verify every signal named in assertions resolves to a trigger `emit` target, a `Plant` route `as_key`, or a declared `Comm` tag. `validate_spec` enforces this, so a miss is a loud spec-validation error rather than a silent pass — but catching it at design time is cheaper than discovering it when the scenario won't validate.
 
 ## Output
 

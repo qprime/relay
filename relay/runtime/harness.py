@@ -3,7 +3,7 @@ import asyncio
 from typing import Any
 
 import relay.plant  # noqa: F401  -- ensure plant registrations are loaded
-from relay.clock import SimClock
+from relay.clock import DEFAULT_SCAN_PERIOD_MS, SimClock
 from relay.io_image import IOImage
 from relay.runtime.comm import CommBus
 from relay.runtime.fb import FunctionBlock
@@ -19,7 +19,7 @@ async def simulate(
     st_blocks: dict[str, str],
     *,
     max_scans: int = 100,
-    scan_period_ms: float = 10.0,
+    scan_period_ms: float = DEFAULT_SCAN_PERIOD_MS,
 ) -> TraceLog:
     plc_ids = spec.plc_ids
     block_ids = set(st_blocks)

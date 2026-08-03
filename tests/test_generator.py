@@ -8,31 +8,18 @@ import pytest
 import relay.plant  # noqa: F401  -- trigger conveyor registration
 from relay.generator.errors import (
     SpecValidationError,
-    STValidationError,
     UnknownCommStrategy,
     UnknownPlantType,
 )
 from relay.generator.spec import validate_spec
-from relay.generator.st import validate_st_blocks
+from relay.generator.st import compile_st_blocks
 from relay.runtime.harness import simulate
 from relay.spec.schema import TaskSpec, load_spec
+from relay.strategies.st_syntax import static_parse_errors
 
 
 _SPEC_PATH = Path(__file__).parent.parent / "specs" / "conveyor_handoff.yaml"
-
-
-_PLC_A_ST = """
-IF sensor_a_exit AND NOT handoff_signaled THEN
-handoff_signaled := TRUE;
-_send_plc_b_handoff_signal := TRUE;
-END_IF;
-"""
-
-_PLC_B_ST = """
-IF handoff_signal AND NOT belt_b_enable THEN
-belt_b_enable := TRUE;
-END_IF;
-"""
+_GOLDEN_DIR = Path(__file__).parent / "golden"
 
 
 def _minimal_spec(**overrides) -> TaskSpec:
@@ -312,87 +299,187 @@ class TestSpecValidation:
         validate_spec(spec)
 
 
-class TestSTValidation:
-    def test_rejects_unparseable_block(self):
-        spec = _minimal_spec(
-            Assertions=["EVENTUALLY(t, within: 100ms)"],
+class TestCompiler:
+    def test_compiles_rising_latched_to_known_st(self):
+        spec = _spec_with_trigger(**{"when.edge": "rising", "emit.mode": "latched"})
+        assert compile_st_blocks(spec)["plc_a"] == (
+            "_scratch_edge_emit_t := sensor_a_exit AND NOT _scratch_prev_emit_t;\n"
+            "_scratch_prev_emit_t := sensor_a_exit;\n"
+            "IF _scratch_edge_emit_t THEN\n"
+            "_scratch_latched_emit_t := TRUE;\n"
+            "END_IF;\n"
+            "_send_plc_b_t := _scratch_latched_emit_t;"
         )
-        blocks = {
-            "plc_a": "@@@ not valid ST @@@",
-            "plc_b": "_send_plc_a_t := TRUE;",
-        }
-        with pytest.raises(STValidationError) as exc:
-            validate_st_blocks(spec, blocks)
-        assert "plc_a" in exc.value.per_plc
 
-    def test_rejects_missing_signal_coverage(self):
-        # part_at_b is asserted but no route/tag/local produces it
-        raw = _minimal_spec().raw
-        raw["Plant"]["routes"] = []
-        raw["Assertions"] = ["EVENTUALLY(part_at_b, within: 500ms)"]
-        spec = TaskSpec(raw=raw)
-        blocks = {
-            "plc_a": "_send_plc_b_t := TRUE;",
-            "plc_b": "noop := FALSE;",
-        }
-        with pytest.raises(STValidationError) as exc:
-            validate_st_blocks(spec, blocks)
-        assert "__spec__" in exc.value.per_plc
+    def test_compiles_falling_latched_to_known_st(self):
+        spec = _spec_with_trigger(**{"when.edge": "falling", "emit.mode": "latched"})
+        assert compile_st_blocks(spec)["plc_a"] == (
+            "_scratch_edge_emit_t := NOT sensor_a_exit AND _scratch_prev_emit_t;\n"
+            "_scratch_prev_emit_t := sensor_a_exit;\n"
+            "IF _scratch_edge_emit_t THEN\n"
+            "_scratch_latched_emit_t := TRUE;\n"
+            "END_IF;\n"
+            "_send_plc_b_t := _scratch_latched_emit_t;"
+        )
 
-    def test_passes_for_conveyor_hardcoded_st(self):
-        spec = load_spec(_SPEC_PATH)
-        blocks = {"plc_a": _PLC_A_ST, "plc_b": _PLC_B_ST}
-        validate_st_blocks(spec, blocks)
+    def test_compiles_level_latched_to_known_st(self):
+        spec = _spec_with_trigger(**{"when.edge": "level", "emit.mode": "latched"})
+        assert compile_st_blocks(spec)["plc_a"] == (
+            "IF sensor_a_exit THEN\n"
+            "_scratch_latched_emit_t := TRUE;\n"
+            "END_IF;\n"
+            "_send_plc_b_t := _scratch_latched_emit_t;"
+        )
 
-    def test_warns_on_zero_preset_timer(self):
-        spec = _minimal_spec(Assertions=["EVENTUALLY(t, within: 100ms)"])
-        blocks = {
-            "plc_a": "T1(IN := TRUE, PT := T#0ms);\n_send_plc_b_t := TRUE;",
-            "plc_b": "noop := FALSE;",
-        }
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            validate_st_blocks(spec, blocks)
-        assert any(issubclass(w.category, UserWarning) for w in caught)
+    def test_compiles_steady_to_known_st(self):
+        spec = _spec_with_trigger(**{"when.edge": "level", "emit.mode": "steady"})
+        assert compile_st_blocks(spec)["plc_a"] == "_send_plc_b_t := sensor_a_exit;"
 
-    def test_rejects_missing_or_extra_plc_keys(self):
+    def test_compiles_rising_pulse_with_ton(self):
+        spec = _spec_with_trigger(
+            **{"when.edge": "rising", "emit.mode": "pulse", "emit.duration_ms": 30}
+        )
+        assert compile_st_blocks(spec)["plc_a"] == (
+            "_scratch_edge_emit_t := sensor_a_exit AND NOT _scratch_prev_emit_t;\n"
+            "_scratch_prev_emit_t := sensor_a_exit;\n"
+            "IF _scratch_edge_emit_t THEN\n"
+            "_scratch_pulse_emit_t := TRUE;\n"
+            "END_IF;\n"
+            "_scratch_ton_emit_t(IN := _scratch_pulse_emit_t, PT := T#30ms);\n"
+            "IF _scratch_ton_emit_t.Q THEN\n"
+            "_scratch_pulse_emit_t := FALSE;\n"
+            "END_IF;\n"
+            "_send_plc_b_t := _scratch_pulse_emit_t;"
+        )
+
+    def test_compiles_with_debounce_emits_stability_ton(self):
+        spec = _spec_with_trigger(
+            **{"when.edge": "level", "emit.mode": "steady", "when.debounce_ms": 30}
+        )
+        assert compile_st_blocks(spec)["plc_a"] == (
+            "_scratch_debounce_emit_t(IN := sensor_a_exit, PT := T#30ms);\n"
+            "_scratch_stable_emit_t := _scratch_debounce_emit_t.Q;\n"
+            "_send_plc_b_t := _scratch_stable_emit_t;"
+        )
+
+    def test_debounce_and_pulse_compose_in_one_trigger(self):
+        spec = _spec_with_trigger(
+            **{
+                "when.edge": "rising",
+                "when.debounce_ms": 20,
+                "emit.mode": "pulse",
+                "emit.duration_ms": 30,
+            }
+        )
+        source = compile_st_blocks(spec)["plc_a"]
+        assert source.startswith("_scratch_debounce_emit_t(IN := sensor_a_exit, PT := T#20ms);")
+        assert "_scratch_edge_emit_t := _scratch_stable_emit_t AND NOT _scratch_prev_emit_t;" in source
+        assert "_scratch_ton_emit_t(IN := _scratch_pulse_emit_t, PT := T#30ms);" in source
+        assert not static_parse_errors(source)
+
+    def test_emits_one_send_per_declared_consumer(self):
         spec = _minimal_spec()
-        blocks = {"plc_a": "_send_plc_b_t := TRUE;"}  # missing plc_b
-        with pytest.raises(STValidationError) as exc:
-            validate_st_blocks(spec, blocks)
-        assert "__spec__" in exc.value.per_plc
+        spec.raw["Comm"]["tags"][0]["consumed_by"] = ["plc_b", "plc_c"]
+        spec.raw["System"]["plcs"].append({"id": "plc_c", "role": "z"})
+        source = compile_st_blocks(spec)["plc_a"]
+        assert "_send_plc_b_t := _scratch_latched_emit_t;" in source
+        assert "_send_plc_c_t := _scratch_latched_emit_t;" in source
 
-    def test_detects_undelivered_tag(self):
+    def test_zero_trigger_plc_compiles_to_empty_body(self):
         spec = _minimal_spec()
-        blocks = {
-            "plc_a": "noop := FALSE;",  # declared tag 't' is never emitted
-            "plc_b": "noop := FALSE;",
-        }
-        with pytest.raises(STValidationError) as exc:
-            validate_st_blocks(spec, blocks)
-        assert "plc_a" in exc.value.per_plc
-        assert any("never emitted" in i for i in exc.value.per_plc["plc_a"])
+        spec.raw["Behavior"]["plc_a"]["triggers"] = []
+        assert compile_st_blocks(spec)["plc_a"] == ""
+        assert static_parse_errors("") == []
 
+    def test_plc_absent_from_behavior_compiles_to_empty_body(self):
+        spec = _minimal_spec()
+        del spec.raw["Behavior"]["plc_a"]
+        assert compile_st_blocks(spec)["plc_a"] == ""
 
-class TestHarnessIntegration:
-    def test_simulate_runs_conveyor_end_to_end(self):
+    def test_compiler_covers_every_declared_plc(self):
+        spec = _minimal_spec()
+        assert set(compile_st_blocks(spec)) == set(spec.plc_ids)
+
+    def test_compiler_is_pure(self):
         spec = load_spec(_SPEC_PATH)
-        blocks = {"plc_a": _PLC_A_ST, "plc_b": _PLC_B_ST}
-        trace = asyncio.run(simulate(spec, blocks))
-        from relay.verify.assertions import evaluate_all
-        results = evaluate_all(spec.assertions, trace)
-        assert all(r.passed for r in results), [(r.assertion, r.reason) for r in results]
+        assert compile_st_blocks(spec) == compile_st_blocks(spec)
 
-    def test_simulate_propagates_send_routing_error(self):
+    def test_compiler_output_passes_static_st_parser(self):
         spec = load_spec(_SPEC_PATH)
-        bad_st = "_send_plc_unknown_x := TRUE;"
-        blocks = {"plc_a": bad_st, "plc_b": _PLC_B_ST}
-        with pytest.raises(ValueError, match="_send_"):
-            asyncio.run(simulate(spec, blocks, max_scans=1))
+        for plc_id, source in compile_st_blocks(spec).items():
+            assert static_parse_errors(source) == [], (plc_id, source)
 
-    def test_simulate_is_deterministic(self):
+    @pytest.mark.parametrize("edge", ["rising", "falling", "level"])
+    @pytest.mark.parametrize("mode", ["latched", "steady", "pulse"])
+    @pytest.mark.parametrize("debounce_ms", [0, 30])
+    @pytest.mark.parametrize("kind", ["tag", "output"])
+    def test_compiler_output_passes_static_st_parser_for_every_template(
+        self, edge, mode, debounce_ms, kind
+    ):
+        emit = {"mode": mode}
+        emit["tag" if kind == "tag" else "output"] = "t" if kind == "tag" else "belt_a"
+        if mode == "pulse":
+            emit["duration_ms"] = 30
+        spec = _spec_with_trigger(
+            **{"when.edge": edge, "when.debounce_ms": debounce_ms, "emit": emit}
+        )
+        validate_spec(spec)
+        source = compile_st_blocks(spec)["plc_a"]
+        assert static_parse_errors(source) == [], source
+
+
+class TestGoldenST:
+    def test_plc_a_golden(self):
         spec = load_spec(_SPEC_PATH)
-        blocks = {"plc_a": _PLC_A_ST, "plc_b": _PLC_B_ST}
+        expected = (_GOLDEN_DIR / "plc_a.st").read_text()
+        assert compile_st_blocks(spec)["plc_a"] + "\n" == expected
+
+    def test_plc_b_golden(self):
+        spec = load_spec(_SPEC_PATH)
+        expected = (_GOLDEN_DIR / "plc_b.st").read_text()
+        assert compile_st_blocks(spec)["plc_b"] + "\n" == expected
+
+
+def _evaluate_conveyor(spec: TaskSpec, blocks: dict[str, str]):
+    from relay.verify.assertions import evaluate_all
+
+    trace = asyncio.run(simulate(spec, blocks))
+    return evaluate_all(spec.assertions, trace)
+
+
+class TestConveyorMigration:
+    def test_migrated_spec_validates(self):
+        validate_spec(load_spec(_SPEC_PATH))
+
+    def test_migrated_spec_compiles(self):
+        spec = load_spec(_SPEC_PATH)
+        blocks = compile_st_blocks(spec)
+        assert set(blocks) == set(spec.plc_ids)
+        for source in blocks.values():
+            assert static_parse_errors(source) == []
+
+    def test_migrated_spec_eventually_part_at_b(self):
+        spec = load_spec(_SPEC_PATH)
+        results = _evaluate_conveyor(spec, compile_st_blocks(spec))
+        result = next(r for r in results if "EVENTUALLY" in r.assertion)
+        assert result.passed, result.reason
+
+    def test_migrated_spec_precedes_handoff_then_belt(self):
+        spec = load_spec(_SPEC_PATH)
+        results = _evaluate_conveyor(spec, compile_st_blocks(spec))
+        result = next(r for r in results if "PRECEDES" in r.assertion)
+        assert result.passed, result.reason
+
+    def test_migrated_spec_negative_no_emit_fails_assertions(self):
+        spec = load_spec(_SPEC_PATH)
+        blocks = compile_st_blocks(spec)
+        blocks["plc_a"] = ""
+        results = _evaluate_conveyor(spec, blocks)
+        assert not all(r.passed for r in results)
+
+    def test_migrated_spec_deterministic(self):
+        spec = load_spec(_SPEC_PATH)
+        blocks = compile_st_blocks(spec)
         trace_a = asyncio.run(simulate(spec, blocks))
         trace_b = asyncio.run(simulate(spec, blocks))
         assert len(trace_a.records) == len(trace_b.records)
@@ -402,8 +489,25 @@ class TestHarnessIntegration:
             assert dict(ra.outputs.values) == dict(rb.outputs.values)
             assert dict(ra.io.values) == dict(rb.io.values)
 
+    def test_compiled_st_leaves_no_scratch_names_in_trace(self):
+        spec = load_spec(_SPEC_PATH)
+        trace = asyncio.run(simulate(spec, compile_st_blocks(spec)))
+        for record in trace.records:
+            assert not any(k.startswith("_scratch_") for k in record.outputs.values)
+            assert not any(k.startswith("_scratch_") for k in record.io.values)
+
+
+class TestHarnessIntegration:
+    def test_simulate_propagates_send_routing_error(self):
+        spec = load_spec(_SPEC_PATH)
+        blocks = compile_st_blocks(spec)
+        blocks["plc_a"] = "_send_plc_unknown_x := TRUE;"
+        with pytest.raises(ValueError, match="_send_"):
+            asyncio.run(simulate(spec, blocks, max_scans=1))
+
     def test_simulate_with_no_st_for_one_plc_raises(self):
         spec = load_spec(_SPEC_PATH)
-        blocks = {"plc_a": _PLC_A_ST}  # missing plc_b
+        blocks = compile_st_blocks(spec)
+        del blocks["plc_b"]
         with pytest.raises(ValueError, match="missing ST blocks"):
             asyncio.run(simulate(spec, blocks))
