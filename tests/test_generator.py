@@ -58,6 +58,7 @@ def _minimal_spec(**overrides) -> TaskSpec:
                 "actuator_latency_ms": 50.0,
             },
             "routes": [
+                {"sensor": "sensor_a_exit_triggered", "to_plc": "plc_a", "as_key": "sensor_a_exit", "trigger": "edge"},
                 {"sensor": "part_at_b", "to_plc": "plc_b", "as_key": "part_at_b", "trigger": "level"},
             ],
             "actuators": [
@@ -65,8 +66,24 @@ def _minimal_spec(**overrides) -> TaskSpec:
             ],
         },
         "Behavior": {
-            "plc_a": {"owns": ["x"], "on": "rule"},
-            "plc_b": {"owns": ["y"], "on": "rule"},
+            "plc_a": {
+                "triggers": [
+                    {
+                        "id": "emit_t",
+                        "when": {"signal": "sensor_a_exit", "edge": "rising"},
+                        "emit": {"tag": "t", "mode": "latched"},
+                    }
+                ]
+            },
+            "plc_b": {
+                "triggers": [
+                    {
+                        "id": "belt_on_t",
+                        "when": {"signal": "t", "edge": "level"},
+                        "emit": {"output": "belt_b_enable", "mode": "latched"},
+                    }
+                ]
+            },
         },
         "Assertions": ["EVENTUALLY(part_at_b, within: 500ms)"],
     }
@@ -77,6 +94,156 @@ def _minimal_spec(**overrides) -> TaskSpec:
             cursor = cursor[p]
         cursor[parts[-1]] = value
     return TaskSpec(raw=raw)
+
+
+def _spec_with_trigger(plc_id: str = "plc_a", **trigger_overrides) -> TaskSpec:
+    spec = _minimal_spec()
+    trigger = spec.raw["Behavior"][plc_id]["triggers"][0]
+    for path, value in trigger_overrides.items():
+        cursor = trigger
+        parts = path.split(".")
+        for p in parts[:-1]:
+            cursor = cursor[p]
+        if value is _DELETE:
+            cursor.pop(parts[-1], None)
+        else:
+            cursor[parts[-1]] = value
+    return spec
+
+
+_DELETE = object()
+
+
+def _issues_for(spec: TaskSpec) -> list[str]:
+    with pytest.raises(SpecValidationError) as exc:
+        validate_spec(spec)
+    return exc.value.issues
+
+
+class TestBehaviorSchema:
+    def test_accepts_minimal_rising_latched_trigger(self):
+        validate_spec(_minimal_spec())
+
+    def test_rejects_legacy_on_string(self):
+        spec = _minimal_spec()
+        spec.raw["Behavior"]["plc_a"]["on"] = "part_detected -> signal_handoff"
+        assert any("no longer supported" in i and "triggers" in i for i in _issues_for(spec))
+
+    def test_rejects_legacy_owns_key(self):
+        spec = _minimal_spec()
+        spec.raw["Behavior"]["plc_a"]["owns"] = ["belt_a"]
+        issues = _issues_for(spec)
+        assert any("owns has been removed" in i for i in issues)
+        assert any("Plant.routes" in i and "Comm.tags" in i for i in issues)
+
+    def test_rejects_missing_triggers_list(self):
+        spec = _minimal_spec()
+        del spec.raw["Behavior"]["plc_a"]["triggers"]
+        assert any("triggers must be a list" in i for i in _issues_for(spec))
+
+    def test_rejects_duplicate_trigger_id_within_plc(self):
+        spec = _minimal_spec()
+        triggers = spec.raw["Behavior"]["plc_a"]["triggers"]
+        triggers.append(
+            {
+                "id": triggers[0]["id"],
+                "when": {"signal": "sensor_a_exit", "edge": "level"},
+                "emit": {"output": "other", "mode": "steady"},
+            }
+        )
+        assert any("duplicated within this PLC" in i for i in _issues_for(spec))
+
+    def test_rejects_unknown_signal_in_when(self):
+        spec = _spec_with_trigger(**{"when.signal": "no_such_signal"})
+        assert any("does not resolve to a Plant route" in i for i in _issues_for(spec))
+
+    def test_rejects_signal_routed_to_a_different_plc(self):
+        spec = _spec_with_trigger(**{"when.signal": "part_at_b"})
+        assert any("does not resolve" in i for i in _issues_for(spec))
+
+    def test_rejects_emit_tag_not_produced_by_this_plc(self):
+        spec = _spec_with_trigger("plc_b", **{"emit": {"tag": "t", "mode": "latched"}})
+        assert any("not a Comm tag produced by this PLC" in i for i in _issues_for(spec))
+
+    def test_rejects_both_tag_and_output_in_emit(self):
+        spec = _spec_with_trigger(**{"emit.output": "belt_a"})
+        assert any("not both" in i for i in _issues_for(spec))
+
+    def test_rejects_neither_tag_nor_output_in_emit(self):
+        spec = _spec_with_trigger(**{"emit": {"mode": "latched"}})
+        assert any("exactly one of 'tag' or 'output'" in i for i in _issues_for(spec))
+
+    def test_rejects_emit_output_using_scratch_prefix(self):
+        spec = _spec_with_trigger(**{"emit": {"output": "_scratch_x", "mode": "latched"}})
+        assert any("reserved prefix" in i for i in _issues_for(spec))
+
+    def test_rejects_emit_output_using_send_prefix(self):
+        spec = _spec_with_trigger(**{"emit": {"output": "_send_plc_b_x", "mode": "latched"}})
+        assert any("reserved prefix" in i for i in _issues_for(spec))
+
+    def test_rejects_pulse_mode_without_duration(self):
+        spec = _spec_with_trigger(**{"emit.mode": "pulse"})
+        assert any("duration_ms is required for mode 'pulse'" in i for i in _issues_for(spec))
+
+    def test_rejects_pulse_mode_with_zero_duration(self):
+        spec = _spec_with_trigger(**{"emit.mode": "pulse", "emit.duration_ms": 0})
+        assert any("must be > 0" in i for i in _issues_for(spec))
+
+    def test_rejects_duration_ms_on_non_pulse_mode(self):
+        spec = _spec_with_trigger(**{"emit.duration_ms": 50})
+        assert any("only valid for mode 'pulse'" in i for i in _issues_for(spec))
+
+    def test_rejects_negative_debounce_ms(self):
+        spec = _spec_with_trigger(**{"when.debounce_ms": -5})
+        assert any("debounce_ms must be an integer >= 0" in i for i in _issues_for(spec))
+
+    def test_rejects_unknown_edge(self):
+        spec = _spec_with_trigger(**{"when.edge": "sideways"})
+        assert any("when.edge must be one of" in i for i in _issues_for(spec))
+
+    def test_rejects_unknown_mode(self):
+        spec = _spec_with_trigger(**{"emit.mode": "toggle"})
+        assert any("emit.mode must be one of" in i for i in _issues_for(spec))
+
+    def test_rejects_two_triggers_emitting_same_target(self):
+        spec = _minimal_spec()
+        spec.raw["Behavior"]["plc_b"]["triggers"].append(
+            {
+                "id": "belt_again",
+                "when": {"signal": "part_at_b", "edge": "rising"},
+                "emit": {"output": "belt_b_enable", "mode": "steady"},
+            }
+        )
+        assert any("one trigger per target" in i for i in _issues_for(spec))
+
+    def test_accepts_two_triggers_emitting_distinct_targets(self):
+        spec = _minimal_spec()
+        spec.raw["Behavior"]["plc_b"]["triggers"].append(
+            {
+                "id": "alarm_on_part",
+                "when": {"signal": "part_at_b", "edge": "rising"},
+                "emit": {"output": "alarm", "mode": "steady"},
+            }
+        )
+        validate_spec(spec)
+
+    def test_rejects_trigger_id_not_snake_case(self):
+        spec = _spec_with_trigger(**{"id": "Handoff On Exit"})
+        assert any("must match" in i for i in _issues_for(spec))
+
+    def test_collects_multiple_trigger_issues(self):
+        spec = _spec_with_trigger(
+            **{"id": "BAD ID", "when.signal": "nope", "when.edge": "sideways"}
+        )
+        assert len(_issues_for(spec)) >= 3
+
+    def test_uncovered_assertion_signal_is_rejected_at_spec_time(self):
+        spec = _minimal_spec(Assertions=["EVENTUALLY(ghost_signal, within: 100ms)"])
+        assert any("ghost_signal" in i and "not covered" in i for i in _issues_for(spec))
+
+    def test_assertion_signal_covered_by_trigger_emit_target(self):
+        spec = _minimal_spec(Assertions=["EVENTUALLY(belt_b_enable, within: 100ms)"])
+        validate_spec(spec)
 
 
 class TestSpecValidation:

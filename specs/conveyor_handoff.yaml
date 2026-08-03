@@ -35,11 +35,23 @@ Plant:
 
 Behavior:
   plc_a:
-    owns: [belt_a, sensor_a_exit]
-    "on": part_detected_at_exit -> signal_handoff
+    triggers:
+      - id: handoff_on_exit
+        when:
+          signal: sensor_a_exit
+          edge: rising
+        emit:
+          tag: handoff_signal
+          mode: latched
   plc_b:
-    owns: [belt_b, sensor_b_entry]
-    "on": handoff_signal -> enable_belt_b
+    triggers:
+      - id: belt_on_handoff
+        when:
+          signal: handoff_signal
+          edge: level
+        emit:
+          output: belt_b_enable
+          mode: latched
 
 Assertions:
   - "EVENTUALLY(part_at_b, within: 500ms)"
