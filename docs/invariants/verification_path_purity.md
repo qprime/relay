@@ -74,6 +74,11 @@ at the import boundary.
   the trace, not to the runtime producing it.
 - **Performance instrumentation.** A debug print statement is fine. The
   rule is about correctness inputs, not observability.
+- **Tooling that invokes the verifier.** `tools/` may import `relay.verify`
+  to evaluate assertions and record results. The invariant constrains what
+  `relay/verify/` itself imports, not who calls it. `tools/expectations.py`
+  runs the sim and the verifier to produce the expectations artifact; it
+  adds nothing to the verifier's own import set.
 
 ## Failure mode this prevents
 

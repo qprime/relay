@@ -1,0 +1,20 @@
+{
+  "assertions": [
+    {
+      "observed_gap_ms": null,
+      "passed": true,
+      "text": "EVENTUALLY(part_at_b, within: 500ms)",
+      "witness": "signal 'part_at_b' true at 290.0ms"
+    },
+    {
+      "observed_gap_ms": 0.0,
+      "passed": true,
+      "text": "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)",
+      "witness": "'handoff_signal' at 100.0ms precedes 'belt_b_enable' at 100.0ms (gap 0.0ms, budget 500.0ms)"
+    }
+  ],
+  "generated_from": "specs/conveyor_handoff.yaml",
+  "max_scans": 100,
+  "scan_period_ms": 10.0,
+  "system_name": "conveyor_handoff"
+}

@@ -94,6 +94,13 @@ graph identical for the lifetime of the project.
 - **Stdlib and third-party imports.** The rule is about intra-`relay/`
   edges, not external dependencies (those are constrained by other
   invariants, e.g. `verification_path_purity`).
+- **The C++ deployment host.** `host/` is a separate C++ runtime sibling,
+  not a Python pipeline stage. The import-direction rule applies only to
+  `relay/`. The host consumes pipeline *artifacts* (resolved-spec JSON,
+  ST-blocks JSON) and produces a trace; it never imports Python code.
+- **Developer tooling.** `tools/` may import from any stage, on the same
+  footing as `tests/`. It produces artifacts *from* the pipeline
+  (expectations goldens, host inputs); it is not a stage within it.
 
 ## Failure mode this prevents
 

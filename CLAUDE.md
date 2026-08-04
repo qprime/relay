@@ -14,6 +14,8 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 | Load-bearing rules | [docs/invariants/](docs/invariants/) |
 | Slash-command personas | [.claude/commands/](.claude/commands/) |
 | Task spec examples | [specs/](specs/) |
+| C++ deployment host | [host/README.md](host/README.md) |
+| Expectations artifacts (sim-certified verdicts) | [specs/expectations/](specs/expectations/) |
 
 ## Capabilities
 
