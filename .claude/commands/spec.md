@@ -15,7 +15,7 @@ Draft a GitHub issue implementation specification for: $ARGUMENTS
 
 3. **Check for a smaller change.** Before finalizing, ask: could a narrower scope — fewer files, fewer moving parts, less ceremony — achieve the same goal? If yes, redraft around that. Spec size should match change size. This is about scope, not about removing structure that serves invariants, type safety, or tests.
 
-4. **Self-review the draft.** Read it back as if you hadn't written it. Flag anything you're unsure about, anything resting on an unverified assumption, and anything that sounds confident but isn't grounded in what you actually read. Surface those to the user with the draft.
+4. **Self-review and resolve.** Read the draft back as if you hadn't written it. For every point of doubt — an unverified assumption, an unchecked signature or line number, a claim that sounds confident but isn't grounded in something you actually read — resolve it yourself: read the file, verify the fact, fix the draft. Repeat until every doubt is either resolved or genuinely requires a decision only the user can make (a tradeoff, a scope call, a preference). Surface only those with the draft. A doubt you could resolve by reading code is work to do, not a caveat to report — if nothing needs a user decision, present the draft with no review commentary.
 
 5. **Present the draft** to the user for review before creating the issue.
 
@@ -126,3 +126,5 @@ Before presenting the draft, verify:
 - [ ] No `time.sleep` or wall-clock timing in scan-cycle test paths — all timing flows through SimClock
 - [ ] Every behavioral change is covered by at least one EVENTUALLY or PRECEDES assertion
 - [ ] Generated ST is never hand-edited — fixes target `relay/generator/` or `relay/spec/`
+
+Run these checks silently and fix what fails. Mention a check only if it fails and cannot be fixed without a user decision.
