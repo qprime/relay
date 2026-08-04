@@ -5,10 +5,11 @@ from typing import Literal
 
 
 EVENTUALLY_RE = re.compile(
-    r"EVENTUALLY\((\w+),\s*within:\s*(\d+(?:\.\d+)?)\s*ms\)", re.IGNORECASE
+    r"EVENTUALLY\(\s*(\w+)\s*,\s*within:\s*(\d+(?:\.\d+)?)\s*ms\s*\)", re.IGNORECASE
 )
 PRECEDES_RE = re.compile(
-    r"PRECEDES\((\w+),\s*(\w+),\s*within:\s*(\d+(?:\.\d+)?)\s*ms\)", re.IGNORECASE
+    r"PRECEDES\(\s*(\w+)\s*,\s*(\w+)\s*,\s*within:\s*(\d+(?:\.\d+)?)\s*ms\s*\)",
+    re.IGNORECASE,
 )
 
 
@@ -21,14 +22,14 @@ class ParsedAssertion:
 
 def parse_assertion(s: str) -> ParsedAssertion | None:
     s = s.strip()
-    m = EVENTUALLY_RE.match(s)
+    m = EVENTUALLY_RE.fullmatch(s)
     if m:
         return ParsedAssertion(
             form="EVENTUALLY",
             signals=(m.group(1),),
             within_ms=float(m.group(2)),
         )
-    m = PRECEDES_RE.match(s)
+    m = PRECEDES_RE.fullmatch(s)
     if m:
         return ParsedAssertion(
             form="PRECEDES",

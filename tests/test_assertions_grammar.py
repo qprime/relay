@@ -57,6 +57,66 @@ class TestPrecedesGrammar:
         assert parse_assertion("PRECEDES(a, b, within: -5ms)") is None
 
 
+class TestGrammarAnchoring:
+    """Both forms are matched with `fullmatch`, so text outside the call is a
+    parse failure rather than silently discarded."""
+
+    @pytest.mark.parametrize(
+        "assertion",
+        [
+            "PRECEDES(a, b, within: 500ms) TRAILING",
+            "PRECEDES(a, b, within: 500ms) and then some",
+            "EVENTUALLY(a, within: 500ms) GARBAGE",
+            "JUNK PRECEDES(a, b, within: 500ms)",
+            "JUNK EVENTUALLY(a, within: 500ms)",
+            "PRECEDES(a, b, within: 500ms) EVENTUALLY(c, within: 1ms)",
+        ],
+    )
+    def test_text_outside_the_call_is_rejected(self, assertion):
+        assert parse_assertion(assertion) is None
+
+    @pytest.mark.parametrize(
+        "assertion",
+        ["  PRECEDES(a, b, within: 500ms)  ", "\tEVENTUALLY(a, within: 500ms)\n"],
+    )
+    def test_surrounding_whitespace_is_still_tolerated(self, assertion):
+        assert parse_assertion(assertion) is not None
+
+
+class TestGrammarWhitespaceSymmetry:
+    """Task specs are hand-written, so internal padding is tolerated the same
+    way in both forms rather than only before `ms`."""
+
+    @pytest.mark.parametrize(
+        "assertion, signals",
+        [
+            ("PRECEDES(a , b, within: 500ms)", ("a", "b")),
+            ("PRECEDES(a, b , within: 500ms)", ("a", "b")),
+            ("PRECEDES( a, b, within: 500ms )", ("a", "b")),
+            ("PRECEDES( a , b , within: 500 ms )", ("a", "b")),
+        ],
+    )
+    def test_precedes_tolerates_internal_padding(self, assertion, signals):
+        parsed = parse_assertion(assertion)
+        assert parsed is not None
+        assert parsed.signals == signals
+        assert parsed.within_ms == 500.0
+
+    @pytest.mark.parametrize(
+        "assertion",
+        [
+            "EVENTUALLY(a , within: 500ms)",
+            "EVENTUALLY( a, within: 500ms )",
+            "EVENTUALLY( a , within: 500 ms )",
+        ],
+    )
+    def test_eventually_tolerates_internal_padding(self, assertion):
+        parsed = parse_assertion(assertion)
+        assert parsed is not None
+        assert parsed.signals == ("a",)
+        assert parsed.within_ms == 500.0
+
+
 class TestPrecedesSemantics:
     def test_same_scan_passes_under_any_budget(self):
         trace = _trace({}, {"a": True, "b": True})
