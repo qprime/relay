@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import math
 from typing import Any, TextIO
 
 from relay.clock import SimClock
@@ -16,6 +17,11 @@ def _check_values(values: dict[str, Any], where: str) -> dict[str, Any]:
             raise TypeError(
                 f"{where} signal {key!r} has unserializable type "
                 f"{type(value).__name__}; allowed types are bool, int, float"
+            )
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError(
+                f"{where} signal {key!r} is {value}, which JSON cannot represent "
+                "portably; signal values must be finite"
             )
     return values
 
@@ -53,8 +59,14 @@ def load_jsonl(stream: TextIO) -> TraceLog:
             data = json.loads(line)
         except json.JSONDecodeError as exc:
             raise ValueError(f"malformed JSON on line {lineno}: {exc.msg}") from exc
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"line {lineno} is a JSON {type(data).__name__}, not an object"
+            )
         try:
             trace.record(record_from_dict(data))
         except KeyError as exc:
             raise KeyError(f"line {lineno} missing required key {exc.args[0]!r}") from exc
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"line {lineno} has an unreadable field: {exc}") from exc
     return trace

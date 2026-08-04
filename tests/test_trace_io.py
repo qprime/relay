@@ -172,6 +172,22 @@ class TestTraceIOTypes:
         assert "mode" in str(exc.value)
         assert type(value).__name__ in str(exc.value)
 
+    @pytest.mark.parametrize(
+        "value", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
+    )
+    def test_non_finite_float_raises_at_dump(self, value):
+        trace = TraceLog([
+            ScanRecord(
+                plc_id="plc_a",
+                clock=SimClock(tick=0, elapsed_ms=0.0),
+                io=IOImage(values={"level": value}),
+                outputs=IOImage.empty(),
+            )
+        ])
+        with pytest.raises(ValueError) as exc:
+            _dump_to_text(trace)
+        assert "level" in str(exc.value)
+
     def test_integral_elapsed_ms_loads_as_float(self):
         record = record_from_dict(
             {
@@ -231,6 +247,46 @@ class TestTraceIOErrors:
             _load_from_text(text)
         assert "line 3" in str(exc.value)
 
+    @pytest.mark.parametrize(
+        "bad,kind",
+        [("[1, 2, 3]", "list"), ("42", "int"), ('"hello"', "str"), ("null", "NoneType")],
+    )
+    def test_non_object_line_raises_naming_file_line_number(self, bad, kind):
+        good = json.dumps(
+            {
+                "plc_id": "plc_a",
+                "tick": 0,
+                "elapsed_ms": 0.0,
+                "io_snapshot": {},
+                "outputs": {},
+            }
+        )
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(f"{good}\n{good}\n{bad}\n{good}\n")
+        assert "line 3" in str(exc.value)
+        assert f"JSON {kind}, not an object" in str(exc.value), (
+            "a non-object line must be diagnosed as such, not as a Python "
+            "subscripting error leaking through the generic field handler"
+        )
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [("tick", "abc"), ("elapsed_ms", None), ("tick", None), ("elapsed_ms", "x")],
+    )
+    def test_unreadable_clock_field_raises_naming_file_line_number(self, field, value):
+        record = {
+            "plc_id": "plc_a",
+            "tick": 0,
+            "elapsed_ms": 0.0,
+            "io_snapshot": {},
+            "outputs": {},
+        }
+        good = json.dumps(record)
+        bad = json.dumps({**record, field: value})
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(f"{good}\n{good}\n{bad}\n{good}\n")
+        assert "line 3" in str(exc.value)
+
     def test_missing_required_key_raises_naming_key(self):
         text = json.dumps(
             {"plc_id": "plc_a", "tick": 0, "elapsed_ms": 0.0, "outputs": {}}
@@ -238,6 +294,7 @@ class TestTraceIOErrors:
         with pytest.raises(KeyError) as exc:
             _load_from_text(text + "\n")
         assert "io_snapshot" in str(exc.value)
+        assert "line 1" in str(exc.value)
 
 
 class TestIOSnapshotIsLoadBearing:
