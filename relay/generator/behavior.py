@@ -50,7 +50,7 @@ def _tag_consumers(spec: TaskSpec) -> dict[str, list[str]]:
 
 
 def _compile_trigger(trigger: Trigger, consumers: dict[str, list[str]]) -> str:
-    lines: list[str] = []
+    lines: list[str] = [f"(* trigger: {trigger.id} *)"]
     source = _emit_debounce(trigger, lines)
     condition = _emit_edge(trigger, source, lines)
     _emit_target(trigger, condition, consumers, lines)

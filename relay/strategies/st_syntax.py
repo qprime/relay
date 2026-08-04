@@ -12,12 +12,15 @@ _TON_RE = re.compile(
 _IF_RE = re.compile(r"IF\s+(.+?)\s+THEN", re.IGNORECASE)
 _ENDIF_RE = re.compile(r"END_IF\s*;?", re.IGNORECASE)
 _ASSIGN_RE = re.compile(r"(\w+)\s*:=\s*(.+)")
+_COMMENT_RE = re.compile(r"\(\*.*\*\)\s*$", re.DOTALL)
 
 
 def _line_kind(line: str) -> str | None:
     stripped = line.strip().rstrip(";")
     if not stripped:
         return "blank"
+    if _COMMENT_RE.match(stripped):
+        return "comment"
     if _TON_RE.match(stripped):
         return "ton"
     if _IF_RE.match(stripped):

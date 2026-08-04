@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import io as io_module
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,8 @@ from relay.generator.spec import validate_spec
 from relay.generator.st import compile_st_blocks
 from relay.runtime.harness import simulate
 from relay.spec.schema import TaskSpec, load_spec
-from relay.strategies.st_syntax import static_parse_errors
+from relay.strategies.st_syntax import _line_kind, static_parse_errors
+from relay.trace_io import dump_jsonl
 
 
 _SPEC_PATH = Path(__file__).parent.parent / "specs" / "conveyor_handoff.yaml"
@@ -341,6 +343,7 @@ class TestCompiler:
     def test_compiles_rising_latched_to_known_st(self):
         spec = _spec_with_trigger(**{"when.edge": "rising", "emit.mode": "latched"})
         assert compile_st_blocks(spec)["plc_a"] == (
+            "(* trigger: emit_t *)\n"
             "_scratch_edge_emit_t := sensor_a_exit AND NOT _scratch_prev_emit_t;\n"
             "_scratch_prev_emit_t := sensor_a_exit;\n"
             "IF _scratch_edge_emit_t THEN\n"
@@ -352,6 +355,7 @@ class TestCompiler:
     def test_compiles_falling_latched_to_known_st(self):
         spec = _spec_with_trigger(**{"when.edge": "falling", "emit.mode": "latched"})
         assert compile_st_blocks(spec)["plc_a"] == (
+            "(* trigger: emit_t *)\n"
             "_scratch_edge_emit_t := NOT sensor_a_exit AND _scratch_prev_emit_t;\n"
             "_scratch_prev_emit_t := sensor_a_exit;\n"
             "IF _scratch_edge_emit_t THEN\n"
@@ -363,6 +367,7 @@ class TestCompiler:
     def test_compiles_level_latched_to_known_st(self):
         spec = _spec_with_trigger(**{"when.edge": "level", "emit.mode": "latched"})
         assert compile_st_blocks(spec)["plc_a"] == (
+            "(* trigger: emit_t *)\n"
             "IF sensor_a_exit THEN\n"
             "_scratch_latched_emit_t := TRUE;\n"
             "END_IF;\n"
@@ -371,13 +376,17 @@ class TestCompiler:
 
     def test_compiles_steady_to_known_st(self):
         spec = _spec_with_trigger(**{"when.edge": "level", "emit.mode": "steady"})
-        assert compile_st_blocks(spec)["plc_a"] == "_send_plc_b_t := sensor_a_exit;"
+        assert compile_st_blocks(spec)["plc_a"] == (
+            "(* trigger: emit_t *)\n"
+            "_send_plc_b_t := sensor_a_exit;"
+        )
 
     def test_compiles_rising_pulse_with_ton(self):
         spec = _spec_with_trigger(
             **{"when.edge": "rising", "emit.mode": "pulse", "emit.duration_ms": 30}
         )
         assert compile_st_blocks(spec)["plc_a"] == (
+            "(* trigger: emit_t *)\n"
             "_scratch_edge_emit_t := sensor_a_exit AND NOT _scratch_prev_emit_t;\n"
             "_scratch_prev_emit_t := sensor_a_exit;\n"
             "IF _scratch_edge_emit_t THEN\n"
@@ -395,6 +404,7 @@ class TestCompiler:
             **{"when.edge": "level", "emit.mode": "steady", "when.debounce_ms": 30}
         )
         assert compile_st_blocks(spec)["plc_a"] == (
+            "(* trigger: emit_t *)\n"
             "_scratch_debounce_emit_t(IN := sensor_a_exit, PT := T#30ms);\n"
             "_scratch_stable_emit_t := _scratch_debounce_emit_t.Q;\n"
             "_send_plc_b_t := _scratch_stable_emit_t;"
@@ -410,7 +420,7 @@ class TestCompiler:
             }
         )
         source = compile_st_blocks(spec)["plc_a"]
-        assert source.startswith("_scratch_debounce_emit_t(IN := sensor_a_exit, PT := T#20ms);")
+        assert source.splitlines()[1] == "_scratch_debounce_emit_t(IN := sensor_a_exit, PT := T#20ms);"
         assert "_scratch_edge_emit_t := _scratch_stable_emit_t AND NOT _scratch_prev_emit_t;" in source
         assert "_scratch_ton_emit_t(IN := _scratch_pulse_emit_t, PT := T#30ms);" in source
         assert not static_parse_errors(source)
@@ -464,6 +474,83 @@ class TestCompiler:
         validate_spec(spec)
         source = compile_st_blocks(spec)["plc_a"]
         assert static_parse_errors(source) == [], source
+
+
+class TestTriggerMarkers:
+    def test_every_stanza_is_preceded_by_its_marker(self):
+        spec = load_spec(_SPEC_PATH)
+        blocks = compile_st_blocks(spec)
+        for plc_id, entry in spec.behavior.items():
+            source = blocks[plc_id]
+            for trigger in entry["triggers"]:
+                assert source.count(f"(* trigger: {trigger['id']} *)") == 1
+
+    def test_marker_count_equals_trigger_count(self):
+        spec = load_spec(_SPEC_PATH)
+        blocks = compile_st_blocks(spec)
+        for plc_id, entry in spec.behavior.items():
+            markers = [
+                line for line in blocks[plc_id].splitlines()
+                if line.startswith("(* trigger:")
+            ]
+            assert len(markers) == len(entry["triggers"])
+
+    def test_bare_assignment_trigger_still_gets_a_marker(self):
+        spec = _spec_with_trigger(
+            **{"when.edge": "level", "when.debounce_ms": 0, "emit.mode": "steady"}
+        )
+        validate_spec(spec)
+        source = compile_st_blocks(spec)["plc_a"]
+        assert source.splitlines() == [
+            "(* trigger: emit_t *)",
+            "_send_plc_b_t := sensor_a_exit;",
+        ]
+
+    def test_markers_use_iec_comment_syntax(self):
+        spec = load_spec(_SPEC_PATH)
+        for source in compile_st_blocks(spec).values():
+            for line in source.splitlines():
+                assert not line.lstrip().startswith("//")
+                assert not line.lstrip().startswith("#")
+
+    def test_trigger_ids_cannot_close_a_comment(self):
+        spec = _spec_with_trigger(**{"id": "bad*)id"})
+        with pytest.raises(SpecValidationError):
+            validate_spec(spec)
+
+
+class TestSTSyntaxAcceptsComments:
+    def test_comment_line_classified_as_comment(self):
+        assert _line_kind("(* trigger: emit_t *)") == "comment"
+
+    def test_static_parse_errors_empty_for_generated_block(self):
+        spec = load_spec(_SPEC_PATH)
+        for plc_id, source in compile_st_blocks(spec).items():
+            assert static_parse_errors(source) == [], (plc_id, source)
+
+
+class TestInterpreterSkipsComments:
+    def test_comment_line_is_a_noop(self):
+        from relay.st.interpreter import STContext, execute
+
+        body = "belt_a := sensor_a_exit;"
+        with_marker = f"(* trigger: emit_t *)\n{body}"
+
+        plain, marked = STContext(), STContext()
+        for ctx in (plain, marked):
+            ctx.set("sensor_a_exit", True)
+        execute(body, plain, dt_ms=10.0)
+        execute(with_marker, marked, dt_ms=10.0)
+        assert plain.variables == marked.variables
+        assert plain.assigned == marked.assigned
+
+    def test_conveyor_trace_unchanged_by_markers(self):
+        spec = load_spec(_SPEC_PATH)
+        trace = asyncio.run(simulate(spec, compile_st_blocks(spec)))
+        stream = io_module.StringIO()
+        dump_jsonl(trace, stream)
+        expected = (_GOLDEN_DIR / "conveyor_trace.jsonl").read_text()
+        assert stream.getvalue() == expected
 
 
 class TestGoldenST:
