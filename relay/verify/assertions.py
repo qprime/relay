@@ -21,12 +21,12 @@ def evaluate_assertion(assertion: str, trace: TraceLog) -> AssertionResult:
             passed=False,
             reason=f"unrecognized assertion form: {assertion.strip()}",
         )
+    if parsed.within_ms is None:
+        raise ValueError(f"{parsed.form} parsed without a budget: {assertion!r}")
     if parsed.form == "EVENTUALLY":
         return _check_eventually(
-            assertion.strip(), parsed.signals[0], parsed.within_ms or 0.0, trace
+            assertion.strip(), parsed.signals[0], parsed.within_ms, trace
         )
-    if parsed.within_ms is None:
-        raise ValueError(f"PRECEDES parsed without a budget: {assertion!r}")
     return _check_precedes(
         assertion.strip(), parsed.signals[0], parsed.signals[1], parsed.within_ms, trace
     )

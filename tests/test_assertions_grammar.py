@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
+import relay.verify.assertions as verify_assertions
 from relay.clock import SimClock
 from relay.io_image import IOImage
-from relay.strategies.assertions import parse_assertion
+from relay.strategies.assertions import ParsedAssertion, parse_assertion
 from relay.trace import ScanRecord, TraceLog
 from relay.verify.assertions import evaluate_assertion
 
@@ -106,3 +109,34 @@ class TestPrecedesSemantics:
         result = evaluate_assertion("PRECEDES(a, b, within: 500ms)", trace)
         assert not result.passed
         assert result.observed_gap_ms is None
+
+
+class TestBudgetNarrowing:
+    """Both grammars make `within:` mandatory, so a parsed assertion always
+    carries a budget. These pin the guard that fires if parser and grammar
+    ever disagree — it must raise, not silently degrade to a 0ms budget."""
+
+    @pytest.mark.parametrize(
+        "form, signals, assertion",
+        [
+            ("PRECEDES", ("a", "b"), "PRECEDES(a, b, within: 500ms)"),
+            ("EVENTUALLY", ("a",), "EVENTUALLY(a, within: 500ms)"),
+        ],
+    )
+    def test_budgetless_parse_raises(self, monkeypatch, form, signals, assertion):
+        monkeypatch.setattr(
+            verify_assertions,
+            "parse_assertion",
+            lambda _s: ParsedAssertion(form=form, signals=signals, within_ms=None),
+        )
+        with pytest.raises(ValueError, match=f"{form} parsed without a budget"):
+            evaluate_assertion(assertion, _trace({"a": True, "b": True}))
+
+    @pytest.mark.parametrize(
+        "assertion",
+        ["PRECEDES(a, b, within: 500ms)", "EVENTUALLY(a, within: 500ms)"],
+    )
+    def test_parser_always_supplies_a_budget(self, assertion):
+        parsed = parse_assertion(assertion)
+        assert parsed is not None
+        assert parsed.within_ms is not None
