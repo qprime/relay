@@ -1,0 +1,22 @@
+{
+  "counts": {
+    "failed": 0,
+    "passed": 2,
+    "total": 2
+  },
+  "passed": true,
+  "results": [
+    {
+      "assertion": "EVENTUALLY(part_at_b, within: 500ms)",
+      "observed_gap_ms": null,
+      "passed": true,
+      "reason": "signal 'part_at_b' true at 290.0ms"
+    },
+    {
+      "assertion": "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)",
+      "observed_gap_ms": 0.0,
+      "passed": true,
+      "reason": "'handoff_signal' at 100.0ms precedes 'belt_b_enable' at 100.0ms (gap 0.0ms, budget 500.0ms)"
+    }
+  ]
+}

@@ -51,8 +51,8 @@ graph identical for the lifetime of the project.
    (the runtime drives the plant per-scan).
 2. **Leaf modules are stage-neutral.** Top-level modules under `relay/`
    that are not pipeline stages — `relay/clock.py`, `relay/io_image.py`,
-   `relay/trace.py`, `relay/trace_io.py`, and anything under
-   `relay/strategies/` — hold shared
+   `relay/trace.py`, `relay/trace_io.py`, `relay/verdict_io.py`, and anything
+   under `relay/strategies/` — hold shared
    types, Protocols, and registries that any stage may import. Leaf modules
    may import only from stdlib and from other leaves; they may not import
    from any pipeline stage. They exist precisely to break what would
@@ -78,7 +78,8 @@ graph identical for the lifetime of the project.
 - `from relay.verify.* import ...` inside any non-test module — verify is
   the final stage; nothing else may depend on it.
 - A leaf module (`relay/clock.py`, `relay/io_image.py`, `relay/trace.py`,
-  `relay/trace_io.py`, `relay/strategies/*`) that imports from a pipeline
+  `relay/trace_io.py`, `relay/verdict_io.py`, `relay/strategies/*`) that
+  imports from a pipeline
   stage. Leaves are
   leaves: stdlib + sibling leaves only.
 
