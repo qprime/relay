@@ -248,6 +248,8 @@ Between checkpoints, `relay` enforces honesty through documented invariants rath
 
 The reason invariants suit this domain better than goldens: each downstream stage runs in a different environment. The C++ host's trace will not be bit-identical to the Python sim's trace — that's fine; the contract is the assertions, not the trace bytes. Goldens of the trace would over-specify, locking down properties that aren't part of the contract. Invariants generalize across environments in a way goldens don't. "ST execution is pure" applies in Python and in C++ alike. "SimClock is the only time source" applies in any execution environment that wants to be evidence-producing.
 
+One distinction this rules out and one it doesn't. What is rejected is the golden as a *cross-environment equality oracle* — asserting the C++ trace matches the Python trace byte-for-byte, which would fail on differences that carry no meaning and certify nothing when it passed. What remains legitimate is the golden as a *wire-format reference*: `tests/golden/conveyor_trace.jsonl` exists so a C++ implementer can diff their emitter's output against a known-good encoding of the shared format, converting format drift into a one-line diff rather than an assertion mismatch three layers downstream. It pins how a record is spelled, never which records a given environment produces. The first use makes the trace bytes the contract; the second makes them a shared alphabet the contract is written in.
+
 ---
 
 ## 5. What's shared
