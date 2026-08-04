@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+from typing import Any
 
 import anthropic
 import yaml
@@ -30,7 +31,11 @@ Output ONLY valid YAML. No explanation, no markdown fences.
 The YAML must have these top-level keys: System, Comm, Plant, Behavior, Assertions.
 System.name is a short identifier (snake_case) for the scenario.
 System.plcs is a list of {id, role}.
-Assertions is a list of strings using EVENTUALLY(signal, within: Nms) or PRECEDES(a, b) forms.
+Assertions is a list of strings using EVENTUALLY(signal, within: Nms) or
+PRECEDES(a, b, within: Nms) forms. Both budgets are required. A PRECEDES budget
+bounds the gap between the two signals and is a real temporal requirement; when
+the true requirement is unknown, state a generous budget rather than a precise-
+looking guess.
 
 Behavior maps each PLC id to a 'triggers' list. This is a structured IR compiled
 directly to ST — there is no free-form rule text. Each trigger is:
@@ -193,7 +198,8 @@ def validate_spec(spec: TaskSpec) -> None:
             if parse_assertion(a) is None:
                 issues.append(
                     f"Assertions[{i}] {a!r} is not a recognized form "
-                    "(use EVENTUALLY or PRECEDES)"
+                    "(use EVENTUALLY(signal, within: Nms) or "
+                    "PRECEDES(a, b, within: Nms); both budgets are required)"
                 )
 
     _validate_assertion_coverage(spec, emit_targets, issues)

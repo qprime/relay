@@ -55,4 +55,7 @@ Behavior:
 
 Assertions:
   - "EVENTUALLY(part_at_b, within: 500ms)"
-  - "PRECEDES(handoff_signal, belt_b_enable)"
+  # Budget is an UNVALIDATED PLACEHOLDER chosen for scale, not measured.
+  # Observed gap today is 0ms (both signals land in the same scan).
+  # Tighten once real timing data exists — see observed_gap_ms in AssertionResult.
+  - "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)"

@@ -69,7 +69,7 @@ Behavior:
 
 Assertions:
   - "EVENTUALLY(part_at_b, within: 500ms)"
-  - "PRECEDES(handoff_signal, belt_b_enable)"
+  - "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)"
 ```
 
 The `Comm` block selects a comm strategy (currently `tag`; see below) and declares the inter-PLC signals it routes. The `Plant` block selects a plant model (currently `conveyor`) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching.

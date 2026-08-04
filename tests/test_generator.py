@@ -1,6 +1,5 @@
 from __future__ import annotations
 import asyncio
-import warnings
 from pathlib import Path
 
 import pytest
@@ -279,6 +278,12 @@ class TestSpecValidation:
         with pytest.raises(SpecValidationError) as exc:
             validate_spec(spec)
         assert any("ALWAYS" in i or "not a recognized form" in i for i in exc.value.issues)
+
+    def test_rejects_unbounded_precedes_with_actionable_error(self):
+        spec = _minimal_spec(Assertions=["PRECEDES(belt_b_enable, part_at_b)"])
+        with pytest.raises(SpecValidationError) as exc:
+            validate_spec(spec)
+        assert any("PRECEDES(a, b, within: Nms)" in i for i in exc.value.issues)
 
     def test_rejects_missing_comm_strategy(self):
         raw = _minimal_spec().raw

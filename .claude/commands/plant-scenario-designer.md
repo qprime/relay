@@ -110,16 +110,16 @@ Scenario:
 Assertions are strings in the DSL that `relay.verify.assertions.evaluate_assertion` recognizes. Current grammar:
 
 - `EVENTUALLY(<signal>, within: <N>ms)` — signal becomes true within N ms of sim start.
-- `PRECEDES(<a>, <b>)` — signal `a` becomes true no later than signal `b`. **Non-strict:** both becoming true in the same scan is a pass, because within one scan there is no observable ordering. Don't rely on `PRECEDES` to prove causation between signals that resolve in the same scan — it can't distinguish that from coincidence.
+- `PRECEDES(<a>, <b>, within: <N>ms)` — signal `a` becomes true no later than signal `b`, and no more than N ms before it. The budget is required. **Ordering is non-strict:** both becoming true in the same scan is a pass, because within one scan there is no observable ordering. Don't rely on `PRECEDES` to prove causation between signals that resolve in the same scan — a budget bounds the gap, it does not establish causation, and `PRECEDES` still can't distinguish causation from coincidence.
 
-Signal names must be identifiers (`\w+`) present in the PLC output image. If a scenario needs a form the evaluator doesn't support (e.g. `ALWAYS`, `NEVER`, `WITHIN`), call that out explicitly — it's a framework extension, not a spec extension.
+Signal names must be identifiers (`\w+`) present in the PLC output image. If a scenario needs a form the evaluator doesn't support (e.g. `ALWAYS`, `NEVER`), call that out explicitly — it's a framework extension, not a spec extension.
 
-Note there is currently **no form that bounds the gap between two signals** — the thing you'd want for asserting pulse widths or debounce windows. If a scenario needs that, it's a framework extension.
+**Choosing a `PRECEDES` budget.** The budget is a real temporal requirement, so state it from the scenario's needs, not from what the sim currently does. When the real constraint is unknown, state a generously loose budget and say in a comment that it is an unvalidated placeholder — an obviously loose number is honest, whereas a precise-looking one (`50ms`, `120ms`) reads as measured and misleads. Tighten it later from the `observed_gap_ms` the verifier reports on every evaluation, pass or fail.
 
 ```yaml
 Assertions:
   - "EVENTUALLY(<signal>, within: <N>ms)"
-  - "PRECEDES(<signal_a>, <signal_b>)"
+  - "PRECEDES(<signal_a>, <signal_b>, within: <N>ms)"
 ```
 
 ## Environment spec format
@@ -153,7 +153,7 @@ Flag explicitly when composition requires runtime work that doesn't exist yet (e
 
 5. Identify the specific scan-boundary or comm-timing conditions that would expose bad generated logic. These become the edge cases.
 
-6. Verify every assertion is expressible in the current DSL (`EVENTUALLY`, `PRECEDES`). If not, name the framework extension required and keep it out of the spec until built.
+6. Verify every assertion is expressible in the current DSL (`EVENTUALLY`, `PRECEDES` — both carry a required `within:` budget, so ordering with a bounded gap is expressible). If not, name the framework extension required and keep it out of the spec until built.
 
 7. Verify every signal named in assertions resolves to a trigger `emit` target, a `Plant` route `as_key`, or a declared `Comm` tag. `validate_spec` enforces this, so a miss is a loud spec-validation error rather than a silent pass — but catching it at design time is cheaper than discovering it when the scenario won't validate.
 

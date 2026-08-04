@@ -33,8 +33,18 @@ class TestConveyorHandoff:
     def test_handoff_signal_precedes_belt_b_enable(self):
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        result = evaluate_assertion("PRECEDES(handoff_signal, belt_b_enable)", trace)
+        result = evaluate_assertion(
+            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
+        )
         assert result.passed, result.reason
+
+    def test_conveyor_precedes_observed_gap_is_zero(self):
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        result = evaluate_assertion(
+            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
+        )
+        assert result.observed_gap_ms == 0.0, result.reason
 
     def test_part_never_arrives_when_sensor_a_never_triggers(self):
         spec, blocks = _load_spec_and_blocks(silence_plc_a=True)
@@ -99,6 +109,6 @@ class TestSpecLoading:
         assert spec.system_name == "conveyor_handoff"
         assert {p["id"] for p in spec.plcs} == {"plc_a", "plc_b"}
         assert "EVENTUALLY(part_at_b, within: 500ms)" in spec.assertions
-        assert "PRECEDES(handoff_signal, belt_b_enable)" in spec.assertions
+        assert "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)" in spec.assertions
         assert spec.comm_strategy == "tag"
         assert spec.plant_type == "conveyor"

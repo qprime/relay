@@ -58,7 +58,7 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 | plant model | Minimal physics: belt speed, sensor thresholds, actuator latency |
 | trace log | Scan-by-scan record of I/O snapshots and outputs for all PLCs |
 | EVENTUALLY | Assertion: signal becomes true within N ms from simulation start |
-| PRECEDES | Assertion: signal A becomes true no later than signal B. Non-strict — same-scan is a pass, since within one scan there is no observable ordering |
+| PRECEDES | Assertion: signal A becomes true no later than signal B, and within a required time budget (`within: Nms`). Ordering is non-strict — same-scan is a pass, since within one scan there is no observable ordering — but a gap larger than the budget fails. The observed gap is reported on every evaluation, pass or fail |
 
 ## Skill Routing
 
