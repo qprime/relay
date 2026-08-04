@@ -1,0 +1,200 @@
+{"elapsed_ms": 0.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 0}
+{"elapsed_ms": 0.0, "io_snapshot": {"handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 0}
+{"elapsed_ms": 10.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 1}
+{"elapsed_ms": 10.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 1}
+{"elapsed_ms": 20.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 2}
+{"elapsed_ms": 20.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 2}
+{"elapsed_ms": 30.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 3}
+{"elapsed_ms": 30.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 3}
+{"elapsed_ms": 40.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 4}
+{"elapsed_ms": 40.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 4}
+{"elapsed_ms": 50.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 5}
+{"elapsed_ms": 50.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 5}
+{"elapsed_ms": 60.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 6}
+{"elapsed_ms": 60.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 6}
+{"elapsed_ms": 70.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 7}
+{"elapsed_ms": 70.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 7}
+{"elapsed_ms": 80.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 8}
+{"elapsed_ms": 80.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 8}
+{"elapsed_ms": 90.0, "io_snapshot": {}, "outputs": {}, "plc_id": "plc_a", "tick": 9}
+{"elapsed_ms": 90.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": false}, "outputs": {"belt_b_enable": false}, "plc_id": "plc_b", "tick": 9}
+{"elapsed_ms": 100.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 10}
+{"elapsed_ms": 100.0, "io_snapshot": {"belt_b_enable": false, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 10}
+{"elapsed_ms": 110.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 11}
+{"elapsed_ms": 110.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 11}
+{"elapsed_ms": 120.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 12}
+{"elapsed_ms": 120.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 12}
+{"elapsed_ms": 130.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 13}
+{"elapsed_ms": 130.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 13}
+{"elapsed_ms": 140.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 14}
+{"elapsed_ms": 140.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 14}
+{"elapsed_ms": 150.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 15}
+{"elapsed_ms": 150.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 15}
+{"elapsed_ms": 160.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 16}
+{"elapsed_ms": 160.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 16}
+{"elapsed_ms": 170.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 17}
+{"elapsed_ms": 170.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 17}
+{"elapsed_ms": 180.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 18}
+{"elapsed_ms": 180.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 18}
+{"elapsed_ms": 190.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 19}
+{"elapsed_ms": 190.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 19}
+{"elapsed_ms": 200.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 20}
+{"elapsed_ms": 200.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 20}
+{"elapsed_ms": 210.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 21}
+{"elapsed_ms": 210.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 21}
+{"elapsed_ms": 220.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 22}
+{"elapsed_ms": 220.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 22}
+{"elapsed_ms": 230.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 23}
+{"elapsed_ms": 230.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 23}
+{"elapsed_ms": 240.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 24}
+{"elapsed_ms": 240.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 24}
+{"elapsed_ms": 250.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 25}
+{"elapsed_ms": 250.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 25}
+{"elapsed_ms": 260.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 26}
+{"elapsed_ms": 260.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 26}
+{"elapsed_ms": 270.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 27}
+{"elapsed_ms": 270.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 27}
+{"elapsed_ms": 280.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 28}
+{"elapsed_ms": 280.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 28}
+{"elapsed_ms": 290.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 29}
+{"elapsed_ms": 290.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 29}
+{"elapsed_ms": 300.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 30}
+{"elapsed_ms": 300.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 30}
+{"elapsed_ms": 310.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 31}
+{"elapsed_ms": 310.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 31}
+{"elapsed_ms": 320.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 32}
+{"elapsed_ms": 320.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 32}
+{"elapsed_ms": 330.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 33}
+{"elapsed_ms": 330.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 33}
+{"elapsed_ms": 340.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 34}
+{"elapsed_ms": 340.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 34}
+{"elapsed_ms": 350.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 35}
+{"elapsed_ms": 350.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 35}
+{"elapsed_ms": 360.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 36}
+{"elapsed_ms": 360.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 36}
+{"elapsed_ms": 370.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 37}
+{"elapsed_ms": 370.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 37}
+{"elapsed_ms": 380.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 38}
+{"elapsed_ms": 380.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 38}
+{"elapsed_ms": 390.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 39}
+{"elapsed_ms": 390.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 39}
+{"elapsed_ms": 400.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 40}
+{"elapsed_ms": 400.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 40}
+{"elapsed_ms": 410.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 41}
+{"elapsed_ms": 410.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 41}
+{"elapsed_ms": 420.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 42}
+{"elapsed_ms": 420.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 42}
+{"elapsed_ms": 430.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 43}
+{"elapsed_ms": 430.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 43}
+{"elapsed_ms": 440.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 44}
+{"elapsed_ms": 440.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 44}
+{"elapsed_ms": 450.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 45}
+{"elapsed_ms": 450.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 45}
+{"elapsed_ms": 460.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 46}
+{"elapsed_ms": 460.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 46}
+{"elapsed_ms": 470.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 47}
+{"elapsed_ms": 470.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 47}
+{"elapsed_ms": 480.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 48}
+{"elapsed_ms": 480.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 48}
+{"elapsed_ms": 490.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 49}
+{"elapsed_ms": 490.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 49}
+{"elapsed_ms": 500.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 50}
+{"elapsed_ms": 500.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 50}
+{"elapsed_ms": 510.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 51}
+{"elapsed_ms": 510.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 51}
+{"elapsed_ms": 520.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 52}
+{"elapsed_ms": 520.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 52}
+{"elapsed_ms": 530.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 53}
+{"elapsed_ms": 530.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 53}
+{"elapsed_ms": 540.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 54}
+{"elapsed_ms": 540.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 54}
+{"elapsed_ms": 550.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 55}
+{"elapsed_ms": 550.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 55}
+{"elapsed_ms": 560.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 56}
+{"elapsed_ms": 560.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 56}
+{"elapsed_ms": 570.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 57}
+{"elapsed_ms": 570.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 57}
+{"elapsed_ms": 580.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 58}
+{"elapsed_ms": 580.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 58}
+{"elapsed_ms": 590.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 59}
+{"elapsed_ms": 590.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 59}
+{"elapsed_ms": 600.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 60}
+{"elapsed_ms": 600.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 60}
+{"elapsed_ms": 610.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 61}
+{"elapsed_ms": 610.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 61}
+{"elapsed_ms": 620.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 62}
+{"elapsed_ms": 620.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 62}
+{"elapsed_ms": 630.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 63}
+{"elapsed_ms": 630.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 63}
+{"elapsed_ms": 640.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 64}
+{"elapsed_ms": 640.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 64}
+{"elapsed_ms": 650.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 65}
+{"elapsed_ms": 650.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 65}
+{"elapsed_ms": 660.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 66}
+{"elapsed_ms": 660.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 66}
+{"elapsed_ms": 670.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 67}
+{"elapsed_ms": 670.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 67}
+{"elapsed_ms": 680.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 68}
+{"elapsed_ms": 680.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 68}
+{"elapsed_ms": 690.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 69}
+{"elapsed_ms": 690.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 69}
+{"elapsed_ms": 700.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 70}
+{"elapsed_ms": 700.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 70}
+{"elapsed_ms": 710.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 71}
+{"elapsed_ms": 710.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 71}
+{"elapsed_ms": 720.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 72}
+{"elapsed_ms": 720.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 72}
+{"elapsed_ms": 730.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 73}
+{"elapsed_ms": 730.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 73}
+{"elapsed_ms": 740.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 74}
+{"elapsed_ms": 740.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 74}
+{"elapsed_ms": 750.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 75}
+{"elapsed_ms": 750.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 75}
+{"elapsed_ms": 760.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 76}
+{"elapsed_ms": 760.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 76}
+{"elapsed_ms": 770.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 77}
+{"elapsed_ms": 770.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 77}
+{"elapsed_ms": 780.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 78}
+{"elapsed_ms": 780.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 78}
+{"elapsed_ms": 790.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 79}
+{"elapsed_ms": 790.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 79}
+{"elapsed_ms": 800.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 80}
+{"elapsed_ms": 800.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 80}
+{"elapsed_ms": 810.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 81}
+{"elapsed_ms": 810.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 81}
+{"elapsed_ms": 820.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 82}
+{"elapsed_ms": 820.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 82}
+{"elapsed_ms": 830.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 83}
+{"elapsed_ms": 830.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 83}
+{"elapsed_ms": 840.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 84}
+{"elapsed_ms": 840.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 84}
+{"elapsed_ms": 850.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 85}
+{"elapsed_ms": 850.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 85}
+{"elapsed_ms": 860.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 86}
+{"elapsed_ms": 860.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 86}
+{"elapsed_ms": 870.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 87}
+{"elapsed_ms": 870.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 87}
+{"elapsed_ms": 880.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 88}
+{"elapsed_ms": 880.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 88}
+{"elapsed_ms": 890.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 89}
+{"elapsed_ms": 890.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 89}
+{"elapsed_ms": 900.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 90}
+{"elapsed_ms": 900.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 90}
+{"elapsed_ms": 910.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 91}
+{"elapsed_ms": 910.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 91}
+{"elapsed_ms": 920.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 92}
+{"elapsed_ms": 920.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 92}
+{"elapsed_ms": 930.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 93}
+{"elapsed_ms": 930.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 93}
+{"elapsed_ms": 940.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 94}
+{"elapsed_ms": 940.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 94}
+{"elapsed_ms": 950.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 95}
+{"elapsed_ms": 950.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 95}
+{"elapsed_ms": 960.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 96}
+{"elapsed_ms": 960.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 96}
+{"elapsed_ms": 970.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 97}
+{"elapsed_ms": 970.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 97}
+{"elapsed_ms": 980.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 98}
+{"elapsed_ms": 980.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 98}
+{"elapsed_ms": 990.0, "io_snapshot": {"sensor_a_exit": true}, "outputs": {}, "plc_id": "plc_a", "tick": 99}
+{"elapsed_ms": 990.0, "io_snapshot": {"belt_b_enable": true, "handoff_signal": true, "part_at_b": true}, "outputs": {"belt_b_enable": true}, "plc_id": "plc_b", "tick": 99}
