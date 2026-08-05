@@ -34,13 +34,10 @@ class UnknownPlantType(Exception):
 PlantFactory = Callable[[dict], PlantProtocol]
 
 _REGISTRY: dict[str, PlantFactory] = {}
-_PROMPT_FRAGMENTS: dict[str, str] = {}
 
 
-def register_plant(name: str, factory: PlantFactory, prompt_fragment: str = "") -> None:
+def register_plant(name: str, factory: PlantFactory) -> None:
     _REGISTRY[name] = factory
-    if prompt_fragment:
-        _PROMPT_FRAGMENTS[name] = prompt_fragment
 
 
 def get_plant(name: str) -> PlantFactory:
@@ -48,10 +45,6 @@ def get_plant(name: str) -> PlantFactory:
         known = ", ".join(sorted(_REGISTRY)) or "(none)"
         raise UnknownPlantType(f"unknown plant type {name!r}; known: {known}")
     return _REGISTRY[name]
-
-
-def get_plant_prompt_fragment(name: str) -> str:
-    return _PROMPT_FRAGMENTS.get(name, "")
 
 
 def known_plants() -> tuple[str, ...]:

@@ -21,9 +21,10 @@ The framework's central claim is that simulation results are *verified*, not
 plausible. That claim collapses if any part of the verification path is
 non-deterministic, non-reproducible, or judgment-based. An LLM-judges-LLM
 loop produces consensus, not truth. A network call introduces flakiness. A
-file read introduces hidden inputs. An import of `relay.generator.*`
-transitively pulls in `anthropic` and exposes the verifier to model output
-being treated as ground truth.
+file read introduces hidden inputs. An import of `relay.generator.*` is the
+edge along which a model client would arrive — no relay module depends on one
+today, and the denylist is what keeps it that way rather than a description of
+the current graph.
 
 Tests cannot catch this kind of regression. An LLM-powered assertion that
 returns `True` still passes — the test result is exactly as expected.
@@ -58,7 +59,8 @@ at the import boundary.
 - Reading a configuration file, environment variable, or external resource
   during assertion evaluation.
 - Importing `relay.generator.*` for "convenience access" to the spec — that
-  pulls anthropic in transitively even if the verifier never calls it.
+  opens the verifier to whatever the generator stage later takes on, model
+  client included, even if the verifier never calls it.
 - An assertion that consults an external service (a tracing backend, a
   metrics store, a remote rule engine).
 - Caching assertion results to disk between runs in a way the next run

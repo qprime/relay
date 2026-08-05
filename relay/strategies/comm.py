@@ -20,19 +20,8 @@ class CommStrategy(Protocol):
     ) -> list[tuple[str, str, Any]]: ...
 
 
-_TAG_PROMPT_FRAGMENT = """\
-Comm:
-  strategy: tag
-  tags:
-    - { name: <signal>, produced_by: <plc_id>, consumed_by: [<plc_id>, ...] }
-Declare every PLC-to-PLC signal as a tag. Plant-to-PLC signals are NOT tags.
-Emission rule: assign _send_<consumer_plc>_<tag_name> := <value> for each tag this PLC produces; the runtime routes these via the comm bus.
-"""
-
-
 class TagStrategy:
     name = "tag"
-    STRATEGY_PROMPT_FRAGMENT = _TAG_PROMPT_FRAGMENT
 
     def __init__(self, comm_block: dict | None = None) -> None:
         self._by_producer: dict[str, list[tuple[str, list[str]]]] = {}
@@ -103,16 +92,8 @@ class TagStrategy:
         return self._by_producer.get(producer_id, [])
 
 
-_ADDRESS_PROMPT_FRAGMENT = """\
-Comm:
-  strategy: address
-(address-based comm is not yet implemented in this build)
-"""
-
-
 class AddressStrategy:
     name = "address"
-    STRATEGY_PROMPT_FRAGMENT = _ADDRESS_PROMPT_FRAGMENT
 
     def __init__(self, comm_block: dict | None = None) -> None:
         self._comm_block = comm_block or {}

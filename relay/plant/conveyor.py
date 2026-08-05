@@ -9,21 +9,6 @@ if TYPE_CHECKING:
     from relay.spec.schema import TaskSpec
 
 
-PLANT_PROMPT_FRAGMENT = """\
-Plant:
-  type: conveyor
-  config:
-    belt_speed_m_per_s: <float>
-    sensor_trigger_threshold_m: <float>
-    actuator_latency_ms: <float>
-  routes:
-    - { sensor: sensor_a_exit_triggered, to_plc: <plc_id>, as_key: sensor_a_exit, trigger: edge }
-    - { sensor: part_at_b, to_plc: <plc_id>, as_key: part_at_b, trigger: level }
-  actuators:
-    - { from_plc: <plc_id>, key: belt_b_enable, as: belt_b_enable_signal }
-"""
-
-
 @dataclass(frozen=True)
 class ConveyorConfig:
     belt_speed_m_per_s: float
@@ -234,8 +219,4 @@ class ConveyorPlant:
         return self._state
 
 
-register_plant(
-    "conveyor",
-    lambda plant_block: ConveyorPlant(plant_block),
-    prompt_fragment=PLANT_PROMPT_FRAGMENT,
-)
+register_plant("conveyor", lambda plant_block: ConveyorPlant(plant_block))

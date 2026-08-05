@@ -2,137 +2,23 @@ from __future__ import annotations
 import re
 from typing import Any
 
-import anthropic
-import yaml
-
 from relay.generator.errors import (
-    SpecGenerationFailed,
     SpecValidationError,
     UnknownCommStrategy,
     UnknownPlantType,
 )
 from relay.generator.behavior import EDGES, MODES
 from relay.spec.schema import TaskSpec
-from relay.strategies.comm import get_comm_strategy, build_comm_strategy
+from relay.strategies.comm import build_comm_strategy
 from relay.strategies.st_syntax import SCRATCH_PREFIX, SEND_PREFIX
 from relay.strategies.plant import (
     UnknownPlantType as _PlantNotRegistered,
     get_plant,
-    get_plant_prompt_fragment,
 )
 from relay.strategies.assertions import causes_issues, parse_assertion
 
 
-_PREAMBLE = """\
-You are an IEC 61131-3 control systems engineer.
-Given a natural language description of a control task, produce a structured YAML task spec.
-Output ONLY valid YAML. No explanation, no markdown fences.
-
-The YAML must have these top-level keys: System, Comm, Plant, Behavior, Assertions.
-System.name is a short identifier (snake_case) for the scenario.
-System.plcs is a list of {id, role}.
-Assertions is a list of strings using EVENTUALLY(signal, within: Nms) or
-PRECEDES(a, b, within: Nms) forms. Both budgets are required. A PRECEDES budget
-bounds the gap between the two signals and is a real temporal requirement; when
-the true requirement is unknown, state a generous budget rather than a precise-
-looking guess.
-
-Behavior maps each PLC id to a 'triggers' list. This is a structured IR compiled
-directly to ST — there is no free-form rule text. Each trigger is:
-
-  - id: <snake_case, unique within this PLC>
-    when:
-      signal: <a Plant route as_key targeting this PLC, or a Comm tag it consumes>
-      edge: rising | falling | level
-      debounce_ms: <int >= 0, optional; source must hold stable this long>
-    emit:
-      tag: <a Comm tag this PLC produces>      # exactly one of tag / output
-      output: <snake_case local output name>
-      mode: latched | pulse | steady
-      duration_ms: <int > 0, required iff mode is pulse>
-
-edge 'rising' fires on the false-to-true transition, 'falling' on true-to-false,
-'level' fires while the signal is true. mode 'latched' sets the target once and
-holds it, 'steady' follows the condition down, 'pulse' asserts for duration_ms.
-One trigger per emit target. Express every behavior with these primitives; do
-not invent fields.
-"""
-
-
 _NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
-
-
-def _strategy_fragment(name: str) -> str:
-    try:
-        strat = get_comm_strategy(name)
-    except ValueError as e:
-        raise UnknownCommStrategy(str(e)) from None
-    return getattr(strat, "STRATEGY_PROMPT_FRAGMENT", "")
-
-
-def _plant_fragment(name: str) -> str:
-    try:
-        get_plant(name)
-    except _PlantNotRegistered as e:
-        raise UnknownPlantType(str(e)) from None
-    return get_plant_prompt_fragment(name)
-
-
-def _compose_system_prompt(comm_strategy: str, plant_type: str) -> str:
-    return (
-        _PREAMBLE
-        + "\n"
-        + _strategy_fragment(comm_strategy)
-        + "\n"
-        + _plant_fragment(plant_type)
-    )
-
-
-def generate_spec_yaml(
-    intent: str,
-    *,
-    comm_strategy: str,
-    plant_type: str,
-    prior_errors: list[str] | None = None,
-) -> str:
-    system_prompt = _compose_system_prompt(comm_strategy, plant_type)
-    user_content = intent
-    if prior_errors:
-        user_content = (
-            intent
-            + "\n\nThe previous attempt failed validation with these errors. Fix them:\n  - "
-            + "\n  - ".join(prior_errors)
-        )
-    client = anthropic.Anthropic()
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2048,
-        messages=[{"role": "user", "content": user_content}],
-        system=system_prompt,
-    )
-    return message.content[0].text  # type: ignore[union-attr]
-
-
-def generate_spec(
-    intent: str,
-    *,
-    comm_strategy: str,
-    plant_type: str,
-    prior_errors: list[str] | None = None,
-) -> TaskSpec:
-    raw_yaml = generate_spec_yaml(
-        intent,
-        comm_strategy=comm_strategy,
-        plant_type=plant_type,
-        prior_errors=prior_errors,
-    )
-    try:
-        raw = yaml.safe_load(raw_yaml)
-    except yaml.YAMLError as e:
-        raise SpecGenerationFailed(raw_output=raw_yaml, errors=[f"YAML parse error: {e}"])
-    if not isinstance(raw, dict):
-        raise SpecGenerationFailed(raw_output=raw_yaml, errors=["top-level YAML must be a mapping"])
-    return TaskSpec(raw=raw)
 
 
 def validate_spec(spec: TaskSpec) -> None:

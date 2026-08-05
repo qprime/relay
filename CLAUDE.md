@@ -4,7 +4,7 @@ You are a control systems and simulation engineer with deep expertise in IEC 611
 
 ## What This Is
 
-NL intent → task spec YAML → ST function blocks → deterministic scan-cycle simulation → trace-based verification. See [README.md](README.md) for full context. The agent's frame: everything flows through the task spec — it is the semantic IR between intent and simulation, and the only path to generated ST.
+Task spec YAML → ST function blocks → deterministic scan-cycle simulation → trace-based verification, with spec authoring done conversationally upstream of the repo. See [README.md](README.md) for full context. The agent's frame: everything flows through the task spec — it is the semantic IR the repo starts from, and the only path to generated ST. Validate a spec with `python -m tools.validate_spec <spec>` before generating from it.
 
 ## Look-up
 
@@ -49,7 +49,7 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 
 | Term | Meaning |
 |------|---------|
-| task spec | YAML intermediate representation between NL intent and generated ST |
+| task spec | YAML intermediate representation the repo starts from; hand- or conversationally authored, gated by `tools/validate_spec.py`, compiled to ST |
 | trigger | Atomic unit of `Behavior`: `when` (signal + edge + debounce) → `emit` (tag/output + mode). Compiles to one ST stanza |
 | scratch variable | Compiler bookkeeping (`_scratch_*`) for edge/latch/pulse state; suppressed from the output image so it never reaches the trace or verifier |
 | function block | ST program unit that executes each scan; holds internal timer state |

@@ -2,7 +2,7 @@
 
 **Compile natural-language control intent into deterministic, verified PLC simulations — then carry the verdict onto a real deployment target.**
 
-Relay takes a description of what a factory cell should do and runs it through a four-stage pipeline: intent → task spec → IEC 61131-3 Structured Text → scan-cycle simulation → trace-based verification. The task spec is a hand-authorable semantic IR; verification is plain Python against a deterministic trace log — so when a test passes, it passes for reasons you can inspect. There is a single LLM hop, at the front (intent → spec). Everything downstream of the task spec is a deterministic compiler.
+Relay takes a description of what a factory cell should do and runs it through a four-stage pipeline: intent → task spec → IEC 61131-3 Structured Text → scan-cycle simulation → trace-based verification. The task spec is a hand-authorable semantic IR; verification is plain Python against a deterministic trace log — so when a test passes, it passes for reasons you can inspect. Spec authoring is conversational and happens outside the repo; the entry point here is a validated YAML file, and everything downstream of it is a deterministic compiler.
 
 The same verdict is then re-earned on a C++23 deployment host running wall-clock-paced, free-running scan cycles — the same spec, the same assertions, a harder environment.
 
@@ -12,12 +12,12 @@ It is a spec-first framework for prototyping and verifying distributed control b
 
 Relay is a compiler-shaped framework for prototyping PLC control strategies without physical hardware — and without trusting an LLM to tell you whether the result is correct. The pipeline has four stages:
 
-1. **Intent** — a natural-language description of a control task ("when a part reaches the end of belt A, hand it off to belt B").
-2. **Task spec** — a YAML intermediate representation that captures the semantic meaning of the intent. Everything downstream reads from this.
+1. **Intent** — a natural-language description of a control task ("when a part reaches the end of belt A, hand it off to belt B"). This stage is a conversation with an agent, not a step the repo runs; the repo's job starts at the artifact it produces.
+2. **Task spec** — a YAML intermediate representation that captures the semantic meaning of the intent. Everything downstream reads from this. `python -m tools.validate_spec <spec>` is the gate: it runs the full validator and prints every issue at once, so a spec is checked before anything is generated from it.
 3. **Structured Text generation** — the task spec's `Behavior` block is a structured trigger IR (edge/level detection, debounce, latch/pulse/steady emission), which a deterministic Python compiler translates into IEC 61131-3 Structured Text function blocks, the same language real PLCs run. Every timing and edge semantic is written in the spec and inspectable there, not chosen downstream.
 4. **Simulation and verification** — the generated code executes against a plant physics model, and the resulting scan-by-scan trace is checked against temporal assertions (`EVENTUALLY`, `PRECEDES`, `CAUSES`) written in Python.
 
-The LLM sits at the very front of the pipeline (stage 1 only). It is strictly upstream of the IR: once the task spec exists, every downstream artifact — ST, simulation trace, verdict — is deterministically derived from it. The LLM is deliberately excluded from the verification path — assertions are evaluated against a deterministic trace log, not by asking an LLM whether the output looks right.
+The LLM is external to the pipeline and strictly upstream of the IR: it helps author the task spec, and once that spec exists, every downstream artifact — ST, simulation trace, verdict — is deterministically derived from it. No relay module calls a model. The LLM is deliberately excluded from the verification path — assertions are evaluated against a deterministic trace log, not by asking an LLM whether the output looks right.
 
 Each simulated PLC runs as an `asyncio` coroutine executing a conventional scan loop:
 
@@ -140,7 +140,7 @@ The test also checks the negative case (PLC A never signals → part never arriv
 
 ## Core representation and framework discipline
 
-**Task spec** is relay's semantic IR. Every stage downstream of intent parsing reads from the task spec YAML — it defines what PLCs exist, what they own, how they behave, and what assertions must hold. A change to the task spec schema reshapes the entire pipeline.
+**Task spec** is relay's semantic IR. Every stage downstream of the task spec reads from the task spec YAML — it defines what PLCs exist, what they own, how they behave, and what assertions must hold. A change to the task spec schema reshapes the entire pipeline.
 
 Four invariants make the simulation deterministic and the verification trustworthy:
 
@@ -199,7 +199,15 @@ Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 uv sync
 ```
 
-### 2. Run the conveyor demo
+### 2. Validate the task spec
+
+```bash
+uv run python -m tools.validate_spec specs/conveyor_handoff.yaml
+```
+
+Checks a spec against the full validator — trigger IR, assertion grammar, per-strategy config, assertion coverage — and prints every issue in one run, exiting non-zero if any. Validate before you trust anything generated from a spec; the loader's own checks are narrower and a malformed `Behavior` block will otherwise surface as a confusing failure inside the compiler.
+
+### 3. Run the conveyor demo
 
 ```bash
 uv run pytest tests/test_conveyor.py -v
@@ -207,15 +215,15 @@ uv run pytest tests/test_conveyor.py -v
 
 This runs the two-PLC conveyor handoff end-to-end: generates Structured Text from the task spec, simulates the plant, and evaluates temporal assertions against the trace log.
 
-### 3. Run all tests
+### 4. Run all tests
 
 ```bash
 uv run pytest
 ```
 
-Only the intent → task spec pass (stage 1) requires an `ANTHROPIC_API_KEY` in your environment. ST compilation, simulation, and verification do not call out to any LLM — starting from a hand-authored task spec, the whole pipeline runs offline.
+The whole pipeline runs offline with no API key. ST compilation, simulation, and verification do not call out to any LLM, and no relay module depends on a model client.
 
-### 4. Run the C++ host
+### 5. Run the C++ host
 
 Requires GCC 13+ or clang 17+ and CMake ≥ 3.22. The first configure fetches asio and googletest over the network.
 
@@ -243,7 +251,7 @@ host/build/relay_host_main --spec ... --st-blocks ... --out ... --plant-endpoint
 
 See [host/README.md](host/README.md) for build details, plant selection, and the time-discipline rules the host holds itself to.
 
-### 5. Regenerate expectations
+### 6. Regenerate expectations
 
 ```bash
 python -m tools.regenerate_expectations              # sim → specs/expectations/*.expected.json
@@ -258,7 +266,7 @@ The expectations artifact is generated, never hand-authored.
 ```
 relay/
 ├── spec/          Task spec loader and validation
-├── generator/     NL → task spec (LLM), task spec → ST (deterministic compiler)
+├── generator/     Task spec validation, task spec → ST (deterministic compiler)
 ├── st/            Structured Text subset interpreter and function blocks
 ├── runtime/       PLC coroutine, scan loop, comm bus
 │   └── harness.py  Simulation entry point: wires plant + comm + PLCs and drives the scan loop
@@ -317,7 +325,6 @@ Scope is deliberately narrow. One conveyor scenario carried end-to-end — throu
 ## Requirements
 
 - Python 3.11+
-- `ANTHROPIC_API_KEY` for generator passes (simulation and verification are offline)
 - For the C++ host: GCC 13+ or clang 17+, CMake ≥ 3.22
 - See [`pyproject.toml`](pyproject.toml) for the full dependency list
 

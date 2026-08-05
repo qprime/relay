@@ -50,9 +50,13 @@ For every pluggable subsystem:
    its own spec block. The spec validator dispatches to
    `strategy.validate_config(block)`; it does not know what makes a tag map
    valid versus a register map.
-6. **Per-variant prompt context for the generator**: the spec/ST generator is
-   told which strategy is in play and emits the corresponding spec idiom.
-   The generator does not produce the union of all strategies' fields.
+6. **Per-variant authoring context, sourced from the strategy**: whoever
+   authors a spec block — a person or an agent in conversation — works
+   against the rules the strategy itself owns in `validate_config`, not
+   against a prompt fragment stored on the strategy. Authoring is external
+   to this repo; the strategy's validator is what makes it converge, via
+   `python -m tools.validate_spec`. A spec declares one strategy and carries
+   that strategy's idiom, never the union of all strategies' fields.
 
 ## What violates this invariant
 
@@ -62,8 +66,9 @@ For every pluggable subsystem:
   doesn't declare one. Spec must declare; harness must raise on missing.
 - Validation rules for a specific variant living in shared validator code
   rather than on the strategy.
-- Generator prompts that list all strategies' fields and let the LLM pick.
-  The driver picks; the generator emits the chosen idiom.
+- Authoring context that lists all strategies' fields and leaves the choice
+  to whoever is writing the spec. The spec declares the strategy; the block
+  carries that strategy's idiom alone.
 - Cross-strategy coupling — a comm strategy that knows it's running with a
   particular plant, or vice versa.
 
@@ -83,7 +88,7 @@ The framework grows a second scenario, the second scenario needs a different
 comm model, and a contributor adds `if spec.System.comm == "opcua": ...` in
 the harness. Six months later that branch has metastasized: the plant module
 checks it (because OPC UA changes how actuators acknowledge), the validator
-checks it (because tag rules don't apply), the generator prompt has a
+checks it (because tag rules don't apply), and the ST generator grows a
 six-bullet conditional. The framework now models one and a half protocols
 badly instead of two protocols correctly.
 
@@ -114,4 +119,4 @@ badly instead of two protocols correctly.
 
 - CLAUDE.md `## Don't` — local rules, conventions
 - Generator spec — first concrete consumer of this invariant (comm strategy
-  selection drives validator dispatch and prompt construction)
+  selection drives validator dispatch)

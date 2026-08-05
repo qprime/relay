@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Intent-driven PLC simulation framework"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic",
     "pyyaml",
 ]
 
