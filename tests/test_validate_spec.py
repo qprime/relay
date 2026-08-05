@@ -139,10 +139,24 @@ class TestNoModelClientDependency:
             assert getattr(relay.generator.spec, name, None) is None
 
 
+class _StubPlant:
+    def step(self, dt_ms, actuator_state):
+        return self
+
+    def route_to_plcs(self, plant_output, prior_output):
+        return []
+
+    def read_actuators(self, latest_outputs):
+        return {}
+
+    def validate_config(self, plant_block, spec):
+        return []
+
+
 class TestRegisterPlantSignature:
     def test_register_plant_accepts_two_positional_args(self):
-        def factory(plant_block):
-            return object()
+        def factory(plant_block: dict) -> _StubPlant:
+            return _StubPlant()
 
         register_plant("_test_plant", factory)
         try:
