@@ -65,10 +65,23 @@ quietly becomes two formats.
    the same enum membership tests. `load_jsonl` wraps `KeyError` naming the
    missing key and `(TypeError, ValueError)` as "line N has an unreadable
    field."
-2. **`relay/trace_io.py`** routes `io_snapshot`, `outputs`, `sends`, and
-   receipt `value` through `_check_values` from `record_to_dict` and from
-   `record_from_dict`. `_check_values` rejects any type outside
-   `(bool, int, float)` and any non-finite float.
+2. **`relay/trace_io.py`** guards every field of a `ScanRecord` from
+   `record_to_dict` and from `record_from_dict`, each with the predicate that
+   field's type actually calls for:
+   - `io_snapshot`, `outputs`, and receipt `value` → `_check_values`, which
+     rejects any type outside `(bool, int, float)` and any non-finite float.
+   - `sends` and receipt `seq` → `_check_counters`, which rejects `bool` as
+     well as non-`int`. Send counters are integers; the signal-value predicate
+     is the wrong one for them, because it admits `True` and `0.9` where
+     `int()` would then silently truncate them to `1` and `0`.
+   - `plc_id` → `_check_str`.
+   - `io_snapshot`, `outputs`, `sends`, and `recvs` are each checked to be a
+     JSON object before iteration, so a non-object raises `TypeError` through
+     the position-carrying wrapper rather than `AttributeError` past it.
+
+   `tick` and `elapsed_ms` remain symmetric `int()` / `float()` conversions on
+   load — a known weaker spot, tolerated because it is symmetric and a corrupt
+   clock surfaces as a divergence scan rather than a confident wrong verdict.
 3. **`relay/verdict_io.py`** guards all four fields from both directions:
    `assertion` and `reason` are `str`, `passed` is `bool`, `observed_gap_ms`
    is a finite number or `None`.
@@ -89,6 +102,12 @@ quietly becomes two formats.
   corresponding `*_to_dict` runs a `_check_*` on it.
 - A load-side check looser than its dump-side twin — accepting `int` where the
   dump side requires `bool`, or skipping the finiteness test that dump applies.
+- Reusing a neighbouring field's predicate because it is the one already
+  imported. "Both sides call *a* guard" is not the rule; both sides call the
+  *same* guard, and it has to be the right one for that field. `sends` guarded
+  by the signal-value predicate passes `True` and `0.9` on the dump side, which
+  `int()` then truncates on load — asymmetry reintroduced underneath a guard
+  that looked present.
 - `bool(...)`, `int(...)`, or `str(...)` used as a load-path guard. Coercion is
   not validation: it always succeeds, so it converts a corrupt document into a
   plausible one.

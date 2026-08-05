@@ -273,15 +273,71 @@ class TestTraceIOTypes:
         record = record_from_dict(
             {
                 **_MINIMAL_RECORD,
-                "sends": {"handoff_signal": 11.0},
-                "recvs": {
-                    "sensor_a_exit": {"sender": None, "seq": 1.0, "value": True}
-                },
+                "sends": {"handoff_signal": 11},
+                "recvs": {"sensor_a_exit": {"sender": None, "seq": 1, "value": True}},
             }
         )
         assert record.sends["handoff_signal"] == 11
         assert isinstance(record.sends["handoff_signal"], int)
         assert isinstance(record.recvs["sensor_a_exit"].seq, int)
+
+    @pytest.mark.parametrize("value", [11.0, 0.9, True, "11", None])
+    def test_non_int_send_counter_is_rejected_not_truncated(self, value):
+        """int() as a load guard always succeeds, so it converts a corrupt
+        count into a plausible one: 0.9 became 0 and True became 1. `sends`
+        feeds CAUSES attribution, so a truncated count silently changes which
+        sender scan is credited. No conformant writer emits a non-int here —
+        json.dumps of an int emits 11, and the host writes std::to_string of
+        an int64."""
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(
+                json.dumps({**_MINIMAL_RECORD, "sends": {"handoff_signal": value}})
+                + "\n"
+            )
+        assert "handoff_signal" in str(exc.value)
+
+    @pytest.mark.parametrize("value", [1.0, True, "1", None])
+    def test_non_int_receipt_seq_is_rejected_not_truncated(self, value):
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(
+                json.dumps(
+                    {
+                        **_MINIMAL_RECORD,
+                        "recvs": {"tag": {"sender": "plc_a", "seq": value, "value": True}},
+                    }
+                )
+                + "\n"
+            )
+        assert "tag" in str(exc.value)
+
+    def test_send_counter_round_trips_as_written(self):
+        """Dump accepts what load accepts: bool and float pass the value-type
+        check for signals but are not counters, so guarding only one side let
+        {'go': True} dump as true and reload as 1."""
+        record = ScanRecord(
+            plc_id="plc_a",
+            clock=SimClock(tick=0, elapsed_ms=0.0),
+            io=IOImage.empty(),
+            outputs=IOImage.empty(),
+            sends={"handoff_signal": 11},
+        )
+        restored = _round_trip(TraceLog([record])).records[0]
+        assert restored.sends == {"handoff_signal": 11}
+
+    @pytest.mark.parametrize("value", [True, 0.9])
+    def test_non_int_send_counter_rejected_at_dump(self, value):
+        trace = TraceLog([
+            ScanRecord(
+                plc_id="plc_a",
+                clock=SimClock(tick=0, elapsed_ms=0.0),
+                io=IOImage.empty(),
+                outputs=IOImage.empty(),
+                sends={"handoff_signal": value},
+            )
+        ])
+        with pytest.raises(TypeError) as exc:
+            _dump_to_text(trace)
+        assert "handoff_signal" in str(exc.value)
 
     @pytest.mark.parametrize("missing", ["sender", "seq", "value"])
     def test_receipt_missing_field_raises_naming_key(self, missing):
@@ -389,6 +445,37 @@ class TestTraceIOLoadGuards:
                 json.dumps({**_MINIMAL_RECORD, "io_snapshot": {"part_at_b": "false"}})
                 + "\n"
             )
+
+    @pytest.mark.parametrize("where", ["sends", "recvs"])
+    def test_non_object_counter_map_rejected_with_position(self, where):
+        """A bare AttributeError from .items() escapes load_jsonl's
+        (KeyError, TypeError, ValueError) handler, losing the line number."""
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(json.dumps({**_MINIMAL_RECORD, where: [1, 2]}) + "\n")
+        assert where in str(exc.value)
+        assert "line 1" in str(exc.value)
+
+    @pytest.mark.parametrize("value", [7, None, ["plc_a"]])
+    def test_non_string_plc_id_rejected_at_load(self, value):
+        """plc_id is the key TraceLog.for_plc matches on and the key CAUSES
+        uses to locate the sender's scans, so a non-string yields an empty
+        match set and an unattributable-looking verdict."""
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(json.dumps({**_MINIMAL_RECORD, "plc_id": value}) + "\n")
+        assert "plc_id" in str(exc.value)
+
+    def test_non_string_plc_id_rejected_at_dump(self):
+        trace = TraceLog([
+            ScanRecord(
+                plc_id=7,  # pyright: ignore[reportArgumentType]
+                clock=SimClock(tick=0, elapsed_ms=0.0),
+                io=IOImage.empty(),
+                outputs=IOImage.empty(),
+            )
+        ])
+        with pytest.raises(TypeError) as exc:
+            _dump_to_text(trace)
+        assert "plc_id" in str(exc.value)
 
     def test_guard_failure_names_the_file_line_number(self):
         good = json.dumps(_MINIMAL_RECORD)

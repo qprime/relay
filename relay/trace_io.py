@@ -30,14 +30,45 @@ def _check_values(values: Any, where: str) -> dict[str, Any]:
     return values
 
 
+def _check_str(value: Any, field: str) -> Any:
+    if not isinstance(value, str):
+        raise TypeError(
+            f"field {field!r} has unserializable type {type(value).__name__}; "
+            "expected str"
+        )
+    return value
+
+
+def _check_counters(counters: Any, where: str) -> dict[str, Any]:
+    if not isinstance(counters, dict):
+        raise TypeError(
+            f"{where} is a {type(counters).__name__}, not an object of send counts"
+        )
+    for key, value in counters.items():
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(
+                f"{where} counter {key!r} has unserializable type "
+                f"{type(value).__name__}; expected int"
+            )
+    return counters
+
+
+def _check_object(data: Any, where: str) -> dict[str, Any]:
+    if not isinstance(data, dict):
+        raise TypeError(
+            f"{where} is a {type(data).__name__}, not an object of receipts"
+        )
+    return data
+
+
 def record_to_dict(record: ScanRecord) -> dict[str, Any]:
     return {
-        "plc_id": record.plc_id,
+        "plc_id": _check_str(record.plc_id, "plc_id"),
         "tick": record.clock.tick,
         "elapsed_ms": record.clock.elapsed_ms,
         "io_snapshot": _check_values(dict(record.io.values), "io_snapshot"),
         "outputs": _check_values(dict(record.outputs.values), "outputs"),
-        "sends": _check_values(dict(record.sends), "sends"),
+        "sends": _check_counters(dict(record.sends), "sends"),
         "recvs": {
             key: _receipt_to_dict(key, receipt)
             for key, receipt in record.recvs.items()
@@ -47,7 +78,8 @@ def record_to_dict(record: ScanRecord) -> dict[str, Any]:
 
 def _receipt_to_dict(key: str, receipt: Receipt) -> dict[str, Any]:
     _check_values({key: receipt.value}, "recvs")
-    return {"sender": receipt.sender, "seq": int(receipt.seq), "value": receipt.value}
+    _check_counters({key: receipt.seq}, "recvs")
+    return {"sender": receipt.sender, "seq": receipt.seq, "value": receipt.value}
 
 
 def _receipt_from_dict(key: str, data: Any) -> Receipt:
@@ -64,17 +96,22 @@ def _receipt_from_dict(key: str, data: Any) -> Receipt:
         )
     value = data["value"]
     _check_values({key: value}, "recvs")
-    return Receipt(sender=sender, seq=int(data["seq"]), value=value)
+    seq = data["seq"]
+    _check_counters({key: seq}, "recvs")
+    return Receipt(sender=sender, seq=seq, value=value)
 
 
 def record_from_dict(data: dict[str, Any]) -> ScanRecord:
     return ScanRecord(
-        plc_id=data["plc_id"],
+        plc_id=_check_str(data["plc_id"], "plc_id"),
         clock=SimClock(tick=int(data["tick"]), elapsed_ms=float(data["elapsed_ms"])),
         io=IOImage(values=_check_values(data["io_snapshot"], "io_snapshot")),
         outputs=IOImage(values=_check_values(data["outputs"], "outputs")),
-        sends={k: int(v) for k, v in data["sends"].items()},
-        recvs={k: _receipt_from_dict(k, v) for k, v in data["recvs"].items()},
+        sends=dict(_check_counters(data["sends"], "sends")),
+        recvs={
+            k: _receipt_from_dict(k, v)
+            for k, v in _check_object(data["recvs"], "recvs").items()
+        },
     )
 
 
