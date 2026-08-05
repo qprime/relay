@@ -62,6 +62,7 @@ class PlantOutputs:
 
 
 _VALID_TRIGGERS = frozenset({"edge", "level"})
+_VALID_SENSORS = frozenset({"sensor_a_exit_triggered", "part_at_b"})
 
 
 class ConveyorPlant:
@@ -191,6 +192,12 @@ class ConveyorPlant:
                 for field in ("sensor", "to_plc", "as_key", "trigger"):
                     if field not in r:
                         issues.append(f"Plant.routes[{i}].{field} is required")
+                sensor = r.get("sensor")
+                if sensor is not None and sensor not in _VALID_SENSORS:
+                    issues.append(
+                        f"Plant.routes[{i}].sensor {sensor!r} is not a conveyor "
+                        f"sensor; known: {sorted(_VALID_SENSORS)}"
+                    )
                 to_plc = r.get("to_plc")
                 if to_plc is not None and to_plc not in plc_ids:
                     issues.append(

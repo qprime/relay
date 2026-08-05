@@ -35,6 +35,17 @@ TEST(TestPlantRegistry, test_conveyor_config_parsed_by_stub_not_loader) {
     EXPECT_NE(plant.error().message.find("belt_speed_m_per_s"), std::string::npos);
 }
 
+TEST(TestPlantRegistry, test_unknown_route_sensor_is_startup_error) {
+    ResolvedTaskSpec spec = minimal_two_plc_spec();
+    spec.plant.routes = {ResolvedRoute{"sensor_c", "plc_a", "some_key", "level"}};
+    asio::io_context io;
+    SignalTable table;
+    const auto plant = build_plant(spec.plant, spec.plc_ids, table, io.get_executor());
+    ASSERT_FALSE(plant.has_value());
+    EXPECT_NE(plant.error().message.find("sensor_c"), std::string::npos);
+    EXPECT_NE(plant.error().message.find("part_at_b"), std::string::npos);
+}
+
 TEST(TestPlantRegistry, test_remote_socket_type_resolves) {
     asio::io_context io;
     asio::ip::tcp::acceptor acceptor(

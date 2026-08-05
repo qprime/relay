@@ -42,7 +42,7 @@ class RemoteSocketPlant {
         std::vector<std::string> plc_ids;
         SignalTable table;
         double request_timeout_ms;
-        std::map<std::int64_t, Channel<nlohmann::json>*> pending;
+        std::map<std::int64_t, std::shared_ptr<Channel<nlohmann::json>>> pending;
         std::int64_t next_id = 1;
         bool pumps_running = false;
         std::optional<std::string> dead;

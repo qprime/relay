@@ -5,6 +5,7 @@ import pytest
 import relay.plant  # noqa: F401  -- triggers conveyor registration
 from relay.io_image import IOImage
 from relay.plant.conveyor import ConveyorPlant, PlantOutputs
+from relay.spec.schema import TaskSpec
 from relay.strategies.plant import UnknownPlantType, get_plant
 
 
@@ -35,6 +36,29 @@ class TestConveyorRegistration:
     def test_unknown_plant_type_raises(self):
         with pytest.raises(UnknownPlantType):
             get_plant("imaginary")
+
+
+class TestConveyorValidation:
+    def _spec(self) -> TaskSpec:
+        return TaskSpec(raw={"System": {"name": "t", "plcs": [{"id": "plc_a"}]}})
+
+    def test_unknown_sensor_rejected_by_validate_config(self):
+        block = _conveyor_block(
+            routes=[{"sensor": "sensor_c", "to_plc": "plc_a", "as_key": "k", "trigger": "level"}],
+        )
+        issues = ConveyorPlant(block).validate_config(block, self._spec())
+        assert any("sensor_c" in issue for issue in issues)
+        assert any("part_at_b" in issue for issue in issues)
+
+    def test_known_sensors_produce_no_sensor_issue(self):
+        block = _conveyor_block(
+            routes=[
+                {"sensor": "part_at_b", "to_plc": "plc_a", "as_key": "k", "trigger": "level"},
+                {"sensor": "sensor_a_exit_triggered", "to_plc": "plc_a", "as_key": "j", "trigger": "edge"},
+            ],
+        )
+        issues = ConveyorPlant(block).validate_config(block, self._spec())
+        assert not any("is not a conveyor sensor" in issue for issue in issues)
 
 
 class TestConveyorRoutingTriggers:

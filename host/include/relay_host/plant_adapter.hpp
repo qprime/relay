@@ -76,7 +76,6 @@ class LocalStubPlant {
     enum class Sensor {
         SensorAExitTriggered,
         PartAtB,
-        Unknown,
     };
 
     enum class TriggerKind {

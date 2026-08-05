@@ -202,6 +202,7 @@ void RemoteSocketPlant::fail(const std::shared_ptr<State>& state, std::string me
     for (const auto& [id, waiter] : state->pending) {
         waiter->close();
     }
+    state->pending.clear();
 }
 
 Task RemoteSocketPlant::read_loop(std::shared_ptr<State> state) {
@@ -224,6 +225,7 @@ Task RemoteSocketPlant::read_loop(std::shared_ptr<State> state) {
         const auto waiter = state->pending.find(parsed["id"].get<std::int64_t>());
         if (waiter != state->pending.end()) {
             waiter->second->try_send(asio::error_code{}, std::move(parsed));
+            state->pending.erase(waiter);
         }
     }
 }
@@ -262,8 +264,9 @@ asio::awaitable<std::expected<nlohmann::json, PlantError>> RemoteSocketPlant::ca
         json{{"id", id}, {"method", method}, {"params", std::move(params)}}.dump();
     line += '\n';
 
-    Channel<json> waiter(state->socket.get_executor(), 1);
-    state->pending.emplace(id, &waiter);
+    const auto waiter =
+        std::make_shared<Channel<json>>(state->socket.get_executor(), 1);
+    state->pending.emplace(id, waiter);
 
     const auto [send_ec] = co_await state->write_queue.async_send(
         asio::error_code{}, std::move(line), asio::as_tuple(asio::use_awaitable));
@@ -279,7 +282,7 @@ asio::awaitable<std::expected<nlohmann::json, PlantError>> RemoteSocketPlant::ca
 
     using namespace asio::experimental::awaitable_operators;
     auto outcome =
-        co_await (waiter.async_receive(asio::as_tuple(asio::use_awaitable)) ||
+        co_await (waiter->async_receive(asio::as_tuple(asio::use_awaitable)) ||
                   timer.async_wait(asio::as_tuple(asio::use_awaitable)));
     state->pending.erase(id);
 

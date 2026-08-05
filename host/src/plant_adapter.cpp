@@ -64,11 +64,15 @@ std::expected<LocalStubPlant, PlantError> LocalStubPlant::try_create(
     if (!latency) return std::unexpected(latency.error());
     stub.config_ = Config{*belt_speed, *threshold, *latency};
     for (const ResolvedRoute& route : plant.routes) {
-        Sensor sensor = Sensor::Unknown;
+        Sensor sensor;
         if (route.sensor == "sensor_a_exit_triggered") {
             sensor = Sensor::SensorAExitTriggered;
         } else if (route.sensor == "part_at_b") {
             sensor = Sensor::PartAtB;
+        } else {
+            return std::unexpected(PlantError{
+                "plant_adapter: route sensor '" + route.sensor +
+                "' is not a conveyor sensor; known: part_at_b, sensor_a_exit_triggered"});
         }
         const auto to_plc = index_of(plc_ids, route.to_plc);
         if (!to_plc) {
@@ -171,8 +175,6 @@ LocalStubPlant::route_to_plcs(PlantOutputs current, std::optional<PlantOutputs> 
             case Sensor::PartAtB:
                 current_value = current.part_at_b;
                 prior_value = prior.has_value() && prior->part_at_b;
-                break;
-            case Sensor::Unknown:
                 break;
         }
         const bool emit = route.trigger == TriggerKind::Level

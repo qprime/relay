@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import json
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -123,6 +124,30 @@ class TestPlantServerWire:
         first = json.loads(responses[0])
         assert first["id"] is None
         assert "malformed" in first["error"]["message"]
+
+
+class TestPlantServerLifecycle:
+    def test_server_exits_when_client_disconnects(self):
+        server = subprocess.Popen(
+            [sys.executable, "-m", "tools.plant_server", str(CONVEYOR_SPEC), "--port", "0"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        try:
+            ready = server.stdout.readline().split()
+            assert ready and ready[0] == "READY", f"plant server not ready: {ready}"
+            with socket.create_connection(("127.0.0.1", int(ready[1]))):
+                pass
+            assert server.wait(timeout=10) == 0, (
+                "the protocol doc promises the server treats client disconnect "
+                "as end-of-run and exits"
+            )
+        finally:
+            if server.poll() is None:
+                server.kill()
+                server.wait(timeout=10)
 
 
 @pytest.mark.skipif(

@@ -86,15 +86,19 @@ async def serve(spec_path: Path, host: str, port: int) -> None:
     spec = load_spec(spec_path)
     factory = get_plant(spec.plant_type)
     plant_block = spec.plant_block
-    server = await asyncio.start_server(
-        lambda reader, writer: handle_client(reader, writer, lambda: factory(plant_block)),
-        host,
-        port,
-    )
+    run_over = asyncio.Event()
+
+    async def session(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            await handle_client(reader, writer, lambda: factory(plant_block))
+        finally:
+            run_over.set()
+
+    server = await asyncio.start_server(session, host, port)
     bound_port = server.sockets[0].getsockname()[1]
     print(f"READY {bound_port}", flush=True)
     async with server:
-        await server.serve_forever()
+        await run_over.wait()
 
 
 def main(argv: list[str] | None = None) -> int:

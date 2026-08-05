@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -51,6 +52,19 @@ def artifact():
     return json.loads(CONVEYOR_GOLDEN.read_text())
 
 
+def _spawn_plant_server() -> tuple[subprocess.Popen, int]:
+    server = subprocess.Popen(
+        [sys.executable, "-m", "tools.plant_server", str(CONVEYOR_SPEC), "--port", "0"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    ready = server.stdout.readline().split()
+    assert ready and ready[0] == "READY", f"plant server not ready: {ready}"
+    return server, int(ready[1])
+
+
 def _delay_signal_activation(trace: TraceLog, plc_id: str, signal: str, delay_scans: int) -> TraceLog:
     per_plc = sorted(
         (r for r in trace.records if r.plc_id == plc_id), key=lambda r: r.clock.tick
@@ -86,30 +100,41 @@ class TestHostSatisfiesExpectations:
                 f"(python witness: {entry['witness']}; cpp reason: {cpp.reason})"
             )
 
-    def test_gate_holds_across_ten_consecutive_runs(self, artifact, tmp_path):
+    @pytest.mark.parametrize("plant_mode", ["conveyor", "remote_socket"])
+    def test_gate_holds_across_ten_consecutive_runs(self, artifact, tmp_path, plant_mode):
         from tools.emit_host_inputs import emit_host_inputs
 
         resolved_path, blocks_path = emit_host_inputs(CONVEYOR_SPEC, tmp_path)
         for attempt in range(10):
-            trace_path = tmp_path / f"cpp_trace_{attempt}.jsonl"
-            subprocess.run(
-                [
-                    str(HOST_BINARY),
-                    "--spec", str(resolved_path),
-                    "--st-blocks", str(blocks_path),
-                    "--out", str(trace_path),
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
+            trace_path = tmp_path / f"cpp_trace_{plant_mode}_{attempt}.jsonl"
+            command = [
+                str(HOST_BINARY),
+                "--spec", str(resolved_path),
+                "--st-blocks", str(blocks_path),
+                "--out", str(trace_path),
+            ]
+            server = None
+            if plant_mode == "remote_socket":
+                server, port = _spawn_plant_server()
+                command += ["--plant-endpoint", f"127.0.0.1:{port}"]
+            try:
+                subprocess.run(
+                    command,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            finally:
+                if server is not None:
+                    server.terminate()
+                    server.wait(timeout=10)
             with trace_path.open() as stream:
                 trace = load_jsonl(stream)
             for entry in artifact["assertions"]:
                 result = evaluate_assertion(entry["text"], trace)
                 assert result.passed == entry["passed"], (
-                    f"run {attempt + 1}/10: {entry['text']}: "
+                    f"run {attempt + 1}/10 ({plant_mode}): {entry['text']}: "
                     f"python={entry['passed']} cpp={result.passed} "
                     f"(reason: {result.reason}); a single intermittent failure "
                     "is a defect to diagnose, not a retry to absorb"
