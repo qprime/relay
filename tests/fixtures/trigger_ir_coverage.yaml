@@ -1,0 +1,121 @@
+System:
+  name: trigger_ir_coverage
+  plcs:
+    - id: plc_a
+      role: producer
+    - id: plc_b
+      role: consumer
+
+Comm:
+  strategy: tag
+  tags:
+    - name: coverage_tag
+      produced_by: plc_b
+      consumed_by: [plc_a]
+    - name: emitted_tag
+      produced_by: plc_a
+      consumed_by: [plc_b]
+
+Plant:
+  type: conveyor
+  config:
+    belt_speed_m_per_s: 0.5
+    sensor_trigger_threshold_m: 0.1
+    actuator_latency_ms: 50.0
+  routes:
+    - sensor: sensor_a_exit_triggered
+      to_plc: plc_a
+      as_key: sensor_a_exit
+      trigger: edge
+    - sensor: part_at_b
+      to_plc: plc_a
+      as_key: part_at_b
+      trigger: level
+  actuators:
+    - from_plc: plc_a
+      key: out_rising_latched
+      as: belt_b_enable_signal
+
+Behavior:
+  plc_a:
+    triggers:
+      - id: rising_latched
+        when:
+          signal: sensor_a_exit
+          edge: rising
+        emit:
+          output: out_rising_latched
+          mode: latched
+      - id: rising_pulse
+        when:
+          signal: sensor_a_exit
+          edge: rising
+          debounce_ms: 20
+        emit:
+          output: out_rising_pulse
+          mode: pulse
+          duration_ms: 30
+      - id: rising_steady
+        when:
+          signal: sensor_a_exit
+          edge: rising
+        emit:
+          output: out_rising_steady
+          mode: steady
+      - id: falling_latched
+        when:
+          signal: part_at_b
+          edge: falling
+        emit:
+          output: out_falling_latched
+          mode: latched
+      - id: falling_pulse
+        when:
+          signal: part_at_b
+          edge: falling
+          debounce_ms: 5
+        emit:
+          output: out_falling_pulse
+          mode: pulse
+          duration_ms: 15
+      - id: falling_steady
+        when:
+          signal: part_at_b
+          edge: falling
+        emit:
+          output: out_falling_steady
+          mode: steady
+      - id: level_latched
+        when:
+          signal: coverage_tag
+          edge: level
+        emit:
+          output: out_level_latched
+          mode: latched
+      - id: level_pulse
+        when:
+          signal: coverage_tag
+          edge: level
+          debounce_ms: 100
+        emit:
+          output: out_level_pulse
+          mode: pulse
+          duration_ms: 40
+      - id: level_steady
+        when:
+          signal: coverage_tag
+          edge: level
+        emit:
+          output: out_level_steady
+          mode: steady
+      - id: tag_target
+        when:
+          signal: sensor_a_exit
+          edge: level
+        emit:
+          tag: emitted_tag
+          mode: steady
+
+Assertions:
+  - "EVENTUALLY(out_rising_latched, within: 500ms)"
+  - "PRECEDES(out_rising_latched, out_level_steady, within: 500ms)"

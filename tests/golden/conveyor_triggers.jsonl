@@ -1,0 +1,2 @@
+{"debounce_ms": 0, "duration_ms": null, "edge": "rising", "id": "handoff_on_exit", "mode": "latched", "plc_id": "plc_a", "signal": "sensor_a_exit", "target": "handoff_signal", "target_kind": "tag"}
+{"debounce_ms": 0, "duration_ms": null, "edge": "level", "id": "belt_on_handoff", "mode": "latched", "plc_id": "plc_b", "signal": "handoff_signal", "target": "belt_b_enable", "target_kind": "output"}

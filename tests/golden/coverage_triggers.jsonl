@@ -1,0 +1,10 @@
+{"debounce_ms": 0, "duration_ms": null, "edge": "rising", "id": "rising_latched", "mode": "latched", "plc_id": "plc_a", "signal": "sensor_a_exit", "target": "out_rising_latched", "target_kind": "output"}
+{"debounce_ms": 20, "duration_ms": 30, "edge": "rising", "id": "rising_pulse", "mode": "pulse", "plc_id": "plc_a", "signal": "sensor_a_exit", "target": "out_rising_pulse", "target_kind": "output"}
+{"debounce_ms": 0, "duration_ms": null, "edge": "rising", "id": "rising_steady", "mode": "steady", "plc_id": "plc_a", "signal": "sensor_a_exit", "target": "out_rising_steady", "target_kind": "output"}
+{"debounce_ms": 0, "duration_ms": null, "edge": "falling", "id": "falling_latched", "mode": "latched", "plc_id": "plc_a", "signal": "part_at_b", "target": "out_falling_latched", "target_kind": "output"}
+{"debounce_ms": 5, "duration_ms": 15, "edge": "falling", "id": "falling_pulse", "mode": "pulse", "plc_id": "plc_a", "signal": "part_at_b", "target": "out_falling_pulse", "target_kind": "output"}
+{"debounce_ms": 0, "duration_ms": null, "edge": "falling", "id": "falling_steady", "mode": "steady", "plc_id": "plc_a", "signal": "part_at_b", "target": "out_falling_steady", "target_kind": "output"}
+{"debounce_ms": 0, "duration_ms": null, "edge": "level", "id": "level_latched", "mode": "latched", "plc_id": "plc_a", "signal": "coverage_tag", "target": "out_level_latched", "target_kind": "output"}
+{"debounce_ms": 100, "duration_ms": 40, "edge": "level", "id": "level_pulse", "mode": "pulse", "plc_id": "plc_a", "signal": "coverage_tag", "target": "out_level_pulse", "target_kind": "output"}
+{"debounce_ms": 0, "duration_ms": null, "edge": "level", "id": "level_steady", "mode": "steady", "plc_id": "plc_a", "signal": "coverage_tag", "target": "out_level_steady", "target_kind": "output"}
+{"debounce_ms": 0, "duration_ms": null, "edge": "level", "id": "tag_target", "mode": "steady", "plc_id": "plc_a", "signal": "sensor_a_exit", "target": "emitted_tag", "target_kind": "tag"}
