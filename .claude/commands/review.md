@@ -33,7 +33,6 @@ Figure out what to review based on $ARGUMENTS and conversation context:
 6. **No arguments, clean working tree** — use `last_review_commit` for change-aware review:
    - Run `git diff --name-only <last_review_commit>..HEAD`
    - **Changed files**: Full review
-   - **Unchanged files with deferred findings**: Quick recheck
    - **Everything else**: Skip
    - If no `last_review_commit`, ask what to review
 
@@ -66,7 +65,11 @@ Read every file under review in full — not just changed lines. Cross-reference
 
 ## Triage
 
-Triage depends on what you're reviewing. Code and specs have different deferral rules.
+Every finding gets exactly one disposition — there is no "Deferred":
+
+- **Fix now** — feasible, actionable, or a footgun. Report in "File These."
+- **File an issue** — real problem whose footprint is too large for an inline fix. An issue is queued work expected to be fixed soon, not a parking lot. Report in "New Issues."
+- **Ignore** — materializes only under guessed future usage and would surface naturally at the point of use. Report in "Noted, Not Actionable" with one line on why it's safe to ignore.
 
 ### Reviewing implemented code
 
@@ -74,10 +77,8 @@ Triage depends on what you're reviewing. Code and specs have different deferral 
 |--------|----------|---------------|
 | **Defect** | Invariant violation, crash path, data loss, silent failure | Report in "File These" |
 | **AI hazard** | Pattern that causes agent mistakes | Report in "File These" |
-| **Structural debt** | Real problem not causing bugs today | Report in "Deferred" with metadata |
+| **Structural debt** | Real problem not causing bugs today | Fix now if feasible; large footprint → "New Issues"; surfaces naturally → "Noted, Not Actionable" |
 | **Taste** | Valid observation, working code, no risk | Report in "Noted, Not Actionable" |
-
-**Deferred metadata (required):** `first observed [date], commit [hash]. Deferred because [reason]. Revisit when [trigger].`
 
 ### Reviewing specs or issues
 
@@ -88,8 +89,6 @@ Triage depends on what you're reviewing. Code and specs have different deferral 
 | **Missing scope** | Real concern not covered by this spec | Report in "New Issues" |
 | **Taste** | Valid observation, no risk | Report in "Noted, Not Actionable" |
 
-**No "Deferred" bucket for specs.** Unresolved design questions create ambiguity during implementation — fix now, plan separately, or note as not actionable.
-
 ## Report Structure
 
 ### When reviewing code
@@ -99,14 +98,14 @@ Triage depends on what you're reviewing. Code and specs have different deferral 
 - Trigger: [with args: description] or [no args: change-aware from <commit>]
 - Artifact type: implemented code
 - Context loaded: [reference docs found]
-- Files reviewed: N reviewed, N deferred recheck, N skipped
+- Files reviewed: N reviewed, N skipped
 
 ## File These
 - **[defect]** description — `file:line` — violates [invariant ID / convention / principle]
 - **[AI hazard]** description — `file:line` — causes [specific agent mistake]
 
-## Deferred
-- description — `file:line` — first observed [date], commit [hash]. Deferred because [reason]. Revisit when [trigger].
+## New Issues
+- description — `file:line` — footprint too large for an inline fix; file with the expectation it's fixed soon
 
 ## Noted, Not Actionable
 - observation
