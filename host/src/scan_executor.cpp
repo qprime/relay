@@ -1,5 +1,7 @@
 #include "relay_host/scan_executor.hpp"
 
+#include <chrono>
+
 namespace relay_host {
 
 PlcScanState::PlcScanState(std::uint32_t plc_index_arg, const ValidatedSt* block_arg,
@@ -125,12 +127,24 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
 
 Task run_plc_scan_loop(PlcExecutionContext ctx) {
     OutgoingBuffer outgoing;
-    for (std::int64_t scan = 0; scan < ctx.max_scans; ++scan) {
-        const auto [clock_ec, clock] = co_await ctx.clock_chan->async_receive(
-            asio::as_tuple(asio::use_awaitable));
-        if (clock_ec) {
-            co_return;
+    SimClock clock = SimClock::zero();
+    IOImage prior_outputs = IOImage::empty();
+    std::vector<std::int64_t> routed_send_counts(ctx.table->size(), 0);
+    std::vector<Routed> routed_copy;
+    asio::steady_timer timer(co_await asio::this_coro::executor);
+    const auto period = std::chrono::duration_cast<asio::steady_timer::duration>(
+        std::chrono::duration<double, std::milli>(ctx.scan_period_ms));
+    auto deadline = asio::steady_timer::clock_type::now();
+
+    for (std::int64_t scan = 0; scan < ctx.max_scans && !ctx.run->stop; ++scan) {
+        deadline += period;
+        timer.expires_at(deadline);
+        const auto [wait_ec] =
+            co_await timer.async_wait(asio::as_tuple(asio::use_awaitable));
+        if (wait_ec || ctx.run->stop) {
+            break;
         }
+
         ctx.bus->begin_drain(ctx.plc_index);
         while (true) {
             Message msg{};
@@ -143,24 +157,46 @@ Task run_plc_scan_loop(PlcExecutionContext ctx) {
             }
             ctx.bus->fold(ctx.plc_index, msg);
         }
+
         ScanTraceEntry& entry = ctx.trace->next_entry();
         const std::optional<ScanError> error =
             execute_one_scan(*ctx.state, ctx.bus->buffer(ctx.plc_index), clock,
                              ctx.scan_period_ms, entry, outgoing);
         if (error.has_value()) {
-            co_await ctx.done_chan->async_send(asio::error_code{},
-                                               ScanDone{ctx.plc_index, false, *error},
-                                               asio::as_tuple(asio::use_awaitable));
-            co_return;
+            ctx.run->error =
+                RunError{RunErrorKind::ScanFailed, ctx.plc_index, *error, {}};
+            ctx.run->stop = true;
+            break;
         }
         for (std::uint32_t index = 0; index < outgoing.count; ++index) {
             const OutgoingMessage& message = outgoing.items[index];
             co_await ctx.bus->send(message.target_plc, message.msg);
         }
-        co_await ctx.done_chan->async_send(asio::error_code{},
-                                           ScanDone{ctx.plc_index, true, std::nullopt},
-                                           asio::as_tuple(asio::use_awaitable));
+
+        IOImage outputs = IOImage::empty();
+        for (std::uint32_t cell = 0; cell < ctx.state->output_count; ++cell) {
+            outputs = outputs.with_value(
+                ctx.table->name_of(ctx.state->outputs[cell].signal_id),
+                ctx.state->outputs[cell].value);
+        }
+        const std::span<const Routed> routed = std::visit(
+            [&](auto& strategy) {
+                return strategy.route(ctx.plc_index, outputs, prior_outputs);
+            },
+            *ctx.strategy);
+        routed_copy.assign(routed.begin(), routed.end());
+        for (const Routed& message : routed_copy) {
+            const std::int64_t seq = ++routed_send_counts[message.signal_id];
+            co_await ctx.bus->send(
+                message.consumer_index,
+                Message{message.signal_id, message.value, kNoSender, seq});
+        }
+
+        *ctx.latest_output = outputs;
+        prior_outputs = std::move(outputs);
+        clock = clock.advance(ctx.scan_period_ms);
     }
+    ++ctx.run->plcs_done;
     co_return;
 }
 

@@ -3,11 +3,15 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "relay_host/async.hpp"
 #include "relay_host/clock.hpp"
 #include "relay_host/comm_bus.hpp"
+#include "relay_host/comm_strategy.hpp"
+#include "relay_host/io_image.hpp"
+#include "relay_host/signal_table.hpp"
 #include "relay_host/st_eval.hpp"
 #include "relay_host/st_validator.hpp"
 #include "relay_host/trace.hpp"
@@ -43,21 +47,35 @@ struct PlcScanState {
                                                         ScanTraceEntry& entry,
                                                         OutgoingBuffer& outgoing);
 
-struct ScanDone {
+enum class RunErrorKind {
+    ScanFailed,
+    PlantFailed,
+};
+
+struct RunError {
+    RunErrorKind kind;
     std::uint32_t plc_index;
-    bool ok;
-    std::optional<ScanError> error;
+    std::optional<ScanError> scan_error;
+    std::string message;
+};
+
+struct RunState {
+    std::optional<RunError> error;
+    bool stop = false;
+    std::uint32_t plcs_done = 0;
 };
 
 struct PlcExecutionContext {
     std::uint32_t plc_index;
     std::int64_t max_scans;
     double scan_period_ms;
-    Channel<SimClock>* clock_chan;
-    Channel<ScanDone>* done_chan;
     CommBus* bus;
     PlcScanState* state;
     TraceRing* trace;
+    const SignalTable* table;
+    CommStrategy* strategy;
+    IOImage* latest_output;
+    RunState* run;
 };
 
 [[nodiscard]] Task run_plc_scan_loop(PlcExecutionContext ctx);

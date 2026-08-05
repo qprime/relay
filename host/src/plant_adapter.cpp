@@ -20,6 +20,17 @@ std::optional<std::uint32_t> index_of(std::span<const std::string> plc_ids,
     return static_cast<std::uint32_t>(it - plc_ids.begin());
 }
 
+std::expected<double, PlantError> require_config_number(const nlohmann::json& config,
+                                                        const std::string& key) {
+    if (!config.contains(key) || !config[key].is_number()) {
+        return std::unexpected(PlantError{
+            "plant_adapter: conveyor config field '" + key + "' must be a number, got " +
+            (config.contains(key) ? std::string(config[key].type_name())
+                                  : std::string("nothing"))});
+    }
+    return config[key].get<double>();
+}
+
 }  // namespace
 
 void ActuatorState::set(std::string alias, Cell value) {
@@ -45,7 +56,13 @@ std::expected<LocalStubPlant, PlantError> LocalStubPlant::try_create(
     const ResolvedPlant& plant, std::span<const std::string> plc_ids,
     const SignalTable& table) {
     LocalStubPlant stub;
-    stub.config_ = plant.config;
+    auto belt_speed = require_config_number(plant.config, "belt_speed_m_per_s");
+    if (!belt_speed) return std::unexpected(belt_speed.error());
+    auto threshold = require_config_number(plant.config, "sensor_trigger_threshold_m");
+    if (!threshold) return std::unexpected(threshold.error());
+    auto latency = require_config_number(plant.config, "actuator_latency_ms");
+    if (!latency) return std::unexpected(latency.error());
+    stub.config_ = Config{*belt_speed, *threshold, *latency};
     for (const ResolvedRoute& route : plant.routes) {
         Sensor sensor = Sensor::Unknown;
         if (route.sensor == "sensor_a_exit_triggered") {
@@ -78,11 +95,10 @@ std::expected<LocalStubPlant, PlantError> LocalStubPlant::try_create(
         }
         stub.actuators_.push_back(Actuator{*from_plc, actuator.key, actuator.as});
     }
-    stub.scratch_.resize(stub.routes_.size());
     return stub;
 }
 
-ActuatorState LocalStubPlant::read_actuators(
+asio::awaitable<std::expected<ActuatorState, PlantError>> LocalStubPlant::read_actuators(
     std::span<const IOImage> latest_outputs) const {
     ActuatorState state;
     for (const Actuator& actuator : actuators_) {
@@ -90,10 +106,11 @@ ActuatorState LocalStubPlant::read_actuators(
             latest_outputs[actuator.from_plc_index].get(actuator.key);
         state.set(actuator.alias, value.value_or(Cell{false}));
     }
-    return state;
+    co_return state;
 }
 
-PlantOutputs LocalStubPlant::step(double dt_ms, const ActuatorState& actuator_state) {
+asio::awaitable<std::expected<PlantOutputs, PlantError>> LocalStubPlant::step(
+    double dt_ms, const ActuatorState& actuator_state) {
     const double dt_s = dt_ms / 1000.0;
     const bool belt_b_enable_signal =
         is_truthy(actuator_state.get("belt_b_enable_signal").value_or(Cell{false}));
@@ -136,12 +153,13 @@ PlantOutputs LocalStubPlant::step(double dt_ms, const ActuatorState& actuator_st
     const bool sensor_a_exit =
         std::abs(new_pos - kBeltALengthM) < config_.sensor_trigger_threshold_m;
 
-    return PlantOutputs{sensor_a_exit, on_belt_b};
+    co_return PlantOutputs{sensor_a_exit, on_belt_b};
 }
 
-std::span<const RoutedPlantSignal> LocalStubPlant::route_to_plcs(
-    PlantOutputs current, std::optional<PlantOutputs> prior) {
-    std::size_t count = 0;
+asio::awaitable<std::expected<std::vector<RoutedPlantSignal>, PlantError>>
+LocalStubPlant::route_to_plcs(PlantOutputs current, std::optional<PlantOutputs> prior) {
+    std::vector<RoutedPlantSignal> routed;
+    routed.reserve(routes_.size());
     for (const Route& route : routes_) {
         bool current_value = false;
         bool prior_value = false;
@@ -161,12 +179,11 @@ std::span<const RoutedPlantSignal> LocalStubPlant::route_to_plcs(
                               ? current_value
                               : current_value && !prior_value;
         if (emit) {
-            scratch_[count] = RoutedPlantSignal{route.to_plc_index, route.signal_id,
-                                                Cell{current_value}};
-            ++count;
+            routed.push_back(RoutedPlantSignal{route.to_plc_index, route.signal_id,
+                                               Cell{current_value}});
         }
     }
-    return std::span<const RoutedPlantSignal>(scratch_.data(), count);
+    co_return routed;
 }
 
 }  // namespace relay_host

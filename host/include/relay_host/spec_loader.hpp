@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "relay_host/clock.hpp"
 
 namespace relay_host {
@@ -36,15 +38,9 @@ struct ResolvedActuator {
     std::string as;
 };
 
-struct ResolvedPlantConfig {
-    double belt_speed_m_per_s;
-    double sensor_trigger_threshold_m;
-    double actuator_latency_ms;
-};
-
 struct ResolvedPlant {
     std::string type;
-    ResolvedPlantConfig config;
+    nlohmann::json config;
     std::vector<ResolvedRoute> routes;
     std::vector<ResolvedActuator> actuators;
 };

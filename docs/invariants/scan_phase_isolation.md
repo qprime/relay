@@ -1,12 +1,15 @@
 # Invariant: Scan phases are canonical and ST cannot escape its phase
 
-**Status:** Active | **As-Of:** 2026-04-21 | **Scope:** `relay/runtime/`, `relay/st/`, comm strategies, plant models
+**Status:** Active | **As-Of:** 2026-08-04 | **Scope:** `relay/runtime/`, `relay/st/`, comm strategies, plant models, `host/`
 
 ## Statement
 
 Each PLC scan executes in a fixed phase order:
 
-1. **Consume clock** — receive `SimClock` from the harness
+1. **Establish clock** — obtain this scan's `SimClock`. In the lockstep
+   simulator it is received from the harness; in the free-running host each
+   PLC produces it from its own pacing, under the production rule in
+   [simclock_only_time_source.md](simclock_only_time_source.md)
 2. **Drain bus** — collect pending inter-PLC messages into a `CommBuffer`
 3. **Promote** — fold `CommBuffer` contents into the IOImage
 4. **Snapshot** — capture the IOImage immediately before execution

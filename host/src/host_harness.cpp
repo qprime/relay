@@ -74,7 +74,7 @@ std::expected<std::unique_ptr<HostHarness>, InitError> HostHarness::try_create(
         return std::unexpected(InitError{strategy.error().message});
     }
 
-    auto plant = LocalStubPlant::try_create(spec.plant, spec.plc_ids, table);
+    auto plant = build_plant(spec.plant, spec.plc_ids, table, ex);
     if (!plant) {
         return std::unexpected(InitError{plant.error().message});
     }
@@ -94,7 +94,7 @@ std::expected<std::unique_ptr<HostHarness>, InitError> HostHarness::try_create(
 
 HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
                          std::vector<ValidatedSt> blocks, CommStrategy strategy,
-                         LocalStubPlant plant, std::size_t trace_capacity, Executor ex)
+                         PlantVariant plant, std::size_t trace_capacity, Executor ex)
     : spec_(std::move(spec)),
       cfg_(cfg),
       table_(std::move(table)),
@@ -104,108 +104,91 @@ HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
       bus_(ex, static_cast<std::uint32_t>(spec_.plc_ids.size()), table_.size(),
            kCommChannelCapacity),
       trace_(trace_capacity),
-      done_chan_(ex, kCommChannelCapacity),
-      scan_timer_(ex),
-      harness_send_counts_(table_.size(), 0) {
+      plant_send_counts_(table_.size(), 0) {
     const std::uint32_t plc_count = static_cast<std::uint32_t>(spec_.plc_ids.size());
     states_.reserve(plc_count);
-    clock_chans_.reserve(plc_count);
     for (std::uint32_t index = 0; index < plc_count; ++index) {
         states_.emplace_back(index, &blocks_[index], table_.size());
-        clock_chans_.push_back(std::make_unique<Channel<SimClock>>(ex, 1));
         latest_outputs_.push_back(IOImage::empty());
-        prior_outputs_.push_back(IOImage::empty());
     }
+}
+
+Task HostHarness::run_plant_loop() {
+    const std::uint32_t plc_count = static_cast<std::uint32_t>(spec_.plc_ids.size());
+    asio::steady_timer timer(co_await asio::this_coro::executor);
+    const auto period = std::chrono::duration_cast<asio::steady_timer::duration>(
+        std::chrono::duration<double, std::milli>(cfg_.scan_period_ms));
+    auto deadline = asio::steady_timer::clock_type::now();
+
+    for (std::int64_t scan = 0;
+         scan < cfg_.max_scans && !run_state_.stop && run_state_.plcs_done < plc_count;
+         ++scan) {
+        deadline += period;
+        timer.expires_at(deadline);
+        const auto [wait_ec] =
+            co_await timer.async_wait(asio::as_tuple(asio::use_awaitable));
+        if (wait_ec || run_state_.stop || run_state_.plcs_done == plc_count) {
+            break;
+        }
+
+        const auto actuator_state = co_await std::visit(
+            [&](auto& plant) { return plant.read_actuators(latest_outputs_); }, plant_);
+        if (!actuator_state) {
+            run_state_.error = RunError{RunErrorKind::PlantFailed, 0, std::nullopt,
+                                        actuator_state.error().message};
+            run_state_.stop = true;
+            break;
+        }
+        const auto plant_out = co_await std::visit(
+            [&](auto& plant) { return plant.step(cfg_.scan_period_ms, *actuator_state); },
+            plant_);
+        if (!plant_out) {
+            run_state_.error = RunError{RunErrorKind::PlantFailed, 0, std::nullopt,
+                                        plant_out.error().message};
+            run_state_.stop = true;
+            break;
+        }
+        const auto plant_routed = co_await std::visit(
+            [&](auto& plant) { return plant.route_to_plcs(*plant_out, prior_plant_out_); },
+            plant_);
+        if (!plant_routed) {
+            run_state_.error = RunError{RunErrorKind::PlantFailed, 0, std::nullopt,
+                                        plant_routed.error().message};
+            run_state_.stop = true;
+            break;
+        }
+        for (const RoutedPlantSignal& routed : *plant_routed) {
+            const std::int64_t seq = ++plant_send_counts_[routed.signal_id];
+            co_await bus_.send(
+                routed.to_plc_index,
+                Message{routed.signal_id, routed.value, kNoSender, seq});
+        }
+
+        prior_plant_out_ = *plant_out;
+    }
+    co_return;
 }
 
 Task HostHarness::run() {
     const Executor ex = co_await asio::this_coro::executor;
     const std::uint32_t plc_count = static_cast<std::uint32_t>(spec_.plc_ids.size());
     std::vector<asio::experimental::promise<void(std::exception_ptr)>> joins;
-    joins.reserve(plc_count);
+    joins.reserve(plc_count + 1);
     for (std::uint32_t index = 0; index < plc_count; ++index) {
         joins.push_back(asio::co_spawn(
             ex,
             run_plc_scan_loop(PlcExecutionContext{
-                index, cfg_.max_scans, cfg_.scan_period_ms, clock_chans_[index].get(),
-                &done_chan_, &bus_, &states_[index], &trace_}),
+                index, cfg_.max_scans, cfg_.scan_period_ms, &bus_, &states_[index],
+                &trace_, &table_, &strategy_, &latest_outputs_[index], &run_state_}),
             asio::experimental::use_promise));
     }
+    joins.push_back(asio::co_spawn(ex, run_plant_loop(), asio::experimental::use_promise));
 
-    const auto scan_period = std::chrono::duration_cast<asio::steady_timer::duration>(
-        std::chrono::duration<double, std::milli>(cfg_.scan_period_ms));
-
-    bool aborted = false;
-    for (std::int64_t scan = 0; scan < cfg_.max_scans && !aborted; ++scan) {
-        scan_timer_.expires_after(scan_period);
-        co_await scan_timer_.async_wait(asio::use_awaitable);
-
-        const ActuatorState actuator_state = plant_.read_actuators(latest_outputs_);
-        const PlantOutputs plant_out = plant_.step(cfg_.scan_period_ms, actuator_state);
-        for (const RoutedPlantSignal& routed :
-             plant_.route_to_plcs(plant_out, prior_plant_out_)) {
-            const std::int64_t seq = ++harness_send_counts_[routed.signal_id];
-            co_await bus_.send(
-                routed.to_plc_index,
-                Message{routed.signal_id, routed.value, kNoSender, seq});
-        }
-
-        for (std::uint32_t index = 0; index < plc_count && !aborted; ++index) {
-            co_await clock_chans_[index]->async_send(asio::error_code{}, clock_,
-                                                     asio::use_awaitable);
-            const auto [done_ec, done] = co_await done_chan_.async_receive(
-                asio::as_tuple(asio::use_awaitable));
-            if (done_ec) {
-                run_error_ = RunError{RunErrorKind::PlcExited, index, std::nullopt};
-                aborted = true;
-                break;
-            }
-            if (!done.ok) {
-                run_error_ =
-                    RunError{RunErrorKind::ScanFailed, done.plc_index, done.error};
-                aborted = true;
-                break;
-            }
-            IOImage outputs = IOImage::empty();
-            const PlcScanState& state = states_[done.plc_index];
-            for (std::uint32_t cell = 0; cell < state.output_count; ++cell) {
-                outputs = outputs.with_value(table_.name_of(state.outputs[cell].signal_id),
-                                             state.outputs[cell].value);
-            }
-            latest_outputs_[done.plc_index] = std::move(outputs);
-        }
-        if (aborted) {
-            break;
-        }
-
-        for (std::uint32_t index = 0; index < plc_count; ++index) {
-            const std::span<const Routed> routed = std::visit(
-                [&](auto& strategy) {
-                    return strategy.route(index, latest_outputs_[index],
-                                          prior_outputs_[index]);
-                },
-                strategy_);
-            for (const Routed& message : routed) {
-                const std::int64_t seq = ++harness_send_counts_[message.signal_id];
-                co_await bus_.send(
-                    message.consumer_index,
-                    Message{message.signal_id, message.value, kNoSender, seq});
-            }
-        }
-
-        prior_outputs_ = latest_outputs_;
-        prior_plant_out_ = plant_out;
-        clock_ = clock_.advance(cfg_.scan_period_ms);
-    }
-
-    for (const std::unique_ptr<Channel<SimClock>>& channel : clock_chans_) {
-        channel->close();
-    }
-    bus_.close();
     for (auto& join : joins) {
         co_await join(asio::use_awaitable);
     }
-    done_chan_.close();
+    bus_.close();
+    run_error_ = run_state_.error;
     co_return;
 }
 

@@ -30,6 +30,8 @@ add_library(relay_host STATIC
     src/comm_bus.cpp
     src/comm_strategy.cpp
     src/plant_adapter.cpp
+    src/plant_registry.cpp
+    src/remote_socket_plant.cpp
     src/scan_executor.cpp
     src/host_harness.cpp
     src/trace.cpp
@@ -59,6 +61,8 @@ add_executable(relay_host_tests
     tests/test_comm_bus.cpp
     tests/test_comm_strategy.cpp
     tests/test_host_harness.cpp
+    tests/test_plant_registry.cpp
+    tests/test_remote_socket_plant.cpp
     tests/test_scan_executor.cpp
     tests/test_ring_buffer_trace.cpp
 )

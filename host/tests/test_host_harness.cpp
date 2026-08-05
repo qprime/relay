@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 
 #include <map>
-#include <set>
+#include <sstream>
+#include <vector>
 
 #include "harness_helpers.hpp"
 
@@ -27,117 +28,89 @@ std::optional<Cell> io_value(const ScanTraceEntry& entry, const SignalTable& tab
     return std::nullopt;
 }
 
-TEST(TestHostHarness, test_scan_synchrony_assumption_holds) {
-    // INTERIM ASSUMPTION GUARD (register row 1): every PLC occupies the same
-    // scan index at every tick. Lifting the shared barrier (#14) must fail
-    // here first, by name, not as a byte diff against the golden trace.
-    const auto harness =
-        run_harness(minimal_two_plc_spec(), {{"plc_a", ""}, {"plc_b", ""}},
-                    fast_config(20));
-    ASSERT_FALSE(harness->run_error().has_value());
-    const TraceRing& trace = harness->trace();
-    const std::size_t plc_count = harness->plc_ids().size();
-    ASSERT_EQ(trace.size(), 20u * plc_count);
-    for (std::size_t index = 0; index < trace.size(); index += plc_count) {
-        std::set<std::uint32_t> plcs_in_group;
-        for (std::size_t offset = 0; offset < plc_count; ++offset) {
-            const ScanTraceEntry& entry = trace.at(index + offset);
-            EXPECT_EQ(entry.clock.tick, static_cast<std::int64_t>(index / plc_count));
-            plcs_in_group.insert(entry.plc_index);
-        }
-        EXPECT_EQ(plcs_in_group.size(), plc_count);
-    }
-}
-
-TEST(TestHostHarness, test_barrier_holds_all_plcs_to_same_scan) {
-    const auto harness =
-        run_harness(minimal_two_plc_spec(), {{"plc_a", ""}, {"plc_b", ""}},
-                    fast_config(20));
-    std::map<std::uint32_t, std::int64_t> last_tick;
-    const TraceRing& trace = harness->trace();
+bool ever_delivered(const TraceRing& trace, const SignalTable& table,
+                    std::uint32_t plc_index, std::string_view name) {
     for (std::size_t index = 0; index < trace.size(); ++index) {
         const ScanTraceEntry& entry = trace.at(index);
-        for (const auto& [plc, tick] : last_tick) {
-            EXPECT_LE(entry.clock.tick - tick, 1)
-                << "plc_index " << entry.plc_index << " reached tick "
-                << entry.clock.tick << " while plc_index " << plc << " was at " << tick;
+        if (entry.plc_index != plc_index) {
+            continue;
         }
-        last_tick[entry.plc_index] = entry.clock.tick;
+        const std::optional<Cell> value = io_value(entry, table, name);
+        if (value.has_value() && is_truthy(*value)) {
+            return true;
+        }
     }
+    return false;
 }
 
-TEST(TestHostHarness, test_comm_routing_happens_after_barrier) {
+TEST(TestHostHarness, test_strategy_routed_tag_is_delivered) {
     ResolvedTaskSpec spec = minimal_two_plc_spec();
     spec.comm.tags = {ResolvedTag{"relayed", "plc_a", {"plc_b"}}};
     const auto harness = run_harness(
         spec, {{"plc_a", "relayed := TRUE;"}, {"plc_b", ""}}, fast_config(4));
     ASSERT_FALSE(harness->run_error().has_value());
-    const TraceRing& trace = harness->trace();
-    const SignalTable& table = harness->signal_table();
-    EXPECT_FALSE(io_value(trace.at(1), table, "relayed").has_value())
-        << "strategy-routed value arrived in the same scan; routing must happen "
-           "after the barrier";
-    ASSERT_TRUE(io_value(trace.at(3), table, "relayed").has_value());
-    EXPECT_TRUE(is_truthy(*io_value(trace.at(3), table, "relayed")));
+    EXPECT_TRUE(ever_delivered(harness->trace(), harness->signal_table(), 1, "relayed"));
 }
 
-TEST(TestHostHarness, test_fb_outgoing_delivery_is_same_scan_in_plc_ids_order) {
+TEST(TestHostHarness, test_fb_outgoing_send_is_delivered) {
     const auto harness = run_harness(
         minimal_two_plc_spec(),
         {{"plc_a", "_send_plc_b_flag := TRUE;"}, {"plc_b", ""}}, fast_config(4));
     ASSERT_FALSE(harness->run_error().has_value());
-    const TraceRing& trace = harness->trace();
-    const SignalTable& table = harness->signal_table();
-    const ScanTraceEntry& plc_b_scan_0 = trace.at(1);
-    ASSERT_EQ(plc_b_scan_0.plc_index, 1u);
-    ASSERT_EQ(plc_b_scan_0.clock.tick, 0);
-    ASSERT_TRUE(io_value(plc_b_scan_0, table, "flag").has_value())
-        << "producer earlier in plc_ids must deliver to a later consumer within "
-           "the SAME scan";
-    EXPECT_TRUE(is_truthy(*io_value(plc_b_scan_0, table, "flag")));
+    EXPECT_TRUE(ever_delivered(harness->trace(), harness->signal_table(), 1, "flag"));
 }
 
-TEST(TestHostHarness, test_clock_advances_exactly_once_per_scan) {
+TEST(TestHostHarness, test_each_plc_produces_own_monotonic_clock) {
     const auto harness =
         run_harness(minimal_two_plc_spec(), {{"plc_a", ""}, {"plc_b", ""}},
                     fast_config(20));
+    ASSERT_FALSE(harness->run_error().has_value());
     const TraceRing& trace = harness->trace();
-    std::map<std::int64_t, std::size_t> per_tick;
+    ASSERT_EQ(trace.size(), 40u);
+    std::map<std::uint32_t, std::int64_t> next_tick;
     for (std::size_t index = 0; index < trace.size(); ++index) {
-        ++per_tick[trace.at(index).clock.tick];
+        const ScanTraceEntry& entry = trace.at(index);
+        const std::int64_t expected = next_tick[entry.plc_index];
+        EXPECT_EQ(entry.clock.tick, expected)
+            << "plc_index " << entry.plc_index << " skipped or repeated a tick";
+        EXPECT_DOUBLE_EQ(entry.clock.elapsed_ms,
+                         static_cast<double>(entry.clock.tick) * 1.0)
+            << "elapsed_ms must derive from the PLC's own scan period, not wall clock";
+        next_tick[entry.plc_index] = expected + 1;
     }
-    ASSERT_EQ(per_tick.size(), 20u);
-    for (std::int64_t tick = 0; tick < 20; ++tick) {
-        EXPECT_EQ(per_tick[tick], 2u) << "tick " << tick;
+    for (const auto& [plc, count] : next_tick) {
+        EXPECT_EQ(count, 20) << "plc_index " << plc;
     }
 }
 
-TEST(TestHostHarness, test_elapsed_ms_is_deterministic_across_runs) {
-    std::vector<double> first;
-    std::vector<double> second;
-    for (std::vector<double>* elapsed : {&first, &second}) {
-        const auto harness =
-            run_harness(minimal_two_plc_spec(), {{"plc_a", ""}, {"plc_b", ""}},
-                        fast_config(20));
-        const TraceRing& trace = harness->trace();
-        for (std::size_t index = 0; index < trace.size(); ++index) {
-            elapsed->push_back(trace.at(index).clock.elapsed_ms);
-        }
-    }
-    EXPECT_EQ(first, second);
-}
-
-TEST(TestHostHarness, test_trace_record_order_is_plc_ids_order) {
+TEST(TestHostHarness, test_trace_dump_order_is_sorted_by_tick_then_plc) {
     const auto harness = run_harness(conveyor_spec(), conveyor_blocks(),
                                      HostHarness::Config{1.0, 100, 100000});
-    const TraceRing& trace = harness->trace();
-    ASSERT_EQ(trace.size(), 200u);
-    for (std::size_t index = 0; index < trace.size(); ++index) {
-        EXPECT_EQ(trace.at(index).plc_index, index % 2)
-            << "trace entry " << index
-            << " out of plc_ids order; scan executors must not append on "
-               "completion order";
+    ASSERT_FALSE(harness->run_error().has_value());
+    std::ostringstream out;
+    const auto dumped = harness->trace().dump_to_jsonl(out, harness->signal_table(),
+                                                       harness->plc_ids());
+    ASSERT_TRUE(dumped.has_value());
+
+    std::istringstream lines(out.str());
+    std::string line;
+    std::int64_t prior_tick = -1;
+    std::string prior_plc;
+    std::size_t count = 0;
+    while (std::getline(lines, line)) {
+        const nlohmann::json record = nlohmann::json::parse(line);
+        const std::int64_t tick = record["tick"].get<std::int64_t>();
+        const std::string plc = record["plc_id"].get<std::string>();
+        ASSERT_GE(tick, prior_tick) << "dump order must sort by tick";
+        if (tick == prior_tick) {
+            ASSERT_GT(plc, prior_plc)
+                << "dump order must break tick ties by plc_ids order";
+        }
+        prior_tick = tick;
+        prior_plc = plc;
+        ++count;
     }
+    EXPECT_EQ(count, 200u);
 }
 
 TEST(TestHostHarness, test_dead_plc_coroutine_surfaces_error_not_hang) {

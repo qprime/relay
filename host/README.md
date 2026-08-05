@@ -39,13 +39,42 @@ host/build/relay_host_main \
 ```
 
 Flags: `--max-scans`, `--scan-period-ms` (default to the resolved-spec values),
-`--trace-capacity` (default 100000; the ring warns on stderr when entries drop).
+`--trace-capacity` (default 100000; the ring warns on stderr when entries drop),
+`--plant-endpoint <host:port>` (force the `remote_socket` plant against a
+running plant server, overriding the spec's plant block).
 
-For the conveyor spec at the default `scan_period_ms`/`max_scans`, the emitted
-trace byte-matches [tests/golden/conveyor_trace.jsonl](../tests/golden/conveyor_trace.jsonl).
 The JSONL format is normatively defined by [relay/trace_io.py](../relay/trace_io.py):
 sorted keys, integral doubles keep their trailing `.0`, non-finite floats are
-rejected at dump time.
+rejected at dump time. Records are dumped sorted by `(tick, plc_id)` so file
+order is a deterministic function of trace *content*; in-memory append order
+is completion order and is genuinely nondeterministic under free-running scan
+cycles. The former byte-match against
+[tests/golden/conveyor_trace.jsonl](../tests/golden/conveyor_trace.jsonl) was
+retired with the scan barrier (#14): the contract is verdict equality, not
+byte equality.
+
+## Plant selection
+
+Plants resolve through a registry keyed by the spec's `Plant.type`
+([plant_registry.cpp](src/plant_registry.cpp)), mirroring
+[relay/strategies/plant.py](../relay/strategies/plant.py). Each plant parses
+and validates its own `Plant.config` block — the spec loader passes the config
+through as raw JSON. Two types are registered:
+
+- `conveyor` — `LocalStubPlant`, an in-process port of the Python conveyor
+  physics; requires `belt_speed_m_per_s`, `sensor_trigger_threshold_m`,
+  `actuator_latency_ms`.
+- `remote_socket` — `RemoteSocketPlant`, a JSON-over-TCP client for a plant
+  running in a separate process; requires `endpoint`, accepts
+  `request_timeout_ms`. The wire protocol is specified in
+  [docs/protocol/plant_socket.md](../docs/protocol/plant_socket.md), and
+  [tools/plant_server.py](../tools/plant_server.py) serves any registered
+  Python plant over it:
+
+```
+python -m tools.plant_server specs/conveyor_handoff.yaml --port 0   # prints READY <port>
+host/build/relay_host_main --spec ... --st-blocks ... --out ... --plant-endpoint 127.0.0.1:<port>
+```
 
 ## Expectations workflow
 
@@ -61,19 +90,25 @@ wrong as the reverse. `witness` and `observed_gap_ms` are informational only.
 
 ## Time discipline
 
-`simclock_only_time_source` applies in full, not "in spirit". Every value that
-reaches the trace derives from the injected `SimClock`, advanced by exactly
-`scan_period_ms` per scan. The wall clock is read in exactly one place —
-`HostHarness::run` step 1 (the inter-scan `asio::steady_timer` wait) — and
-affects only how long the host takes in real time, never trace content. The
-PLC scan coroutine (`run_plc_scan_loop`) contains no sleep and no wall-clock
-read.
+`simclock_only_time_source` applies in full, not "in spirit". Scan cycles are
+**free-running** (#14): each PLC coroutine paces itself on its own
+`asio::steady_timer` at `scan_period_ms` and produces its own `SimClock` —
+`tick` increments per scan, `elapsed_ms` accumulates by that PLC's scan
+period, never read from wall clock. Timer deadlines are absolute multiples of
+the period from loop start, so a scan that overruns runs late and catches up;
+drift never accumulates. The plant runs on its own identically paced loop.
+The wall clock decides *when* a scan runs, never *what time it believes it
+is* — every value that reaches the trace derives from scan counts and the
+scan period.
 
-Within a scan, the harness releases scan executors **sequentially in `plc_ids`
-order** (send clock *i*, await done *i*, then *i+1*). This mirrors Python's
-single-threaded asyncio wakeup, makes FB-path comm delivery same-scan
-producer-before-consumer, and yields trace-append order = `plc_ids` order — the
-property the golden byte-match depends on.
+There is no scan barrier and no shared scan index. Record interleaving and
+message-arrival scans are genuinely nondeterministic run to run; what the
+host guarantees instead is **verdict determinism with quantified headroom**
+— the same certified verdicts on every run, gated by ten consecutive passes
+in `tests/test_host_satisfies_expectations.py`, with the headroom of each
+assertion form against interleaving skew measured in #14 (`CAUSES` is
+timing-free by construction; the placeholder 500ms budgets hold with ~490ms
+and 1.7× to spare).
 
 ## Asio coupling
 
@@ -82,19 +117,20 @@ vocabulary through `include/relay_host/async.hpp` — `Executor`, `Channel<T>`,
 `Task`; no other header includes asio directly. Everything runs on one
 `asio::io_context` with `run()` called from exactly one thread —
 single-threaded cooperative scheduling, matching Python's asyncio. PLC scan
-loops are spawned with `asio::experimental::use_promise` because it initiates
-eagerly (`use_awaitable` initiation is lazy and would deadlock the capacity-1
-clock handshake); the promises are awaited for join at shutdown. Host scan
-bodies remain exception-free and record failures as `ScanError` in the trace
-entry, surfaced at the scan boundary.
+loops and the plant loop are spawned with
+`asio::experimental::use_promise` (eager initiation); the promises are
+awaited for join at shutdown. Host scan bodies remain exception-free and
+record failures as `ScanError` in the trace entry, surfaced at the scan
+boundary. A socket round-trip inside a plant call suspends on `co_await` —
+there is no blocking call on the scan thread.
 
 ## Interim assumption register
 
 Per the project's standing rule on interim steps: every scaffold in `host/` is
 registered here and guarded. New scaffolds add rows; they do not get to be
-undocumented.
+undocumented. Both original rows were lifted by #14:
 
-| # | Assumption | Why it is here | What breaks when lifted | Guard | Lifted by |
-|---|-----------|----------------|------------------------|-------|-----------|
-| 1 | **All PLCs share a harness-driven scan barrier**, so every PLC occupies the same scan index at every tick | Faithful port of `relay/runtime/harness.py`; makes the C++ trace deterministic and the oracle handoff cheap. Real controllers do not rendezvous. | **Per-scan trace record interleaving**, and with it the byte-match against `tests/golden/conveyor_trace.jsonl`. **Not `PRECEDES`** — that assertion resolves both signals off a single plc_b record and is barrier-independent. | `host/tests/test_host_harness.cpp::test_scan_synchrony_assumption_holds` asserts the shared-scan-index property directly and by name; `test_trace_record_order_is_plc_ids_order` pins the observable consequence. | #14. Budgeted `PRECEDES` (#6) has landed and #12 (`CAUSES`) is the surviving cross-PLC contract. |
-| 2 | **`pluggable_subsystems` deferred for `plant_adapter`** | One plant implementation; a registry with one entry and no selector field is ceremony, not compliance. (`comm_strategy` **does** comply: registry keyed by the `Comm.strategy` spec field.) | Nothing today. Framework code must not branch on plant name in the interim. | Code review; this row. | The second plant implementation (#14). |
+| # | Assumption | Lifted by | How |
+|---|-----------|-----------|-----|
+| 1 | **All PLCs share a harness-driven scan barrier** | #14 | Free-running per-PLC pacing and clock production. The named guard tests were retired deliberately (see #14); `test_plcs_reach_different_ticks` now pins the inverse — it fails if a barrier is reintroduced. |
+| 2 | **`pluggable_subsystems` deferred for `plant_adapter`** | #14 | Plant registry keyed by `Plant.type` plus per-strategy config parsing (`LocalStubPlant` owns the conveyor fields, `RemoteSocketPlant` owns `endpoint`); the loader no longer knows any plant's config shape. |

@@ -13,7 +13,7 @@
 #include "relay_host/clock.hpp"
 #include "relay_host/comm_bus.hpp"
 #include "relay_host/comm_strategy.hpp"
-#include "relay_host/plant_adapter.hpp"
+#include "relay_host/plant_registry.hpp"
 #include "relay_host/scan_executor.hpp"
 #include "relay_host/spec_loader.hpp"
 #include "relay_host/st_validator.hpp"
@@ -23,17 +23,6 @@ namespace relay_host {
 
 struct InitError {
     std::string message;
-};
-
-enum class RunErrorKind {
-    ScanFailed,
-    PlcExited,
-};
-
-struct RunError {
-    RunErrorKind kind;
-    std::uint32_t plc_index;
-    std::optional<ScanError> scan_error;
 };
 
 class HostHarness {
@@ -66,25 +55,23 @@ class HostHarness {
  private:
     HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
                 std::vector<ValidatedSt> blocks, CommStrategy strategy,
-                LocalStubPlant plant, std::size_t trace_capacity, Executor ex);
+                PlantVariant plant, std::size_t trace_capacity, Executor ex);
+
+    [[nodiscard]] Task run_plant_loop();
 
     ResolvedTaskSpec spec_;
     Config cfg_;
     SignalTable table_;
     std::vector<ValidatedSt> blocks_;
     CommStrategy strategy_;
-    LocalStubPlant plant_;
+    PlantVariant plant_;
     CommBus bus_;
     TraceRing trace_;
     std::vector<PlcScanState> states_;
-    std::vector<std::unique_ptr<Channel<SimClock>>> clock_chans_;
-    Channel<ScanDone> done_chan_;
-    asio::steady_timer scan_timer_;
     std::vector<IOImage> latest_outputs_;
-    std::vector<IOImage> prior_outputs_;
     std::optional<PlantOutputs> prior_plant_out_;
-    std::vector<std::int64_t> harness_send_counts_;
-    SimClock clock_ = SimClock::zero();
+    std::vector<std::int64_t> plant_send_counts_;
+    RunState run_state_;
     std::optional<RunError> run_error_;
 };
 

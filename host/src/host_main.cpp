@@ -20,13 +20,14 @@ struct CliArgs {
     std::string out_path;
     std::optional<std::int64_t> max_scans;
     std::optional<double> scan_period_ms;
+    std::optional<std::string> plant_endpoint;
     std::size_t trace_capacity = 100000;
 };
 
 constexpr std::string_view kUsage =
     "usage: relay_host_main --spec <resolved_spec.json> --st-blocks <st_blocks.json> "
     "--out <trace.jsonl> [--max-scans <n>] [--scan-period-ms <x>] "
-    "[--trace-capacity <n>]\n";
+    "[--trace-capacity <n>] [--plant-endpoint <host:port>]\n";
 
 std::optional<CliArgs> parse_args(int argc, char** argv) {
     CliArgs args;
@@ -61,6 +62,8 @@ std::optional<CliArgs> parse_args(int argc, char** argv) {
                 return std::nullopt;
             }
             args.scan_period_ms = parsed;
+        } else if (flag == "--plant-endpoint") {
+            args.plant_endpoint = std::string(value);
         } else if (flag == "--trace-capacity") {
             std::size_t parsed = 0;
             if (std::from_chars(value.data(), value.data() + value.size(), parsed).ec !=
@@ -100,6 +103,10 @@ int main(int argc, char** argv) {
         std::cerr << "host_main: " << st_blocks.error().message << "\n";
         return 1;
     }
+    if (args->plant_endpoint.has_value()) {
+        spec->plant.type = "remote_socket";
+        spec->plant.config = nlohmann::json{{"endpoint", *args->plant_endpoint}};
+    }
 
     const relay_host::HostHarness::Config cfg{
         args->scan_period_ms.value_or(spec->scan_period_ms),
@@ -115,7 +122,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    asio::co_spawn(io, (*harness)->run(), asio::detached);
+    asio::co_spawn(io, (*harness)->run(),
+                   [&io](std::exception_ptr) { io.stop(); });
     io.run();
 
     std::ofstream out(args->out_path);
@@ -137,12 +145,13 @@ int main(int argc, char** argv) {
     }
 
     if (const auto& error = (*harness)->run_error(); error.has_value()) {
-        std::cerr << "host_main: run halted on plc index " << error->plc_index << ": ";
-        if (error->scan_error.has_value()) {
-            std::cerr << relay_host::describe(*error->scan_error,
-                                              (*harness)->signal_table());
+        if (error->kind == relay_host::RunErrorKind::PlantFailed) {
+            std::cerr << "host_main: run halted: " << error->message;
         } else {
-            std::cerr << "PLC coroutine exited before the harness loop completed";
+            std::cerr << "host_main: run halted on plc index " << error->plc_index
+                      << ": "
+                      << relay_host::describe(*error->scan_error,
+                                              (*harness)->signal_table());
         }
         std::cerr << "; partial trace written to '" << args->out_path << "'\n";
         return 1;

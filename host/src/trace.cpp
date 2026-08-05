@@ -247,7 +247,20 @@ const ScanTraceEntry& TraceRing::at(std::size_t index) const noexcept {
 std::expected<void, DumpError> TraceRing::dump_to_jsonl(
     std::ostream& stream, const SignalTable& table,
     std::span<const std::string> plc_ids) const {
-    for (std::size_t index = 0; index < size(); ++index) {
+    std::vector<std::size_t> order(size());
+    for (std::size_t index = 0; index < order.size(); ++index) {
+        order[index] = index;
+    }
+    std::stable_sort(order.begin(), order.end(),
+                     [this](std::size_t lhs, std::size_t rhs) {
+                         const ScanTraceEntry& a = at(lhs);
+                         const ScanTraceEntry& b = at(rhs);
+                         if (a.clock.tick != b.clock.tick) {
+                             return a.clock.tick < b.clock.tick;
+                         }
+                         return a.plc_index < b.plc_index;
+                     });
+    for (const std::size_t index : order) {
         const ScanTraceEntry& entry = at(index);
         if (!std::isfinite(entry.clock.elapsed_ms)) {
             return std::unexpected(DumpError{

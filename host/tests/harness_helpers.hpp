@@ -34,7 +34,9 @@ inline ResolvedTaskSpec conveyor_spec() {
     spec.comm.strategy = "tag";
     spec.comm.tags = {ResolvedTag{"handoff_signal", "plc_a", {"plc_b"}}};
     spec.plant.type = "conveyor";
-    spec.plant.config = ResolvedPlantConfig{0.5, 0.1, 50.0};
+    spec.plant.config = nlohmann::json{{"belt_speed_m_per_s", 0.5},
+                                       {"sensor_trigger_threshold_m", 0.1},
+                                       {"actuator_latency_ms", 50.0}};
     spec.plant.routes = {
         ResolvedRoute{"sensor_a_exit_triggered", "plc_a", "sensor_a_exit", "edge"},
         ResolvedRoute{"part_at_b", "plc_b", "part_at_b", "level"},
@@ -58,7 +60,9 @@ inline ResolvedTaskSpec minimal_two_plc_spec() {
     spec.max_scans = 20;
     spec.comm.strategy = "tag";
     spec.plant.type = "conveyor";
-    spec.plant.config = ResolvedPlantConfig{0.5, 0.1, 50.0};
+    spec.plant.config = nlohmann::json{{"belt_speed_m_per_s", 0.5},
+                                       {"sensor_trigger_threshold_m", 0.1},
+                                       {"actuator_latency_ms", 50.0}};
     return spec;
 }
 

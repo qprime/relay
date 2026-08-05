@@ -144,15 +144,7 @@ std::expected<ResolvedTaskSpec, LoadError> try_load(const std::filesystem::path&
     if (!plant.contains("config") || !plant["config"].is_object()) {
         return fail(path, "field 'plant.config' must be an object");
     }
-    const json& config = plant["config"];
-    auto belt_speed = require_number(config, "belt_speed_m_per_s", path);
-    if (!belt_speed) return std::unexpected(belt_speed.error());
-    auto threshold = require_number(config, "sensor_trigger_threshold_m", path);
-    if (!threshold) return std::unexpected(threshold.error());
-    auto latency = require_number(config, "actuator_latency_ms", path);
-    if (!latency) return std::unexpected(latency.error());
-    spec.plant.config =
-        ResolvedPlantConfig{*belt_speed, *threshold, *latency};
+    spec.plant.config = plant["config"];
 
     if (!plant.contains("routes") || !plant["routes"].is_array()) {
         return fail(path, "field 'plant.routes' must be an array");

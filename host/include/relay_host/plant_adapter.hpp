@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "relay_host/async.hpp"
 #include "relay_host/io_image.hpp"
 #include "relay_host/signal_table.hpp"
 #include "relay_host/spec_loader.hpp"
@@ -19,6 +20,9 @@ class ActuatorState {
  public:
     void set(std::string alias, Cell value);
     [[nodiscard]] std::optional<Cell> get(std::string_view alias) const noexcept;
+    [[nodiscard]] std::span<const std::pair<std::string, Cell>> entries() const noexcept {
+        return values_;
+    }
 
  private:
     std::vector<std::pair<std::string, Cell>> values_;
@@ -43,11 +47,16 @@ template <typename T>
 concept PlantModel = requires(T plant, double dt_ms, const ActuatorState& actuators,
                               std::span<const IOImage> latest_outputs,
                               PlantOutputs outputs, std::optional<PlantOutputs> prior) {
-    { plant.read_actuators(latest_outputs) } -> std::same_as<ActuatorState>;
-    { plant.step(dt_ms, actuators) } -> std::same_as<PlantOutputs>;
+    {
+        plant.read_actuators(latest_outputs)
+    } -> std::same_as<asio::awaitable<std::expected<ActuatorState, PlantError>>>;
+    {
+        plant.step(dt_ms, actuators)
+    } -> std::same_as<asio::awaitable<std::expected<PlantOutputs, PlantError>>>;
     {
         plant.route_to_plcs(outputs, prior)
-    } -> std::same_as<std::span<const RoutedPlantSignal>>;
+    } -> std::same_as<
+        asio::awaitable<std::expected<std::vector<RoutedPlantSignal>, PlantError>>>;
 };
 
 class LocalStubPlant {
@@ -56,14 +65,12 @@ class LocalStubPlant {
         const ResolvedPlant& plant, std::span<const std::string> plc_ids,
         const SignalTable& table);
 
-    [[nodiscard]] ActuatorState read_actuators(
-        std::span<const IOImage> latest_outputs) const;
-    [[nodiscard]] PlantOutputs step(double dt_ms, const ActuatorState& actuator_state);
-    // Returns a view into an internal buffer sized at construction to hold one
-    // signal per declared route, so routing can never truncate. The view is
-    // valid until the next route_to_plcs() call; single-threaded by contract.
-    [[nodiscard]] std::span<const RoutedPlantSignal> route_to_plcs(
-        PlantOutputs current, std::optional<PlantOutputs> prior);
+    [[nodiscard]] asio::awaitable<std::expected<ActuatorState, PlantError>>
+    read_actuators(std::span<const IOImage> latest_outputs) const;
+    [[nodiscard]] asio::awaitable<std::expected<PlantOutputs, PlantError>> step(
+        double dt_ms, const ActuatorState& actuator_state);
+    [[nodiscard]] asio::awaitable<std::expected<std::vector<RoutedPlantSignal>, PlantError>>
+    route_to_plcs(PlantOutputs current, std::optional<PlantOutputs> prior);
 
  private:
     enum class Sensor {
@@ -90,10 +97,15 @@ class LocalStubPlant {
         std::string alias;
     };
 
-    ResolvedPlantConfig config_;
+    struct Config {
+        double belt_speed_m_per_s;
+        double sensor_trigger_threshold_m;
+        double actuator_latency_ms;
+    };
+
+    Config config_;
     std::vector<Route> routes_;
     std::vector<Actuator> actuators_;
-    std::vector<RoutedPlantSignal> scratch_;
 
     double part_position_m_ = 0.0;
     bool part_on_belt_a_ = true;

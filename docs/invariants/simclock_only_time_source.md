@@ -1,6 +1,6 @@
 # Invariant: SimClock is the only time source for execution-path code
 
-**Status:** Active | **As-Of:** 2026-04-21 | **Scope:** `relay/runtime/`, `relay/plant/`, `relay/st/`, comm strategies
+**Status:** Active | **As-Of:** 2026-08-04 | **Scope:** `relay/runtime/`, `relay/plant/`, `relay/st/`, comm strategies, `host/`
 
 ## Statement
 
@@ -11,16 +11,36 @@ harness passes in. No execution-path module may import `time`, `datetime`,
 `asyncio.sleep` (for delay), `loop.time()`, `perf_counter`, `monotonic`, or
 any other source of wall-clock or monotonic time.
 
-The harness itself drives `SimClock` advancement. The execution path consumes
-clock values; it does not produce them.
+In the lockstep simulator, the harness itself drives `SimClock` advancement:
+the execution path consumes clock values and does not produce them. In the
+free-running deployment host (`host/`, #14), each PLC scan loop produces its
+own `SimClock` — and the production rule is part of this invariant: a per-PLC
+clock may derive **only** from that PLC's own scan period and scan count
+(`tick` increments by one per scan, `elapsed_ms` accumulates by the scan
+period). It may never derive from wall clock, a plant response, a message
+timestamp, or another PLC's clock. The wall clock paces *when* a scan runs;
+it never decides *what time the scan believes it is*. ST execution is
+unchanged either way: `dt_ms` remains the only time input to evaluation.
 
 ## Why
 
 Determinism and replayability are the simulator's contract with verification.
-The same task spec, the same generated ST, the same plant config must produce
-the same trace — bit-identical, scan-by-scan — on any machine, any run. That
-is what makes assertions stable and what makes a failing trace something a
-human or classifier can actually debug instead of chasing flake.
+For the Python simulator — the oracle — the same task spec, the same
+generated ST, the same plant config must produce the same trace —
+bit-identical, scan-by-scan — on any machine, any run. That is what makes
+assertions stable and what makes a failing trace something a human or
+classifier can actually debug instead of chasing flake.
+
+The free-running host deliberately trades bit-identical traces away: with no
+scan barrier, record interleaving and message-arrival scans are genuinely
+nondeterministic. What replaces bit-identity there is **verdict determinism
+with quantified headroom**: every certified assertion must produce the same
+verdict on every run (the #14 gate is ten consecutive runs), and the skew the
+host can introduce is measured against each assertion form's tolerance —
+`CAUSES` is timing-free, `PRECEDES`/`EVENTUALLY` hold with hundreds of
+milliseconds of measured headroom against placeholder 500ms budgets. Because
+per-PLC clocks still derive from the scan period rather than wall clock, the
+*values* in a trace stay deterministic; only their interleaving does not.
 
 Any wall-clock read in the execution path silently breaks this. Two runs on
 the same machine can differ if one happens to schedule across a context
