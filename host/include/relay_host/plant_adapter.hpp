@@ -42,12 +42,11 @@ struct PlantError {
 template <typename T>
 concept PlantModel = requires(T plant, double dt_ms, const ActuatorState& actuators,
                               std::span<const IOImage> latest_outputs,
-                              PlantOutputs outputs, std::optional<PlantOutputs> prior,
-                              std::span<RoutedPlantSignal> scratch) {
+                              PlantOutputs outputs, std::optional<PlantOutputs> prior) {
     { plant.read_actuators(latest_outputs) } -> std::same_as<ActuatorState>;
     { plant.step(dt_ms, actuators) } -> std::same_as<PlantOutputs>;
     {
-        plant.route_to_plcs(outputs, prior, scratch)
+        plant.route_to_plcs(outputs, prior)
     } -> std::same_as<std::span<const RoutedPlantSignal>>;
 };
 
@@ -60,11 +59,11 @@ class LocalStubPlant {
     [[nodiscard]] ActuatorState read_actuators(
         std::span<const IOImage> latest_outputs) const;
     [[nodiscard]] PlantOutputs step(double dt_ms, const ActuatorState& actuator_state);
+    // Returns a view into an internal buffer sized at construction to hold one
+    // signal per declared route, so routing can never truncate. The view is
+    // valid until the next route_to_plcs() call; single-threaded by contract.
     [[nodiscard]] std::span<const RoutedPlantSignal> route_to_plcs(
-        PlantOutputs current, std::optional<PlantOutputs> prior,
-        std::span<RoutedPlantSignal> scratch) const;
-
-    [[nodiscard]] std::size_t max_routed_per_step() const noexcept;
+        PlantOutputs current, std::optional<PlantOutputs> prior);
 
  private:
     enum class Sensor {
@@ -94,6 +93,7 @@ class LocalStubPlant {
     ResolvedPlantConfig config_;
     std::vector<Route> routes_;
     std::vector<Actuator> actuators_;
+    std::vector<RoutedPlantSignal> scratch_;
 
     double part_position_m_ = 0.0;
     bool part_on_belt_a_ = true;

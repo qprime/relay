@@ -78,6 +78,7 @@ std::expected<LocalStubPlant, PlantError> LocalStubPlant::try_create(
         }
         stub.actuators_.push_back(Actuator{*from_plc, actuator.key, actuator.as});
     }
+    stub.scratch_.resize(stub.routes_.size());
     return stub;
 }
 
@@ -139,8 +140,7 @@ PlantOutputs LocalStubPlant::step(double dt_ms, const ActuatorState& actuator_st
 }
 
 std::span<const RoutedPlantSignal> LocalStubPlant::route_to_plcs(
-    PlantOutputs current, std::optional<PlantOutputs> prior,
-    std::span<RoutedPlantSignal> scratch) const {
+    PlantOutputs current, std::optional<PlantOutputs> prior) {
     std::size_t count = 0;
     for (const Route& route : routes_) {
         bool current_value = false;
@@ -160,17 +160,13 @@ std::span<const RoutedPlantSignal> LocalStubPlant::route_to_plcs(
         const bool emit = route.trigger == TriggerKind::Level
                               ? current_value
                               : current_value && !prior_value;
-        if (emit && count < scratch.size()) {
-            scratch[count] = RoutedPlantSignal{route.to_plc_index, route.signal_id,
-                                               Cell{current_value}};
+        if (emit) {
+            scratch_[count] = RoutedPlantSignal{route.to_plc_index, route.signal_id,
+                                                Cell{current_value}};
             ++count;
         }
     }
-    return scratch.subspan(0, count);
-}
-
-std::size_t LocalStubPlant::max_routed_per_step() const noexcept {
-    return routes_.size();
+    return std::span<const RoutedPlantSignal>(scratch_.data(), count);
 }
 
 }  // namespace relay_host

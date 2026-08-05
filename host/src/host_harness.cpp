@@ -110,11 +110,6 @@ HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
         latest_outputs_.push_back(IOImage::empty());
         prior_outputs_.push_back(IOImage::empty());
     }
-    const std::size_t strategy_max = std::visit(
-        [](const auto& strategy) { return strategy.max_routed_per_producer(); },
-        strategy_);
-    strategy_scratch_.resize(std::max<std::size_t>(strategy_max, 1));
-    plant_scratch_.resize(std::max<std::size_t>(plant_.max_routed_per_step(), 1));
 }
 
 hce::co<void> HostHarness::run() {
@@ -137,7 +132,7 @@ hce::co<void> HostHarness::run() {
         const ActuatorState actuator_state = plant_.read_actuators(latest_outputs_);
         const PlantOutputs plant_out = plant_.step(cfg_.scan_period_ms, actuator_state);
         for (const RoutedPlantSignal& routed :
-             plant_.route_to_plcs(plant_out, prior_plant_out_, plant_scratch_)) {
+             plant_.route_to_plcs(plant_out, prior_plant_out_)) {
             co_await bus_.send(routed.to_plc_index,
                                Message{routed.signal_id, routed.value});
         }
@@ -170,10 +165,9 @@ hce::co<void> HostHarness::run() {
 
         for (std::uint32_t index = 0; index < plc_count; ++index) {
             const std::span<const Routed> routed = std::visit(
-                [&](const auto& strategy) {
+                [&](auto& strategy) {
                     return strategy.route(index, latest_outputs_[index],
-                                          prior_outputs_[index],
-                                          std::span<Routed>(strategy_scratch_));
+                                          prior_outputs_[index]);
                 },
                 strategy_);
             for (const Routed& message : routed) {

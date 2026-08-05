@@ -5,6 +5,7 @@
 #include <hce.hpp>
 
 #include "relay_host/comm_bus.hpp"
+#include "relay_host/host_harness.hpp"
 
 namespace relay_host {
 namespace {
@@ -35,7 +36,7 @@ hce::co<void> drain_into(CommBus* bus, std::uint32_t plc_index) {
 }
 
 void drain(CommBus& bus, std::uint32_t plc_index) {
-    auto joined = hce::schedule(drain_into(&bus, plc_index));
+    join_scheduled(hce::schedule(drain_into(&bus, plc_index)));
 }
 
 void send(CommBus& bus, std::uint32_t to_plc, Message msg) {

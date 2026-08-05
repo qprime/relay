@@ -93,6 +93,8 @@ class TagStrategy:
             prior = prior_outputs.get(tag_name)
             if current == prior:
                 continue
+            if current is None:
+                continue
             for consumer in consumers:
                 emitted.append((consumer, tag_name, current))
         return emitted

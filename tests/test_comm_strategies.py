@@ -95,6 +95,15 @@ class TestTagStrategy:
         emitted = strat.route("plc_a", outputs, prior)
         assert sorted(emitted) == [("plc_b", "x", True), ("plc_c", "x", True)]
 
+    def test_present_to_absent_emits_nothing(self):
+        block = {
+            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]
+        }
+        strat = TagStrategy(block)
+        prior = IOImage(values={"x": True})
+        emitted = strat.route("plc_a", IOImage.empty(), prior)
+        assert emitted == []
+
     def test_first_scan_treats_prior_as_empty(self):
         block = {
             "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]

@@ -116,21 +116,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    {
-        auto joined = hce::schedule((*harness)->run());
-    }
-
-    if (const auto& error = (*harness)->run_error(); error.has_value()) {
-        std::cerr << "host_main: run halted on plc index " << error->plc_index << ": ";
-        if (error->scan_error.has_value()) {
-            std::cerr << relay_host::describe(*error->scan_error,
-                                              (*harness)->signal_table());
-        } else {
-            std::cerr << "PLC coroutine exited before the harness loop completed";
-        }
-        std::cerr << "\n";
-        return 1;
-    }
+    relay_host::join_scheduled(hce::schedule((*harness)->run()));
 
     std::ofstream out(args->out_path);
     if (!out) {
@@ -148,6 +134,18 @@ int main(int argc, char** argv) {
         std::cerr << "host_main: warning: trace ring dropped "
                   << (*harness)->trace().dropped()
                   << " oldest entries; rerun with a larger --trace-capacity\n";
+    }
+
+    if (const auto& error = (*harness)->run_error(); error.has_value()) {
+        std::cerr << "host_main: run halted on plc index " << error->plc_index << ": ";
+        if (error->scan_error.has_value()) {
+            std::cerr << relay_host::describe(*error->scan_error,
+                                              (*harness)->signal_table());
+        } else {
+            std::cerr << "PLC coroutine exited before the harness loop completed";
+        }
+        std::cerr << "; partial trace written to '" << args->out_path << "'\n";
+        return 1;
     }
     return 0;
 }

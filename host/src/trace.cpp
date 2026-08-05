@@ -102,7 +102,7 @@ std::string describe(const ScanError& error, const SignalTable& table) {
                    " outgoing messages; overflow at signal '" + signal + "'";
         case ScanErrorKind::SignalLookupMiss:
             return "assigned variable has no signal table entry; population rule missed "
-                   "slot for signal id " +
+                   "local slot index " +
                    std::to_string(error.signal_id);
         case ScanErrorKind::EvalDivisionByZero:
             return "ST evaluation divided by zero";

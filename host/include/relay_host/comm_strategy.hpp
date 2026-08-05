@@ -29,12 +29,12 @@ class TagStrategy {
         const ResolvedComm& comm, const SignalTable& table,
         std::span<const std::string> plc_ids);
 
+    // Returns a view into an internal buffer sized at construction to hold
+    // every declared (tag, consumer) pair, so routing can never truncate.
+    // The view is valid until the next route() call; single-threaded by contract.
     [[nodiscard]] std::span<const Routed> route(std::uint32_t producer_index,
                                                 const IOImage& outputs,
-                                                const IOImage& prior_outputs,
-                                                std::span<Routed> scratch) const noexcept;
-
-    [[nodiscard]] std::size_t max_routed_per_producer() const noexcept;
+                                                const IOImage& prior_outputs) noexcept;
 
  private:
     struct Tag {
@@ -45,6 +45,7 @@ class TagStrategy {
     };
 
     std::vector<Tag> tags_;
+    std::vector<Routed> scratch_;
 };
 
 using CommStrategy = std::variant<TagStrategy>;

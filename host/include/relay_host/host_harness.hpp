@@ -26,6 +26,11 @@ struct InitError {
     std::string message;
 };
 
+// Blocks the calling non-coroutine thread until the scheduled coroutine
+// completes: an hce::awt joins in its destructor, which runs when the
+// by-value parameter goes out of scope here.
+inline void join_scheduled(hce::awt<void>) {}
+
 enum class RunErrorKind {
     ScanFailed,
     PlcExited,
@@ -81,8 +86,6 @@ class HostHarness {
     hce::chan<ScanDone> done_chan_;
     std::vector<IOImage> latest_outputs_;
     std::vector<IOImage> prior_outputs_;
-    std::vector<Routed> strategy_scratch_;
-    std::vector<RoutedPlantSignal> plant_scratch_;
     std::optional<PlantOutputs> prior_plant_out_;
     SimClock clock_ = SimClock::zero();
     std::optional<RunError> run_error_;

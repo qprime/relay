@@ -71,9 +71,7 @@ inline std::unique_ptr<HostHarness> run_harness(
         throw std::runtime_error("harness_helpers: try_create failed: " +
                                  harness.error().message);
     }
-    {
-        auto joined = hce::schedule((*harness)->run());
-    }
+    join_scheduled(hce::schedule((*harness)->run()));
     return std::move(*harness);
 }
 

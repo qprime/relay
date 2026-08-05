@@ -59,13 +59,17 @@ std::expected<TagStrategy, StrategyError> TagStrategy::try_create(
         }
         strategy.tags_.push_back(std::move(resolved));
     }
+    std::size_t max_routed = 0;
+    for (const Tag& tag : strategy.tags_) {
+        max_routed += tag.consumer_indices.size();
+    }
+    strategy.scratch_.resize(max_routed);
     return strategy;
 }
 
 std::span<const Routed> TagStrategy::route(std::uint32_t producer_index,
                                            const IOImage& outputs,
-                                           const IOImage& prior_outputs,
-                                           std::span<Routed> scratch) const noexcept {
+                                           const IOImage& prior_outputs) noexcept {
     std::size_t count = 0;
     for (const Tag& tag : tags_) {
         if (tag.producer_index != producer_index) {
@@ -76,23 +80,15 @@ std::span<const Routed> TagStrategy::route(std::uint32_t producer_index,
         if (optional_cells_equal(current, prior)) {
             continue;
         }
+        if (!current.has_value()) {
+            continue;
+        }
         for (const std::uint32_t consumer : tag.consumer_indices) {
-            if (count < scratch.size()) {
-                scratch[count] = Routed{consumer, tag.signal_id,
-                                        current.value_or(Cell{false})};
-                ++count;
-            }
+            scratch_[count] = Routed{consumer, tag.signal_id, *current};
+            ++count;
         }
     }
-    return scratch.subspan(0, count);
-}
-
-std::size_t TagStrategy::max_routed_per_producer() const noexcept {
-    std::size_t total = 0;
-    for (const Tag& tag : tags_) {
-        total += tag.consumer_indices.size();
-    }
-    return total;
+    return std::span<const Routed>(scratch_.data(), count);
 }
 
 std::expected<CommStrategy, StrategyError> build_comm_strategy(
