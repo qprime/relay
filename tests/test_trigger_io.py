@@ -188,6 +188,19 @@ class TestTriggerIOGuard:
             _dump_to_text({"plc_a": [_trigger(mode="toggled")]})
         assert "mode" in str(exc.value)
 
+    def test_unknown_target_kind_raises_at_dump(self):
+        """behavior.py:117 tests == "output", so any other string takes the tag
+        branch: an unguarded 'banana' compiles exactly as 'tag' would."""
+        with pytest.raises(TypeError) as exc:
+            _dump_to_text({"plc_a": [_trigger(target_kind="banana")]})
+        assert "target_kind" in str(exc.value)
+
+    def test_non_str_plc_id_raises_at_dump(self):
+        """plc_id is the grouping key; None would load back as a dict key."""
+        with pytest.raises(TypeError) as exc:
+            _dump_to_text({None: [_trigger()]})
+        assert "plc_id" in str(exc.value)
+
     def test_non_int_duration_ms_raises_at_dump_on_pulse(self):
         """'30ms' serializes as a JSON string and compiles to PT := T#30msms."""
         with pytest.raises(TypeError) as exc:
@@ -221,6 +234,57 @@ class TestTriggerIOGuard:
         with pytest.raises(TypeError) as exc:
             _dump_to_text({"plc_a": triggers})
         assert "id" in str(exc.value)
+
+
+class TestTriggerIOLoadGuard:
+    """The dump guard alone leaves the boundary open on one side: a hand-edited
+    triggers.jsonl is the module's stated use case, and every value below used
+    to load into IR that compiles to malformed ST."""
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("mode", "toggled"),
+            ("edge", "sideways"),
+            ("target_kind", "banana"),
+            ("id", 42),
+            ("signal", None),
+            ("target", None),
+            ("plc_id", None),
+            ("debounce_ms", True),
+            ("debounce_ms", "30"),
+            ("debounce_ms", 30.7),
+            ("duration_ms", 30),
+        ],
+    )
+    def test_bad_field_value_rejected_at_load(self, field, value):
+        text = json.dumps({**_MINIMAL_LINE, field: value})
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(text + "\n")
+        assert field in str(exc.value)
+        assert "line 1" in str(exc.value)
+
+    def test_pulse_without_duration_rejected_at_load(self):
+        text = json.dumps({**_MINIMAL_LINE, "mode": "pulse", "duration_ms": None})
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(text + "\n")
+        assert "duration_ms" in str(exc.value)
+
+    def test_toggled_mode_no_longer_compiles_to_malformed_st(self):
+        """The load-side twin of the duration_ms rule: mode 'toggled' fell
+        through behavior.py:100's else into the pulse branch, emitting
+        PT := T#Nonems from a line that loaded without complaint."""
+        text = json.dumps({**_MINIMAL_LINE, "mode": "toggled"})
+        with pytest.raises(ValueError):
+            _load_from_text(text + "\n")
+
+    def test_int_valued_fields_are_not_coerced_on_load(self):
+        loaded = _load_from_text(
+            json.dumps({**_MINIMAL_LINE, "debounce_ms": 30}) + "\n"
+        )
+        restored = loaded["plc_a"][0].when.debounce_ms
+        assert restored == 30
+        assert isinstance(restored, int) and not isinstance(restored, bool)
 
 
 class TestTriggerIOErrors:

@@ -5,6 +5,9 @@ from typing import Any, TextIO
 from relay.generator.behavior import EDGES, MODES, Trigger, TriggerEmit, TriggerWhen
 
 
+TARGET_KINDS = ("tag", "output")
+
+
 def _check_str(value: Any, field: str, trigger_id: Any) -> Any:
     if not isinstance(value, str):
         raise TypeError(
@@ -34,6 +37,11 @@ def _check_trigger(trigger: Trigger) -> Trigger:
             f"trigger {tid!r} field 'when.edge' is {trigger.when.edge!r}; "
             f"expected one of {list(EDGES)}"
         )
+    if trigger.emit.target_kind not in TARGET_KINDS:
+        raise TypeError(
+            f"trigger {tid!r} field 'emit.target_kind' is "
+            f"{trigger.emit.target_kind!r}; expected one of {list(TARGET_KINDS)}"
+        )
     if trigger.emit.mode not in MODES:
         raise TypeError(
             f"trigger {tid!r} field 'emit.mode' is {trigger.emit.mode!r}; "
@@ -52,6 +60,7 @@ def _check_trigger(trigger: Trigger) -> Trigger:
 
 def trigger_to_dict(plc_id: str, trigger: Trigger) -> dict[str, Any]:
     _check_trigger(trigger)
+    _check_str(plc_id, "plc_id", trigger.id)
     return {
         "plc_id": plc_id,
         "id": trigger.id,
@@ -66,21 +75,24 @@ def trigger_to_dict(plc_id: str, trigger: Trigger) -> dict[str, Any]:
 
 
 def trigger_from_dict(data: dict[str, Any]) -> tuple[str, Trigger]:
-    duration = data["duration_ms"]
-    return data["plc_id"], Trigger(
+    trigger = Trigger(
         id=data["id"],
         when=TriggerWhen(
             signal=data["signal"],
             edge=data["edge"],
-            debounce_ms=int(data["debounce_ms"]),
+            debounce_ms=data["debounce_ms"],
         ),
         emit=TriggerEmit(
             target=data["target"],
             target_kind=data["target_kind"],
             mode=data["mode"],
-            duration_ms=None if duration is None else int(duration),
+            duration_ms=data["duration_ms"],
         ),
     )
+    _check_trigger(trigger)
+    plc_id = data["plc_id"]
+    _check_str(plc_id, "plc_id", trigger.id)
+    return plc_id, trigger
 
 
 def dump_jsonl(triggers: dict[str, list[Trigger]], stream: TextIO) -> None:
