@@ -28,6 +28,7 @@ line-length = 100
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "host/build"]
 
 [dependency-groups]
 dev = [
