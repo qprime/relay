@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run pyright
+      - run: uv run pytest -q
+      - name: Expectations artifact is reproducible
+        run: |
+          uv run python -m tools.regenerate_expectations
+          git diff --exit-code specs/expectations/
