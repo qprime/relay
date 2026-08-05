@@ -337,6 +337,67 @@ class TestTraceIOTypes:
         assert "tag" in str(exc.value)
 
 
+class TestTraceIOLoadGuards:
+    """The dump-side guard the module already owns, applied to the side that
+    actually faces untrusted bytes: the C++ host writes traces the Python
+    verifier reads, so load is where a foreign writer's values arrive."""
+
+    @pytest.mark.parametrize("where", ["io_snapshot", "outputs"])
+    @pytest.mark.parametrize("value", ["true", None, [1], {"a": 1}])
+    def test_disallowed_signal_value_rejected_at_load(self, where, value):
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(
+                json.dumps({**_MINIMAL_RECORD, where: {"part_at_b": value}}) + "\n"
+            )
+        assert "part_at_b" in str(exc.value)
+        assert type(value).__name__ in str(exc.value)
+
+    @pytest.mark.parametrize("where", ["io_snapshot", "outputs"])
+    @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+    def test_non_finite_signal_value_rejected_at_load(self, where, literal):
+        fields = {k: v for k, v in _MINIMAL_RECORD.items() if k != where}
+        record = json.dumps(fields)[:-1]
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(f'{record}, "{where}": {{"level": {literal}}}}}\n')
+        assert "level" in str(exc.value)
+
+    @pytest.mark.parametrize("where", ["io_snapshot", "outputs"])
+    def test_non_object_signal_map_rejected_at_load(self, where):
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(json.dumps({**_MINIMAL_RECORD, where: [1, 2]}) + "\n")
+        assert where in str(exc.value)
+
+    @pytest.mark.parametrize("value", ["true", None, [1]])
+    def test_disallowed_delivered_value_rejected_at_load(self, value):
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(
+                json.dumps(
+                    {
+                        **_MINIMAL_RECORD,
+                        "recvs": {"tag": {"sender": "plc_a", "seq": 1, "value": value}},
+                    }
+                )
+                + "\n"
+            )
+        assert "tag" in str(exc.value)
+
+    def test_string_signal_value_does_not_reach_the_verifier(self):
+        """A str where the verifier expects bool is truthy for any non-empty
+        string, so 'false' would read as a satisfied signal."""
+        with pytest.raises(ValueError):
+            _load_from_text(
+                json.dumps({**_MINIMAL_RECORD, "io_snapshot": {"part_at_b": "false"}})
+                + "\n"
+            )
+
+    def test_guard_failure_names_the_file_line_number(self):
+        good = json.dumps(_MINIMAL_RECORD)
+        bad = json.dumps({**_MINIMAL_RECORD, "outputs": {"belt": "on"}})
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(f"{good}\n{good}\n{bad}\n{good}\n")
+        assert "line 3" in str(exc.value)
+
+
 class TestGoldenTrace:
     def test_conveyor_trace_matches_golden(self):
         _, trace = _conveyor_spec_and_trace()

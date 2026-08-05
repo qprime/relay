@@ -85,6 +85,7 @@ See [docs/invariants/](docs/invariants/) for project invariants. Check the index
 - **scan_phase_isolation:** Per-scan phase order is fixed; ST execution is pure
 - **simclock_only_time_source:** All time derives from injected SimClock or `dt_ms`
 - **pipeline_direction_imports:** Imports follow pipeline data flow; backward edges across stages are forbidden
+- **wire_format_serialization:** Dump and load guard the same fields with the same predicate; load-side guards are value-level, not typed reconstruction
 
 ## Don't
 
@@ -97,6 +98,7 @@ See [docs/invariants/](docs/invariants/) for project invariants. Check the index
 - Branch on a strategy or plant name in framework code — resolve through the registry
 - Hand-edit generated ST — fix the generator or the task spec, not the artifact
 - Add a backward-edge import across pipeline stages — extract a leaf module under `relay/strategies/` instead
+- Read a field on a load path that the matching dump path guards — a wire format's load side is the one facing untrusted bytes; coercion (`bool(...)`, `int(...)`) is not validation
 
 ## When Stuck
 

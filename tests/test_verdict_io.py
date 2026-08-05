@@ -136,6 +136,88 @@ class TestVerdictFormat:
         assert "observed_gap_ms" in str(exc.value)
 
 
+def _entry(**overrides) -> dict:
+    fields = {
+        "assertion": "EVENTUALLY(part_at_b, within: 500ms)",
+        "passed": True,
+        "reason": "signal 'part_at_b' true at 60.0ms",
+        "observed_gap_ms": None,
+    }
+    fields.update(overrides)
+    return fields
+
+
+def _load_entry(entry: dict):
+    return _load_from_text(json.dumps({"results": [entry], "passed": True}))
+
+
+class TestVerdictLoadGuards:
+    """Same predicate on both sides: a wire format exists to be read by
+    something that did not just write it, so the load path is the one facing
+    untrusted bytes."""
+
+    @pytest.mark.parametrize("value", [123, None, ["x"]])
+    def test_non_string_assertion_rejected_at_load(self, value):
+        with pytest.raises(ValueError) as exc:
+            _load_entry(_entry(assertion=value))
+        assert "assertion" in str(exc.value)
+
+    @pytest.mark.parametrize("value", [None, 7, {"a": 1}])
+    def test_non_string_reason_rejected_at_load(self, value):
+        with pytest.raises(ValueError) as exc:
+            _load_entry(_entry(reason=value))
+        assert "reason" in str(exc.value)
+
+    @pytest.mark.parametrize("value", ["yes", "false", [], 1, 0, None])
+    def test_non_bool_passed_is_rejected_not_coerced(self, value):
+        """bool(data['passed']) loads a corrupt verdict with an inverted
+        pass/fail rather than failing: 'false' becomes True, [] becomes
+        False. A wrong answer that looks right is worse than no answer."""
+        with pytest.raises(ValueError) as exc:
+            _load_entry(_entry(passed=value))
+        assert "passed" in str(exc.value)
+
+    @pytest.mark.parametrize("value", ["not-a-number", True, [1]])
+    def test_non_numeric_gap_rejected_at_load(self, value):
+        with pytest.raises(ValueError) as exc:
+            _load_entry(_entry(observed_gap_ms=value))
+        assert "observed_gap_ms" in str(exc.value)
+
+    @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+    def test_non_finite_gap_rejected_at_load(self, literal):
+        """Rejected as unrepresentable at dump; json.loads accepts these
+        literals, so the load side must reject them by the same predicate."""
+        fields = _entry()
+        del fields["observed_gap_ms"]
+        entry = json.dumps(fields)[:-1] + f', "observed_gap_ms": {literal}}}'
+        with pytest.raises(ValueError) as exc:
+            _load_from_text('{"passed": true, "results": [' + entry + "]}")
+        assert "observed_gap_ms" in str(exc.value)
+
+    def test_guard_failure_names_the_result_index(self):
+        text = json.dumps(
+            {"results": [_entry(), _entry(passed="yes")], "passed": True}
+        )
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(text)
+        assert "results[1]" in str(exc.value)
+
+    def test_valid_entry_still_loads(self):
+        loaded = _load_entry(_entry(passed=False, observed_gap_ms=-40.0))
+        assert loaded == [_entry(passed=False, observed_gap_ms=-40.0)]
+
+
+class TestVerdictDumpGuards:
+    @pytest.mark.parametrize(
+        "field,value",
+        [("assertion", 123), ("reason", None), ("passed", 1), ("passed", "yes")],
+    )
+    def test_bad_field_rejected_at_dump(self, field, value):
+        with pytest.raises(TypeError) as exc:
+            _dump_to_text([_result(**{field: value})])
+        assert field in str(exc.value)
+
+
 class TestVerdictLoadIsUntyped:
     def test_load_returns_plain_dicts(self):
         loaded = _round_trip(_conveyor_results())

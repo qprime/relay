@@ -11,7 +11,11 @@ from relay.trace import Receipt, ScanRecord, TraceLog
 ALLOWED_VALUE_TYPES = (bool, int, float)
 
 
-def _check_values(values: dict[str, Any], where: str) -> dict[str, Any]:
+def _check_values(values: Any, where: str) -> dict[str, Any]:
+    if not isinstance(values, dict):
+        raise TypeError(
+            f"{where} is a {type(values).__name__}, not an object of signal values"
+        )
     for key, value in values.items():
         if not isinstance(value, ALLOWED_VALUE_TYPES):
             raise TypeError(
@@ -58,15 +62,17 @@ def _receipt_from_dict(key: str, data: Any) -> Receipt:
             f"recvs entry {key!r} has sender of type {type(sender).__name__}; "
             "expected a plc_id string or null"
         )
-    return Receipt(sender=sender, seq=int(data["seq"]), value=data["value"])
+    value = data["value"]
+    _check_values({key: value}, "recvs")
+    return Receipt(sender=sender, seq=int(data["seq"]), value=value)
 
 
 def record_from_dict(data: dict[str, Any]) -> ScanRecord:
     return ScanRecord(
         plc_id=data["plc_id"],
         clock=SimClock(tick=int(data["tick"]), elapsed_ms=float(data["elapsed_ms"])),
-        io=IOImage(values=data["io_snapshot"]),
-        outputs=IOImage(values=data["outputs"]),
+        io=IOImage(values=_check_values(data["io_snapshot"], "io_snapshot")),
+        outputs=IOImage(values=_check_values(data["outputs"], "outputs")),
         sends={k: int(v) for k, v in data["sends"].items()},
         recvs={k: _receipt_from_dict(k, v) for k, v in data["recvs"].items()},
     )

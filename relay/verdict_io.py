@@ -4,7 +4,25 @@ import math
 from typing import Any, Iterable, TextIO
 
 
-def _check_gap(gap: Any, assertion: str) -> Any:
+def _check_str(value: Any, field: str, assertion: Any) -> Any:
+    if not isinstance(value, str):
+        raise TypeError(
+            f"assertion {assertion!r} field {field!r} has unserializable type "
+            f"{type(value).__name__}; expected str"
+        )
+    return value
+
+
+def _check_bool(value: Any, field: str, assertion: Any) -> Any:
+    if not isinstance(value, bool):
+        raise TypeError(
+            f"assertion {assertion!r} field {field!r} has unserializable type "
+            f"{type(value).__name__}; expected bool"
+        )
+    return value
+
+
+def _check_gap(gap: Any, assertion: Any) -> Any:
     if gap is None:
         return None
     if isinstance(gap, bool) or not isinstance(gap, (int, float)):
@@ -21,20 +39,22 @@ def _check_gap(gap: Any, assertion: str) -> Any:
 
 
 def verdict_to_dict(result) -> dict[str, Any]:
+    assertion = result.assertion
     return {
-        "assertion": result.assertion,
-        "passed": bool(result.passed),
-        "reason": result.reason,
-        "observed_gap_ms": _check_gap(result.observed_gap_ms, result.assertion),
+        "assertion": _check_str(assertion, "assertion", assertion),
+        "passed": _check_bool(result.passed, "passed", assertion),
+        "reason": _check_str(result.reason, "reason", assertion),
+        "observed_gap_ms": _check_gap(result.observed_gap_ms, assertion),
     }
 
 
 def verdict_from_dict(data: dict[str, Any]) -> dict[str, Any]:
+    assertion = data["assertion"]
     return {
-        "assertion": data["assertion"],
-        "passed": bool(data["passed"]),
-        "reason": data["reason"],
-        "observed_gap_ms": data["observed_gap_ms"],
+        "assertion": _check_str(assertion, "assertion", assertion),
+        "passed": _check_bool(data["passed"], "passed", assertion),
+        "reason": _check_str(data["reason"], "reason", assertion),
+        "observed_gap_ms": _check_gap(data["observed_gap_ms"], assertion),
     }
 
 
@@ -76,5 +96,9 @@ def load_json(stream: TextIO) -> list[dict[str, Any]]:
         except KeyError as exc:
             raise KeyError(
                 f"results[{index}] missing required key {exc.args[0]!r}"
+            ) from exc
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"results[{index}] has an unreadable field: {exc}"
             ) from exc
     return loaded
