@@ -60,6 +60,7 @@ def _spawn_plant_server() -> tuple[subprocess.Popen, int]:
         text=True,
         cwd=REPO_ROOT,
     )
+    assert server.stdout is not None
     ready = server.stdout.readline().split()
     assert ready and ready[0] == "READY", f"plant server not ready: {ready}"
     return server, int(ready[1])

@@ -14,7 +14,7 @@ from relay.strategies.plant import PlantProtocol, get_plant
 
 
 def _outputs_to_dict(outputs: Any) -> dict[str, Any]:
-    if dataclasses.is_dataclass(outputs):
+    if dataclasses.is_dataclass(outputs) and not isinstance(outputs, type):
         return dataclasses.asdict(outputs)
     return dict(vars(outputs))
 

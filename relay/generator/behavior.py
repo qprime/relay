@@ -130,12 +130,12 @@ def parse_triggers(behavior_entry: dict[str, Any]) -> list[Trigger]:
             Trigger(
                 id=raw.get("id"),
                 when=TriggerWhen(
-                    signal=when.get("signal"),
+                    signal=str(when.get("signal")),
                     edge=when.get("edge", "level"),
                     debounce_ms=int(when.get("debounce_ms", 0)),
                 ),
                 emit=TriggerEmit(
-                    target=emit.get(target_kind),
+                    target=str(emit.get(target_kind)),
                     target_kind=target_kind,
                     mode=emit.get("mode", "steady"),
                     duration_ms=emit.get("duration_ms"),

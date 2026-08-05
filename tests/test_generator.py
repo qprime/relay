@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import io as io_module
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -84,10 +85,12 @@ def _minimal_spec(**overrides) -> TaskSpec:
     return TaskSpec(raw=raw)
 
 
-def _spec_with_trigger(plc_id: str = "plc_a", **trigger_overrides) -> TaskSpec:
+def _spec_with_trigger(
+    overrides: dict[str, Any] | None = None, *, plc_id: str = "plc_a"
+) -> TaskSpec:
     spec = _minimal_spec()
     trigger = spec.raw["Behavior"][plc_id]["triggers"][0]
-    for path, value in trigger_overrides.items():
+    for path, value in (overrides or {}).items():
         cursor = trigger
         parts = path.split(".")
         for p in parts[:-1]:
@@ -176,31 +179,31 @@ class TestBehaviorSchema:
         assert any("duplicated within this PLC" in i for i in _issues_for(spec))
 
     def test_rejects_unknown_signal_in_when(self):
-        spec = _spec_with_trigger(**{"when.signal": "no_such_signal"})
+        spec = _spec_with_trigger({"when.signal": "no_such_signal"})
         assert any("does not resolve to a Plant route" in i for i in _issues_for(spec))
 
     def test_rejects_signal_routed_to_a_different_plc(self):
-        spec = _spec_with_trigger(**{"when.signal": "part_at_b"})
+        spec = _spec_with_trigger({"when.signal": "part_at_b"})
         assert any("does not resolve" in i for i in _issues_for(spec))
 
     def test_rejects_emit_tag_not_produced_by_this_plc(self):
-        spec = _spec_with_trigger("plc_b", **{"emit": {"tag": "t", "mode": "latched"}})
+        spec = _spec_with_trigger({"emit": {"tag": "t", "mode": "latched"}}, plc_id="plc_b")
         assert any("not a Comm tag produced by this PLC" in i for i in _issues_for(spec))
 
     def test_rejects_both_tag_and_output_in_emit(self):
-        spec = _spec_with_trigger(**{"emit.output": "belt_a"})
+        spec = _spec_with_trigger({"emit.output": "belt_a"})
         assert any("not both" in i for i in _issues_for(spec))
 
     def test_rejects_neither_tag_nor_output_in_emit(self):
-        spec = _spec_with_trigger(**{"emit": {"mode": "latched"}})
+        spec = _spec_with_trigger({"emit": {"mode": "latched"}})
         assert any("exactly one of 'tag' or 'output'" in i for i in _issues_for(spec))
 
     def test_rejects_emit_output_using_scratch_prefix(self):
-        spec = _spec_with_trigger(**{"emit": {"output": "_scratch_x", "mode": "latched"}})
+        spec = _spec_with_trigger({"emit": {"output": "_scratch_x", "mode": "latched"}})
         assert any("reserved prefix" in i for i in _issues_for(spec))
 
     def test_rejects_emit_output_using_send_prefix(self):
-        spec = _spec_with_trigger(**{"emit": {"output": "_send_plc_b_x", "mode": "latched"}})
+        spec = _spec_with_trigger({"emit": {"output": "_send_plc_b_x", "mode": "latched"}})
         assert any("reserved prefix" in i for i in _issues_for(spec))
 
     def test_rejects_emit_output_colliding_with_plant_route_key(self):
@@ -237,27 +240,27 @@ class TestBehaviorSchema:
         assert any("collides with a Plant route as_key" in i for i in _issues_for(spec))
 
     def test_rejects_pulse_mode_without_duration(self):
-        spec = _spec_with_trigger(**{"emit.mode": "pulse"})
+        spec = _spec_with_trigger({"emit.mode": "pulse"})
         assert any("duration_ms is required for mode 'pulse'" in i for i in _issues_for(spec))
 
     def test_rejects_pulse_mode_with_zero_duration(self):
-        spec = _spec_with_trigger(**{"emit.mode": "pulse", "emit.duration_ms": 0})
+        spec = _spec_with_trigger({"emit.mode": "pulse", "emit.duration_ms": 0})
         assert any("must be > 0" in i for i in _issues_for(spec))
 
     def test_rejects_duration_ms_on_non_pulse_mode(self):
-        spec = _spec_with_trigger(**{"emit.duration_ms": 50})
+        spec = _spec_with_trigger({"emit.duration_ms": 50})
         assert any("only valid for mode 'pulse'" in i for i in _issues_for(spec))
 
     def test_rejects_negative_debounce_ms(self):
-        spec = _spec_with_trigger(**{"when.debounce_ms": -5})
+        spec = _spec_with_trigger({"when.debounce_ms": -5})
         assert any("debounce_ms must be an integer >= 0" in i for i in _issues_for(spec))
 
     def test_rejects_unknown_edge(self):
-        spec = _spec_with_trigger(**{"when.edge": "sideways"})
+        spec = _spec_with_trigger({"when.edge": "sideways"})
         assert any("when.edge must be one of" in i for i in _issues_for(spec))
 
     def test_rejects_unknown_mode(self):
-        spec = _spec_with_trigger(**{"emit.mode": "toggle"})
+        spec = _spec_with_trigger({"emit.mode": "toggle"})
         assert any("emit.mode must be one of" in i for i in _issues_for(spec))
 
     def test_rejects_two_triggers_emitting_same_target(self):
@@ -283,12 +286,12 @@ class TestBehaviorSchema:
         validate_spec(spec)
 
     def test_rejects_trigger_id_not_snake_case(self):
-        spec = _spec_with_trigger(**{"id": "Handoff On Exit"})
+        spec = _spec_with_trigger({"id": "Handoff On Exit"})
         assert any("must match" in i for i in _issues_for(spec))
 
     def test_collects_multiple_trigger_issues(self):
         spec = _spec_with_trigger(
-            **{"id": "BAD ID", "when.signal": "nope", "when.edge": "sideways"}
+            {"id": "BAD ID", "when.signal": "nope", "when.edge": "sideways"}
         )
         assert len(_issues_for(spec)) >= 3
 
@@ -375,7 +378,7 @@ class TestSpecValidation:
 
 class TestCompiler:
     def test_compiles_rising_latched_to_known_st(self):
-        spec = _spec_with_trigger(**{"when.edge": "rising", "emit.mode": "latched"})
+        spec = _spec_with_trigger({"when.edge": "rising", "emit.mode": "latched"})
         assert compile_st_blocks(spec)["plc_a"] == (
             "(* trigger: emit_t *)\n"
             "_scratch_edge_emit_t := sensor_a_exit AND NOT _scratch_prev_emit_t;\n"
@@ -387,7 +390,7 @@ class TestCompiler:
         )
 
     def test_compiles_falling_latched_to_known_st(self):
-        spec = _spec_with_trigger(**{"when.edge": "falling", "emit.mode": "latched"})
+        spec = _spec_with_trigger({"when.edge": "falling", "emit.mode": "latched"})
         assert compile_st_blocks(spec)["plc_a"] == (
             "(* trigger: emit_t *)\n"
             "_scratch_edge_emit_t := NOT sensor_a_exit AND _scratch_prev_emit_t;\n"
@@ -399,7 +402,7 @@ class TestCompiler:
         )
 
     def test_compiles_level_latched_to_known_st(self):
-        spec = _spec_with_trigger(**{"when.edge": "level", "emit.mode": "latched"})
+        spec = _spec_with_trigger({"when.edge": "level", "emit.mode": "latched"})
         assert compile_st_blocks(spec)["plc_a"] == (
             "(* trigger: emit_t *)\n"
             "IF sensor_a_exit THEN\n"
@@ -409,7 +412,7 @@ class TestCompiler:
         )
 
     def test_compiles_steady_to_known_st(self):
-        spec = _spec_with_trigger(**{"when.edge": "level", "emit.mode": "steady"})
+        spec = _spec_with_trigger({"when.edge": "level", "emit.mode": "steady"})
         assert compile_st_blocks(spec)["plc_a"] == (
             "(* trigger: emit_t *)\n"
             "_send_plc_b_t := sensor_a_exit;"
@@ -417,7 +420,7 @@ class TestCompiler:
 
     def test_compiles_rising_pulse_with_ton(self):
         spec = _spec_with_trigger(
-            **{"when.edge": "rising", "emit.mode": "pulse", "emit.duration_ms": 30}
+            {"when.edge": "rising", "emit.mode": "pulse", "emit.duration_ms": 30}
         )
         assert compile_st_blocks(spec)["plc_a"] == (
             "(* trigger: emit_t *)\n"
@@ -435,7 +438,7 @@ class TestCompiler:
 
     def test_compiles_with_debounce_emits_stability_ton(self):
         spec = _spec_with_trigger(
-            **{"when.edge": "level", "emit.mode": "steady", "when.debounce_ms": 30}
+            {"when.edge": "level", "emit.mode": "steady", "when.debounce_ms": 30}
         )
         assert compile_st_blocks(spec)["plc_a"] == (
             "(* trigger: emit_t *)\n"
@@ -446,7 +449,7 @@ class TestCompiler:
 
     def test_debounce_and_pulse_compose_in_one_trigger(self):
         spec = _spec_with_trigger(
-            **{
+            {
                 "when.edge": "rising",
                 "when.debounce_ms": 20,
                 "emit.mode": "pulse",
@@ -503,7 +506,7 @@ class TestCompiler:
         if mode == "pulse":
             emit["duration_ms"] = 30
         spec = _spec_with_trigger(
-            **{"when.edge": edge, "when.debounce_ms": debounce_ms, "emit": emit}
+            {"when.edge": edge, "when.debounce_ms": debounce_ms, "emit": emit}
         )
         validate_spec(spec)
         source = compile_st_blocks(spec)["plc_a"]
@@ -531,7 +534,7 @@ class TestTriggerMarkers:
 
     def test_bare_assignment_trigger_still_gets_a_marker(self):
         spec = _spec_with_trigger(
-            **{"when.edge": "level", "when.debounce_ms": 0, "emit.mode": "steady"}
+            {"when.edge": "level", "when.debounce_ms": 0, "emit.mode": "steady"}
         )
         validate_spec(spec)
         source = compile_st_blocks(spec)["plc_a"]
@@ -548,7 +551,7 @@ class TestTriggerMarkers:
                 assert not line.lstrip().startswith("#")
 
     def test_trigger_ids_cannot_close_a_comment(self):
-        spec = _spec_with_trigger(**{"id": "bad*)id"})
+        spec = _spec_with_trigger({"id": "bad*)id"})
         with pytest.raises(SpecValidationError):
             validate_spec(spec)
 

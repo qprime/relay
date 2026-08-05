@@ -53,7 +53,9 @@ def _round_trip(trace: TraceLog) -> TraceLog:
 
 def _precedes_assertion(spec) -> str:
     return next(
-        a for a in spec.assertions if parse_assertion(a).form == "PRECEDES"
+        a
+        for a in spec.assertions
+        if (parsed := parse_assertion(a)) is not None and parsed.form == "PRECEDES"
     )
 
 

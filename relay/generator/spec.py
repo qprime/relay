@@ -40,7 +40,9 @@ def validate_spec(spec: TaskSpec) -> None:
     if not isinstance(plcs, list) or not plcs:
         issues.append("System.plcs must be a non-empty list")
     else:
-        plc_ids = tuple(p.get("id") for p in plcs if isinstance(p, dict))
+        plc_ids = tuple(
+            p["id"] for p in plcs if isinstance(p, dict) and isinstance(p.get("id"), str)
+        )
         for i, p in enumerate(plcs):
             if not isinstance(p, dict):
                 issues.append(f"System.plcs[{i}] must be a mapping")
@@ -129,7 +131,7 @@ def _plant_route_keys(spec: TaskSpec) -> dict[str, set[str]]:
         if not isinstance(r, dict):
             continue
         as_key, to_plc = r.get("as_key"), r.get("to_plc")
-        if as_key and to_plc:
+        if isinstance(as_key, str) and isinstance(to_plc, str):
             by_plc.setdefault(to_plc, set()).add(as_key)
     return by_plc
 
@@ -141,29 +143,30 @@ def _tag_index(spec: TaskSpec) -> tuple[dict[str, set[str]], dict[str, set[str]]
         if not isinstance(t, dict):
             continue
         name = t.get("name")
-        if not name:
+        if not isinstance(name, str):
             continue
         producer = t.get("produced_by")
-        if producer:
+        if isinstance(producer, str):
             produced.setdefault(producer, set()).add(name)
         for c in t.get("consumed_by") or []:
-            consumed.setdefault(c, set()).add(name)
+            if isinstance(c, str):
+                consumed.setdefault(c, set()).add(name)
     return produced, consumed
 
 
 def _all_plant_route_keys(spec: TaskSpec) -> set[str]:
     return {
-        r.get("as_key")
+        r["as_key"]
         for r in spec.plant_block.get("routes", []) or []
-        if isinstance(r, dict) and r.get("as_key")
+        if isinstance(r, dict) and isinstance(r.get("as_key"), str)
     }
 
 
 def _all_tag_names(spec: TaskSpec) -> set[str]:
     return {
-        t.get("name")
+        t["name"]
         for t in spec.comm_block.get("tags", []) or []
-        if isinstance(t, dict) and t.get("name")
+        if isinstance(t, dict) and isinstance(t.get("name"), str)
     }
 
 

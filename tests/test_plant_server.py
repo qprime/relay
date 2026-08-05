@@ -136,6 +136,7 @@ class TestPlantServerLifecycle:
             cwd=REPO_ROOT,
         )
         try:
+            assert server.stdout is not None
             ready = server.stdout.readline().split()
             assert ready and ready[0] == "READY", f"plant server not ready: {ready}"
             with socket.create_connection(("127.0.0.1", int(ready[1]))):
@@ -168,6 +169,7 @@ class TestHostAgainstPythonPlantServer:
             cwd=REPO_ROOT,
         )
         try:
+            assert server.stdout is not None
             ready = server.stdout.readline().split()
             assert ready and ready[0] == "READY", f"plant server not ready: {ready}"
             port = int(ready[1])

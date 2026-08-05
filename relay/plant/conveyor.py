@@ -3,7 +3,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Mapping
 
 from relay.io_image import IOImage
-from relay.strategies.plant import register_plant
+from relay.strategies.plant import PlantOutput, register_plant
 
 if TYPE_CHECKING:
     from relay.spec.schema import TaskSpec
@@ -121,8 +121,8 @@ class ConveyorPlant:
 
     def route_to_plcs(
         self,
-        plant_output: PlantOutputs,
-        prior_output: PlantOutputs | None,
+        plant_output: PlantOutput,
+        prior_output: PlantOutput | None,
     ) -> list[tuple[str, str, Any]]:
         emitted: list[tuple[str, str, Any]] = []
         for route in self._routes:
@@ -219,4 +219,8 @@ class ConveyorPlant:
         return self._state
 
 
-register_plant("conveyor", lambda plant_block: ConveyorPlant(plant_block))
+def _build_conveyor(plant_block: dict) -> ConveyorPlant:
+    return ConveyorPlant(plant_block)
+
+
+register_plant("conveyor", _build_conveyor)
