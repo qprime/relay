@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Mapping
 
 from relay.clock import SimClock
 from relay.io_image import IOImage
@@ -12,6 +13,14 @@ class ScanRecord:
     clock: SimClock
     io: IOImage
     outputs: IOImage
+    sends: Mapping[str, int] = field(default_factory=dict)
+    recvs: Mapping[str, int] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for name in ("sends", "recvs"):
+            value = getattr(self, name)
+            if not isinstance(value, MappingProxyType):
+                object.__setattr__(self, name, MappingProxyType(dict(value)))
 
 
 @dataclass

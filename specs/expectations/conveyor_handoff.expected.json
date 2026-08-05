@@ -11,6 +11,12 @@
       "passed": true,
       "text": "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)",
       "witness": "'handoff_signal' at 100.0ms precedes 'belt_b_enable' at 100.0ms (gap 0.0ms, budget 500.0ms)"
+    },
+    {
+      "observed_gap_ms": null,
+      "passed": true,
+      "text": "CAUSES(handoff_signal, belt_b_enable)",
+      "witness": "'belt_b_enable' true on 'plc_b' at tick 10 is caused by 'handoff_signal' seq 11 sent by 'plc_a' at tick 10 and received at tick 10"
     }
   ],
   "generated_from": "specs/conveyor_handoff.yaml",

@@ -30,6 +30,7 @@ class PLCCoroutine:
         scan_done: asyncio.Queue[None],
     ) -> None:
         io = IOImage.empty()
+        send_counts: dict[str, int] = {}
 
         for _ in range(max_scans):
             clock = await clock_source.get()
@@ -42,11 +43,24 @@ class PLCCoroutine:
 
             outputs, outgoing = self.executor(snapshot, comm, clock, self.scan_period_ms)
 
+            sends: dict[str, int] = {}
             for target_plc, key, value in outgoing:
-                await bus.send(target_plc, key, value)
+                seq = send_counts.get(key, 0) + 1
+                send_counts[key] = seq
+                sends[key] = seq
+                await bus.send(target_plc, key, value, seq)
 
             for key, value in outputs.values.items():
                 io = io.with_value(key, value)
 
-            trace.record(ScanRecord(plc_id=self.plc_id, clock=clock, io=snapshot, outputs=outputs))
+            trace.record(
+                ScanRecord(
+                    plc_id=self.plc_id,
+                    clock=clock,
+                    io=snapshot,
+                    outputs=outputs,
+                    sends=sends,
+                    recvs=dict(comm.counters),
+                )
+            )
             await scan_done.put(None)

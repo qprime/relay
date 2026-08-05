@@ -83,6 +83,7 @@ class HostHarness {
     std::vector<IOImage> latest_outputs_;
     std::vector<IOImage> prior_outputs_;
     std::optional<PlantOutputs> prior_plant_out_;
+    std::vector<std::int64_t> harness_send_counts_;
     SimClock clock_ = SimClock::zero();
     std::optional<RunError> run_error_;
 };

@@ -23,6 +23,11 @@ struct CellSlot {
     Cell value;
 };
 
+struct SeqSlot {
+    std::uint32_t signal_id;
+    std::int64_t seq;
+};
+
 enum class ScanErrorKind {
     CellOverflow,
     OutgoingOverflow,
@@ -42,8 +47,12 @@ struct ScanTraceEntry {
     SimClock clock;
     std::uint32_t input_count;
     std::uint32_t output_count;
+    std::uint32_t send_count;
+    std::uint32_t recv_count;
     std::array<CellSlot, kMaxCellsPerScan> input_cells;
     std::array<CellSlot, kMaxCellsPerScan> output_cells;
+    std::array<SeqSlot, kMaxCellsPerScan> send_slots;
+    std::array<SeqSlot, kMaxCellsPerScan> recv_slots;
     std::optional<ScanError> error;
 };
 

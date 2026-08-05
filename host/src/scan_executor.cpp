@@ -5,7 +5,7 @@ namespace relay_host {
 PlcScanState::PlcScanState(std::uint32_t plc_index_arg, const ValidatedSt* block_arg,
                            std::uint32_t signal_count)
     : plc_index(plc_index_arg), block(block_arg), ctx(*block_arg),
-      io_cells(signal_count) {}
+      io_cells(signal_count), send_counts(signal_count, 0) {}
 
 std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer& comm,
                                           SimClock clock, double dt_ms,
@@ -30,7 +30,18 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
     entry.clock = clock;
     entry.input_count = 0;
     entry.output_count = 0;
+    entry.send_count = 0;
+    entry.recv_count = 0;
     entry.error.reset();
+    for (const std::uint32_t signal_id : comm.present_ids()) {
+        if (entry.recv_count >= kMaxCellsPerScan) {
+            entry.error = ScanError{ScanErrorKind::CellOverflow, signal_id};
+            return entry.error;
+        }
+        entry.recv_slots[entry.recv_count] =
+            SeqSlot{signal_id, comm.seq_of(signal_id)};
+        ++entry.recv_count;
+    }
     for (std::uint32_t signal_id = 0; signal_id < state.io_cells.size(); ++signal_id) {
         const std::optional<Cell>& cell = state.io_cells[signal_id];
         if (!cell.has_value()) {
@@ -58,16 +69,25 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
         switch (binding.kind) {
             case SlotKind::Scratch:
                 break;
-            case SlotKind::Send:
+            case SlotKind::Send: {
                 if (outgoing.count >= outgoing.items.size()) {
                     entry.error =
                         ScanError{ScanErrorKind::OutgoingOverflow, binding.signal_id};
                     return entry.error;
                 }
+                if (entry.send_count >= kMaxCellsPerScan) {
+                    entry.error =
+                        ScanError{ScanErrorKind::CellOverflow, binding.signal_id};
+                    return entry.error;
+                }
+                const std::int64_t seq = ++state.send_counts[binding.signal_id];
                 outgoing.items[outgoing.count] = OutgoingMessage{
-                    binding.send_target_plc, Message{binding.signal_id, value}};
+                    binding.send_target_plc, Message{binding.signal_id, value, seq}};
                 ++outgoing.count;
+                entry.send_slots[entry.send_count] = SeqSlot{binding.signal_id, seq};
+                ++entry.send_count;
                 break;
+            }
             case SlotKind::Output:
                 if (binding.signal_id == kNoSignal) {
                     entry.error = ScanError{ScanErrorKind::SignalLookupMiss, slot};

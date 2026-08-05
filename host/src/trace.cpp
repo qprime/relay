@@ -88,6 +88,27 @@ std::expected<std::string, DumpError> format_cells_object(
     return out;
 }
 
+std::string format_seqs_object(std::span<const SeqSlot> slots, const SignalTable& table) {
+    std::vector<std::pair<std::string, std::int64_t>> named;
+    named.reserve(slots.size());
+    for (const SeqSlot& slot : slots) {
+        named.emplace_back(table.name_of(slot.signal_id), slot.seq);
+    }
+    std::sort(named.begin(), named.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+    std::string out = "{";
+    bool first = true;
+    for (const auto& [name, seq] : named) {
+        if (!first) {
+            out += ", ";
+        }
+        first = false;
+        out += escape_json_string(name) + ": " + std::to_string(seq);
+    }
+    out += "}";
+    return out;
+}
+
 }  // namespace
 
 std::string describe(const ScanError& error, const SignalTable& table) {
@@ -166,6 +187,8 @@ ScanTraceEntry& TraceRing::next_entry() noexcept {
     ++total_;
     entry.input_count = 0;
     entry.output_count = 0;
+    entry.send_count = 0;
+    entry.recv_count = 0;
     entry.error.reset();
     return entry;
 }
@@ -207,10 +230,16 @@ std::expected<void, DumpError> TraceRing::dump_to_jsonl(
         if (!outputs_object) {
             return std::unexpected(outputs_object.error());
         }
+        const std::string recvs_object = format_seqs_object(
+            std::span(entry.recv_slots.data(), entry.recv_count), table);
+        const std::string sends_object = format_seqs_object(
+            std::span(entry.send_slots.data(), entry.send_count), table);
         stream << "{\"elapsed_ms\": " << format_json_double(entry.clock.elapsed_ms)
                << ", \"io_snapshot\": " << *io_object
                << ", \"outputs\": " << *outputs_object
                << ", \"plc_id\": " << escape_json_string(plc_ids[entry.plc_index])
+               << ", \"recvs\": " << recvs_object
+               << ", \"sends\": " << sends_object
                << ", \"tick\": " << entry.clock.tick << "}\n";
     }
     return {};

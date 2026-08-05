@@ -100,6 +100,12 @@ async def simulate(
 
     clock = SimClock.zero()
     prior_plant_out: Any | None = None
+    harness_send_counts: dict[str, int] = {}
+
+    async def _harness_send(target: str, key: str, value: Any) -> None:
+        seq = harness_send_counts.get(key, 0) + 1
+        harness_send_counts[key] = seq
+        await bus.send(target, key, value, seq)
 
     async def _await_done_or_failure() -> None:
         get_task = asyncio.create_task(done_queue.get())
@@ -125,7 +131,7 @@ async def simulate(
             plant_out = plant.step(scan_period_ms, actuator_state)
 
             for target, key, value in plant.route_to_plcs(plant_out, prior_plant_out):
-                await bus.send(target, key, value)
+                await _harness_send(target, key, value)
 
             for q in clock_queues.values():
                 await q.put(clock)
@@ -137,7 +143,7 @@ async def simulate(
                 for target, key, value in comm_strategy.route(
                     pid, latest_outputs[pid], prior_outputs[pid]
                 ):
-                    await bus.send(target, key, value)
+                    await _harness_send(target, key, value)
 
             prior_outputs = {pid: latest_outputs[pid] for pid in plc_ids}
             prior_plant_out = plant_out

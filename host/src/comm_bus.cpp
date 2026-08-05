@@ -2,15 +2,17 @@
 
 namespace relay_host {
 
-CommBuffer::CommBuffer(std::uint32_t signal_count) : cells_(signal_count) {
+CommBuffer::CommBuffer(std::uint32_t signal_count)
+    : cells_(signal_count), seqs_(signal_count, 0) {
     order_.reserve(signal_count);
 }
 
-void CommBuffer::set(std::uint32_t signal_id, Cell value) noexcept {
+void CommBuffer::set(std::uint32_t signal_id, Cell value, std::int64_t seq) noexcept {
     if (!cells_[signal_id].has_value()) {
         order_.push_back(signal_id);
     }
     cells_[signal_id] = value;
+    seqs_[signal_id] = seq;
 }
 
 void CommBuffer::clear() noexcept {
@@ -22,6 +24,10 @@ void CommBuffer::clear() noexcept {
 
 std::optional<Cell> CommBuffer::get(std::uint32_t signal_id) const noexcept {
     return cells_[signal_id];
+}
+
+std::int64_t CommBuffer::seq_of(std::uint32_t signal_id) const noexcept {
+    return seqs_[signal_id];
 }
 
 std::span<const std::uint32_t> CommBuffer::present_ids() const noexcept {
@@ -53,7 +59,7 @@ void CommBus::begin_drain(std::uint32_t plc_index) noexcept {
 }
 
 void CommBus::fold(std::uint32_t plc_index, const Message& msg) noexcept {
-    buffers_[plc_index].set(msg.signal_id, msg.value);
+    buffers_[plc_index].set(msg.signal_id, msg.value, msg.seq);
 }
 
 Channel<Message>& CommBus::channel_of(std::uint32_t plc_index) noexcept {

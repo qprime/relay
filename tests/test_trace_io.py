@@ -20,6 +20,16 @@ from relay.verify.assertions import evaluate_all
 _SPEC_PATH = Path(__file__).parent.parent / "specs" / "conveyor_handoff.yaml"
 _GOLDEN_TRACE = Path(__file__).parent / "golden" / "conveyor_trace.jsonl"
 
+_MINIMAL_RECORD = {
+    "plc_id": "plc_a",
+    "tick": 0,
+    "elapsed_ms": 0.0,
+    "io_snapshot": {},
+    "outputs": {},
+    "sends": {},
+    "recvs": {},
+}
+
 
 def _conveyor_spec_and_trace():
     spec = load_spec(_SPEC_PATH)
@@ -99,7 +109,7 @@ class TestTraceIOFormat:
         lines = _dump_to_text(trace).splitlines()
         assert len(lines) == len(trace.records)
 
-    def test_each_line_has_five_required_keys(self):
+    def test_each_line_has_seven_required_keys(self):
         _, trace = _conveyor_spec_and_trace()
         for line in _dump_to_text(trace).splitlines():
             assert set(json.loads(line)) == {
@@ -108,7 +118,20 @@ class TestTraceIOFormat:
                 "elapsed_ms",
                 "io_snapshot",
                 "outputs",
+                "sends",
+                "recvs",
             }
+
+    def test_sends_and_recvs_round_trip_as_ints(self):
+        _, trace = _conveyor_spec_and_trace()
+        restored = _round_trip(trace)
+        for original, loaded in zip(trace.records, restored.records):
+            assert dict(loaded.sends) == dict(original.sends)
+            assert dict(loaded.recvs) == dict(original.recvs)
+            for value in (*loaded.sends.values(), *loaded.recvs.values()):
+                assert isinstance(value, int) and not isinstance(value, bool)
+        assert any(r.sends for r in restored.records), "no send was recorded to compare"
+        assert any(r.recvs for r in restored.records), "no receipt was recorded to compare"
 
     def test_key_order_does_not_affect_bytes(self):
         def _record(values):
@@ -196,6 +219,8 @@ class TestTraceIOTypes:
                 "elapsed_ms": 100,
                 "io_snapshot": {},
                 "outputs": {},
+                "sends": {},
+                "recvs": {},
             }
         )
         assert isinstance(record.clock.elapsed_ms, float)
@@ -208,9 +233,27 @@ class TestTraceIOTypes:
                 "elapsed_ms": 100.0,
                 "io_snapshot": {},
                 "outputs": {},
+                "sends": {},
+                "recvs": {},
             }
         )
         assert isinstance(record.clock.tick, int)
+
+    def test_seq_counters_load_as_ints(self):
+        record = record_from_dict(
+            {
+                "plc_id": "plc_a",
+                "tick": 10,
+                "elapsed_ms": 100.0,
+                "io_snapshot": {},
+                "outputs": {},
+                "sends": {"handoff_signal": 11.0},
+                "recvs": {"sensor_a_exit": 1.0},
+            }
+        )
+        assert record.sends["handoff_signal"] == 11
+        assert isinstance(record.sends["handoff_signal"], int)
+        assert isinstance(record.recvs["sensor_a_exit"], int)
 
 
 class TestGoldenTrace:
@@ -233,15 +276,7 @@ class TestGoldenTrace:
 
 class TestTraceIOErrors:
     def test_malformed_line_raises_naming_file_line_number(self):
-        good = json.dumps(
-            {
-                "plc_id": "plc_a",
-                "tick": 0,
-                "elapsed_ms": 0.0,
-                "io_snapshot": {},
-                "outputs": {},
-            }
-        )
+        good = json.dumps(_MINIMAL_RECORD)
         text = f"{good}\n{good}\n{{not json\n{good}\n"
         with pytest.raises(ValueError) as exc:
             _load_from_text(text)
@@ -252,15 +287,7 @@ class TestTraceIOErrors:
         [("[1, 2, 3]", "list"), ("42", "int"), ('"hello"', "str"), ("null", "NoneType")],
     )
     def test_non_object_line_raises_naming_file_line_number(self, bad, kind):
-        good = json.dumps(
-            {
-                "plc_id": "plc_a",
-                "tick": 0,
-                "elapsed_ms": 0.0,
-                "io_snapshot": {},
-                "outputs": {},
-            }
-        )
+        good = json.dumps(_MINIMAL_RECORD)
         with pytest.raises(ValueError) as exc:
             _load_from_text(f"{good}\n{good}\n{bad}\n{good}\n")
         assert "line 3" in str(exc.value)
@@ -274,27 +301,29 @@ class TestTraceIOErrors:
         [("tick", "abc"), ("elapsed_ms", None), ("tick", None), ("elapsed_ms", "x")],
     )
     def test_unreadable_clock_field_raises_naming_file_line_number(self, field, value):
-        record = {
-            "plc_id": "plc_a",
-            "tick": 0,
-            "elapsed_ms": 0.0,
-            "io_snapshot": {},
-            "outputs": {},
-        }
-        good = json.dumps(record)
-        bad = json.dumps({**record, field: value})
+        good = json.dumps(_MINIMAL_RECORD)
+        bad = json.dumps({**_MINIMAL_RECORD, field: value})
         with pytest.raises(ValueError) as exc:
             _load_from_text(f"{good}\n{good}\n{bad}\n{good}\n")
         assert "line 3" in str(exc.value)
 
-    def test_missing_required_key_raises_naming_key(self):
-        text = json.dumps(
-            {"plc_id": "plc_a", "tick": 0, "elapsed_ms": 0.0, "outputs": {}}
-        )
+    @pytest.mark.parametrize("missing", ["io_snapshot", "outputs", "sends", "recvs"])
+    def test_missing_required_key_raises_naming_key(self, missing):
+        text = json.dumps({k: v for k, v in _MINIMAL_RECORD.items() if k != missing})
         with pytest.raises(KeyError) as exc:
             _load_from_text(text + "\n")
-        assert "io_snapshot" in str(exc.value)
+        assert missing in str(exc.value)
         assert "line 1" in str(exc.value)
+
+    def test_counterless_line_is_rejected_not_tolerated(self):
+        """A five-key trace carries no attribution, so CAUSES on it would fail
+        with 'never received' — a wrong-reason verdict. Loud KeyError instead."""
+        legacy = {
+            k: v for k, v in _MINIMAL_RECORD.items() if k not in ("sends", "recvs")
+        }
+        with pytest.raises(KeyError) as exc:
+            _load_from_text(json.dumps(legacy) + "\n")
+        assert "sends" in str(exc.value)
 
 
 class TestIOSnapshotIsLoadBearing:

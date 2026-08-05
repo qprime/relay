@@ -34,6 +34,7 @@ struct PlcScanState {
     std::vector<std::optional<Cell>> io_cells;
     std::array<CellSlot, kMaxCellsPerScan> outputs;
     std::uint32_t output_count = 0;
+    std::vector<std::int64_t> send_counts;
 };
 
 [[nodiscard]] std::optional<ScanError> execute_one_scan(PlcScanState& state,

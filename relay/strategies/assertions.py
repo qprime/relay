@@ -11,11 +11,12 @@ PRECEDES_RE = re.compile(
     r"PRECEDES\(\s*(\w+)\s*,\s*(\w+)\s*,\s*within:\s*(\d+(?:\.\d+)?)\s*ms\s*\)",
     re.IGNORECASE,
 )
+CAUSES_RE = re.compile(r"CAUSES\(\s*(\w+)\s*,\s*(\w+)\s*\)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
 class ParsedAssertion:
-    form: Literal["EVENTUALLY", "PRECEDES"]
+    form: Literal["EVENTUALLY", "PRECEDES", "CAUSES"]
     signals: tuple[str, ...]
     within_ms: float | None = None
 
@@ -36,4 +37,7 @@ def parse_assertion(s: str) -> ParsedAssertion | None:
             signals=(m.group(1), m.group(2)),
             within_ms=float(m.group(3)),
         )
+    m = CAUSES_RE.fullmatch(s)
+    if m:
+        return ParsedAssertion(form="CAUSES", signals=(m.group(1), m.group(2)))
     return None

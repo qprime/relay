@@ -13,19 +13,22 @@ namespace relay_host {
 struct Message {
     std::uint32_t signal_id;
     Cell value;
+    std::int64_t seq;
 };
 
 class CommBuffer {
  public:
     explicit CommBuffer(std::uint32_t signal_count);
 
-    void set(std::uint32_t signal_id, Cell value) noexcept;
+    void set(std::uint32_t signal_id, Cell value, std::int64_t seq) noexcept;
     void clear() noexcept;
     [[nodiscard]] std::optional<Cell> get(std::uint32_t signal_id) const noexcept;
+    [[nodiscard]] std::int64_t seq_of(std::uint32_t signal_id) const noexcept;
     [[nodiscard]] std::span<const std::uint32_t> present_ids() const noexcept;
 
  private:
     std::vector<std::optional<Cell>> cells_;
+    std::vector<std::int64_t> seqs_;
     std::vector<std::uint32_t> order_;
 };
 

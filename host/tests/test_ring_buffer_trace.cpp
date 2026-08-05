@@ -128,7 +128,7 @@ TEST(TestRingBufferTrace, test_cell_overflow_records_scan_error) {
     PlcScanState state(0, &*block, table.size());
     CommBuffer comm(table.size());
     for (std::uint32_t id = 0; id < table.size(); ++id) {
-        comm.set(id, Cell{true});
+        comm.set(id, Cell{true}, 1);
     }
     ScanTraceEntry entry{};
     OutgoingBuffer outgoing;

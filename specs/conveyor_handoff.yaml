@@ -59,3 +59,8 @@ Assertions:
   # Observed gap today is 0ms (both signals land in the same scan).
   # Tighten once real timing data exists — see observed_gap_ms in AssertionResult.
   - "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)"
+  # Attribution, not timing: belt_b_enable must be traceable to a received
+  # handoff_signal message, matched by sequence counter. Carries no budget —
+  # that is PRECEDES's job, and a budget would reintroduce the clock dependency
+  # this form exists to escape.
+  - "CAUSES(handoff_signal, belt_b_enable)"

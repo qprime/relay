@@ -28,7 +28,7 @@ void send(CommBus& bus, std::uint32_t to_plc, Message msg) {
 TEST(TestCommBus, send_then_drain_returns_message) {
     asio::io_context io;
     CommBus bus(io.get_executor(), 1, 4, 64);
-    send(bus, 0, Message{2, Cell{true}});
+    send(bus, 0, Message{2, Cell{true}, 1});
     drain(bus, 0);
     const CommBuffer& buffer = bus.buffer(0);
     ASSERT_EQ(buffer.present_ids().size(), 1u);
@@ -46,19 +46,36 @@ TEST(TestCommBus, drain_empty_returns_empty_buffer) {
 TEST(TestCommBus, duplicate_key_in_one_scan_is_last_wins) {
     asio::io_context io;
     CommBus bus(io.get_executor(), 1, 4, 64);
-    send(bus, 0, Message{1, Cell{std::int64_t{7}}});
-    send(bus, 0, Message{1, Cell{std::int64_t{9}}});
+    send(bus, 0, Message{1, Cell{std::int64_t{7}}, 1});
+    send(bus, 0, Message{1, Cell{std::int64_t{9}}, 2});
     drain(bus, 0);
     const CommBuffer& buffer = bus.buffer(0);
     ASSERT_EQ(buffer.present_ids().size(), 1u);
     EXPECT_EQ(std::get<std::int64_t>(*buffer.get(1)), 9);
 }
 
+TEST(TestCommBus, duplicate_key_folds_seq_last_wins_alongside_value) {
+    asio::io_context io;
+    CommBus bus(io.get_executor(), 1, 4, 64);
+    send(bus, 0, Message{1, Cell{std::int64_t{7}}, 4});
+    send(bus, 0, Message{1, Cell{std::int64_t{9}}, 5});
+    drain(bus, 0);
+    EXPECT_EQ(bus.buffer(0).seq_of(1), 5);
+}
+
+TEST(TestCommBus, seq_survives_drain_to_buffer) {
+    asio::io_context io;
+    CommBus bus(io.get_executor(), 1, 4, 64);
+    send(bus, 0, Message{2, Cell{true}, 11});
+    drain(bus, 0);
+    EXPECT_EQ(bus.buffer(0).seq_of(2), 11);
+}
+
 TEST(TestCommBus, close_then_drain_returns_buffered_messages) {
     asio::io_context io;
     CommBus bus(io.get_executor(), 1, 4, 64);
-    send(bus, 0, Message{0, Cell{true}});
-    send(bus, 0, Message{3, Cell{false}});
+    send(bus, 0, Message{0, Cell{true}, 1});
+    send(bus, 0, Message{3, Cell{false}, 1});
     bus.close();
     drain(bus, 0);
     const CommBuffer& buffer = bus.buffer(0);
@@ -71,7 +88,7 @@ TEST(TestCommBus, send_after_close_returns_false) {
     asio::io_context io;
     CommBus bus(io.get_executor(), 1, 4, 64);
     bus.close();
-    EXPECT_FALSE(bus.try_send(0, Message{0, Cell{true}}));
+    EXPECT_FALSE(bus.try_send(0, Message{0, Cell{true}, 1}));
 }
 
 }  // namespace

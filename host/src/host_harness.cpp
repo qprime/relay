@@ -105,7 +105,8 @@ HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
            kCommChannelCapacity),
       trace_(trace_capacity),
       done_chan_(ex, kCommChannelCapacity),
-      scan_timer_(ex) {
+      scan_timer_(ex),
+      harness_send_counts_(table_.size(), 0) {
     const std::uint32_t plc_count = static_cast<std::uint32_t>(spec_.plc_ids.size());
     states_.reserve(plc_count);
     clock_chans_.reserve(plc_count);
@@ -143,8 +144,9 @@ Task HostHarness::run() {
         const PlantOutputs plant_out = plant_.step(cfg_.scan_period_ms, actuator_state);
         for (const RoutedPlantSignal& routed :
              plant_.route_to_plcs(plant_out, prior_plant_out_)) {
+            const std::int64_t seq = ++harness_send_counts_[routed.signal_id];
             co_await bus_.send(routed.to_plc_index,
-                               Message{routed.signal_id, routed.value});
+                               Message{routed.signal_id, routed.value, seq});
         }
 
         for (std::uint32_t index = 0; index < plc_count && !aborted; ++index) {
@@ -183,8 +185,9 @@ Task HostHarness::run() {
                 },
                 strategy_);
             for (const Routed& message : routed) {
+                const std::int64_t seq = ++harness_send_counts_[message.signal_id];
                 co_await bus_.send(message.consumer_index,
-                                   Message{message.signal_id, message.value});
+                                   Message{message.signal_id, message.value, seq});
             }
         }
 

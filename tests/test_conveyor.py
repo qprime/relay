@@ -68,6 +68,71 @@ class TestConveyorHandoff:
         assert plc_a_ticks == list(range(5)), f"sim ticks not externally driven: {plc_a_ticks}"
 
 
+class TestCausesConveyor:
+    def test_conveyor_causes_passes(self):
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        result = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", trace)
+        assert result.passed, result.reason
+        assert "sent by 'plc_a'" in result.reason
+
+    def test_causes_attributes_to_the_truthy_handoff_not_the_first(self):
+        """plc_a sends handoff_signal every scan, False until the part arrives.
+        Attribution must land on the activating message, not scan 0's False one."""
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        first_send = next(
+            r for r in trace.for_plc("plc_a") if "handoff_signal" in r.sends
+        )
+        assert first_send.clock.tick == 0, "expected a send on the very first scan"
+        assert not first_send.io.get("handoff_signal"), "scan 0 send should be False"
+
+        acting = next(
+            r for r in trace.for_plc("plc_b") if r.outputs.get("belt_b_enable")
+        )
+        result = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", trace)
+        assert result.passed, result.reason
+        assert f"seq {acting.recvs['handoff_signal']}" in result.reason
+        assert acting.recvs["handoff_signal"] > 1, (
+            "attribution bound to the first send; the activating message is later"
+        )
+
+    def test_silenced_producer_fails_causes(self):
+        spec, blocks = _load_spec_and_blocks(silence_plc_a=True)
+        trace = asyncio.run(simulate(spec, blocks))
+        result = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", trace)
+        assert not result.passed
+
+    def test_causes_verdict_survives_jsonl_round_trip(self):
+        import io as io_module
+
+        from relay.trace_io import dump_jsonl, load_jsonl
+
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        stream = io_module.StringIO()
+        dump_jsonl(trace, stream)
+        restored = load_jsonl(io_module.StringIO(stream.getvalue()))
+        before = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", trace)
+        after = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", restored)
+        assert (before.passed, before.reason) == (after.passed, after.reason)
+
+
+class TestCausesDeterminism:
+    def test_two_runs_produce_identical_sends_and_recvs(self):
+        spec, blocks = _load_spec_and_blocks()
+        runs = [asyncio.run(simulate(spec, blocks)) for _ in range(2)]
+        counters = [
+            [
+                (r.plc_id, r.clock.tick, dict(r.sends), dict(r.recvs))
+                for r in trace.records
+            ]
+            for trace in runs
+        ]
+        assert counters[0] == counters[1]
+        assert any(sends for _, _, sends, _ in counters[0]), "no counters were recorded"
+
+
 class TestSubScanTimingWarnings:
     def _spec_with(self, **when_or_emit):
         spec = load_spec(_spec_path())
@@ -110,5 +175,38 @@ class TestSpecLoading:
         assert {p["id"] for p in spec.plcs} == {"plc_a", "plc_b"}
         assert "EVENTUALLY(part_at_b, within: 500ms)" in spec.assertions
         assert "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)" in spec.assertions
+        assert "CAUSES(handoff_signal, belt_b_enable)" in spec.assertions
         assert spec.comm_strategy == "tag"
         assert spec.plant_type == "conveyor"
+
+
+class TestCausesSpecValidation:
+    def _spec_text_with(self, assertion: str, tmp_path: Path) -> Path:
+        import yaml
+
+        raw = yaml.safe_load(_spec_path().read_text())
+        raw["Assertions"] = [assertion]
+        out = tmp_path / "spec.yaml"
+        out.write_text(yaml.safe_dump(raw))
+        return out
+
+    def test_causes_on_undeclared_tag_rejected_at_load(self, tmp_path):
+        """part_at_b is plant-routed, not a tag, so it carries no attributable
+        sender — the failure belongs at load, not at verification time."""
+        path = self._spec_text_with("CAUSES(part_at_b, belt_b_enable)", tmp_path)
+        with pytest.raises(ValueError) as exc:
+            load_spec(path)
+        assert "part_at_b" in str(exc.value)
+        assert "Comm.tags" in str(exc.value)
+
+    def test_causes_self_reference_rejected_at_load(self, tmp_path):
+        path = self._spec_text_with(
+            "CAUSES(handoff_signal, handoff_signal)", tmp_path
+        )
+        with pytest.raises(ValueError) as exc:
+            load_spec(path)
+        assert "cannot cause itself" in str(exc.value)
+
+    def test_declared_tag_cause_loads(self, tmp_path):
+        path = self._spec_text_with("CAUSES(handoff_signal, belt_b_enable)", tmp_path)
+        assert load_spec(path).assertions == ["CAUSES(handoff_signal, belt_b_enable)"]

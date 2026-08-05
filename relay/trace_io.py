@@ -33,6 +33,8 @@ def record_to_dict(record: ScanRecord) -> dict[str, Any]:
         "elapsed_ms": record.clock.elapsed_ms,
         "io_snapshot": _check_values(dict(record.io.values), "io_snapshot"),
         "outputs": _check_values(dict(record.outputs.values), "outputs"),
+        "sends": _check_values(dict(record.sends), "sends"),
+        "recvs": _check_values(dict(record.recvs), "recvs"),
     }
 
 
@@ -42,6 +44,8 @@ def record_from_dict(data: dict[str, Any]) -> ScanRecord:
         clock=SimClock(tick=int(data["tick"]), elapsed_ms=float(data["elapsed_ms"])),
         io=IOImage(values=data["io_snapshot"]),
         outputs=IOImage(values=data["outputs"]),
+        sends={k: int(v) for k, v in data["sends"].items()},
+        recvs={k: int(v) for k, v in data["recvs"].items()},
     )
 
 

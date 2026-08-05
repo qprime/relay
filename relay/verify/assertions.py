@@ -21,6 +21,10 @@ def evaluate_assertion(assertion: str, trace: TraceLog) -> AssertionResult:
             passed=False,
             reason=f"unrecognized assertion form: {assertion.strip()}",
         )
+    if parsed.form == "CAUSES":
+        return _check_causes(
+            assertion.strip(), parsed.signals[0], parsed.signals[1], trace
+        )
     if parsed.within_ms is None:
         raise ValueError(f"{parsed.form} parsed without a budget: {assertion!r}")
     if parsed.form == "EVENTUALLY":
@@ -108,6 +112,91 @@ def _check_precedes(
         passed=True,
         reason=f"'{first}' at {first_ms:.1f}ms precedes '{second}' at {second_ms:.1f}ms (gap {gap:.1f}ms, budget {budget_ms:.1f}ms)",
         observed_gap_ms=gap,
+    )
+
+
+def _check_causes(
+    assertion: str, cause: str, effect: str, trace: TraceLog
+) -> AssertionResult:
+    """CAUSES asserts attribution, not timing: `effect`'s first activation must be
+    explainable by a message carrying `cause` that the acting PLC actually received.
+
+    The claim is established by matching a per-sender, per-key cumulative send
+    count recorded at both ends of the trace, so no clock is read on the pass/fail
+    path. That is what makes it survive the move off lockstep simulation: two
+    physical PLCs share no scan boundary and no clock, but a counter carried on
+    the message is identity that travels with it.
+
+    A receipt only counts as activating if it carried a truthy value. A producer
+    that sends every scan — the conveyor's actual shape — delivers `False`
+    messages long before the real handoff, and binding to the first receipt of
+    any value would attribute the effect to a message that said nothing happened.
+
+    Same-scan receipt and action passes: promotion precedes execution within a
+    scan, so a tag that arrives and is acted on in one scan is a causal chain,
+    not a coincidence. This mirrors PRECEDES's non-strict same-scan rule.
+    """
+    acting = next(
+        (r for r in trace.records if _signal_value(r, effect)), None
+    )
+    if acting is None:
+        return AssertionResult(
+            assertion=assertion,
+            passed=False,
+            reason=f"signal '{effect}' never became true",
+        )
+
+    plc_id = acting.plc_id
+    receipts = [
+        r
+        for r in trace.for_plc(plc_id)
+        if cause in r.recvs and _signal_value(r, cause)
+    ]
+    activating = next(
+        (r for r in receipts if r.clock.tick <= acting.clock.tick), None
+    )
+    if activating is None:
+        any_receipt = any(cause in r.recvs for r in trace.for_plc(plc_id))
+        if not any_receipt:
+            reason = (
+                f"'{effect}' became true on '{plc_id}' at tick {acting.clock.tick} "
+                f"but '{cause}' was never received there"
+            )
+        elif not receipts:
+            reason = (
+                f"'{effect}' became true on '{plc_id}' at tick {acting.clock.tick} "
+                f"but every received '{cause}' message carried a false value"
+            )
+        else:
+            reason = (
+                f"'{effect}' became true on '{plc_id}' at tick {acting.clock.tick}, "
+                f"before the first activating '{cause}' receipt at tick "
+                f"{receipts[0].clock.tick}"
+            )
+        return AssertionResult(assertion=assertion, passed=False, reason=reason)
+
+    seq = activating.recvs[cause]
+    sender = next(
+        (r for r in trace.records if r.sends.get(cause, 0) >= seq), None
+    )
+    if sender is None:
+        return AssertionResult(
+            assertion=assertion,
+            passed=False,
+            reason=(
+                f"'{cause}' receipt seq {seq} on '{plc_id}' has no recorded send; "
+                "plant-routed and strategy-routed signals are not attributable"
+            ),
+        )
+
+    return AssertionResult(
+        assertion=assertion,
+        passed=True,
+        reason=(
+            f"'{effect}' true on '{plc_id}' at tick {acting.clock.tick} is caused by "
+            f"'{cause}' seq {seq} sent by '{sender.plc_id}' at tick "
+            f"{sender.clock.tick} and received at tick {activating.clock.tick}"
+        ),
     )
 
 
