@@ -9,8 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include <hce.hpp>
-
+#include "relay_host/async.hpp"
 #include "relay_host/clock.hpp"
 #include "relay_host/comm_bus.hpp"
 #include "relay_host/comm_strategy.hpp"
@@ -25,11 +24,6 @@ namespace relay_host {
 struct InitError {
     std::string message;
 };
-
-// Blocks the calling non-coroutine thread until the scheduled coroutine
-// completes: an hce::awt joins in its destructor, which runs when the
-// by-value parameter goes out of scope here.
-inline void join_scheduled(hce::awt<void>) {}
 
 enum class RunErrorKind {
     ScanFailed,
@@ -52,12 +46,13 @@ class HostHarness {
 
     [[nodiscard]] static std::expected<std::unique_ptr<HostHarness>, InitError> try_create(
         ResolvedTaskSpec spec,
-        std::vector<std::pair<std::string, std::string>> st_blocks, Config cfg);
+        std::vector<std::pair<std::string, std::string>> st_blocks, Config cfg,
+        Executor ex);
 
     HostHarness(const HostHarness&) = delete;
     HostHarness& operator=(const HostHarness&) = delete;
 
-    [[nodiscard]] hce::co<void> run();
+    [[nodiscard]] Task run();
 
     [[nodiscard]] const TraceRing& trace() const noexcept { return trace_; }
     [[nodiscard]] const SignalTable& signal_table() const noexcept { return table_; }
@@ -71,7 +66,7 @@ class HostHarness {
  private:
     HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
                 std::vector<ValidatedSt> blocks, CommStrategy strategy,
-                LocalStubPlant plant, std::size_t trace_capacity);
+                LocalStubPlant plant, std::size_t trace_capacity, Executor ex);
 
     ResolvedTaskSpec spec_;
     Config cfg_;
@@ -82,8 +77,9 @@ class HostHarness {
     CommBus bus_;
     TraceRing trace_;
     std::vector<PlcScanState> states_;
-    std::vector<hce::chan<SimClock>> clock_chans_;
-    hce::chan<ScanDone> done_chan_;
+    std::vector<std::unique_ptr<Channel<SimClock>>> clock_chans_;
+    Channel<ScanDone> done_chan_;
+    asio::steady_timer scan_timer_;
     std::vector<IOImage> latest_outputs_;
     std::vector<IOImage> prior_outputs_;
     std::optional<PlantOutputs> prior_plant_out_;

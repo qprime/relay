@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <chrono>
 
+#include <asio/experimental/promise.hpp>
+#include <asio/experimental/use_promise.hpp>
+
 #include "relay_host/st_parser.hpp"
 
 namespace relay_host {
@@ -15,7 +18,7 @@ constexpr int kCommChannelCapacity = 64;
 
 std::expected<std::unique_ptr<HostHarness>, InitError> HostHarness::try_create(
     ResolvedTaskSpec spec, std::vector<std::pair<std::string, std::string>> st_blocks,
-    Config cfg) {
+    Config cfg, Executor ex) {
     if (st_blocks.size() != spec.plc_ids.size()) {
         return std::unexpected(InitError{
             "host_harness: st_blocks count " + std::to_string(st_blocks.size()) +
@@ -85,49 +88,56 @@ std::expected<std::unique_ptr<HostHarness>, InitError> HostHarness::try_create(
 
     return std::unique_ptr<HostHarness>(
         new HostHarness(std::move(spec), cfg, std::move(table), std::move(blocks),
-                        std::move(*strategy), std::move(*plant), capacity));
+                        std::move(*strategy), std::move(*plant), capacity,
+                        std::move(ex)));
 }
 
 HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
                          std::vector<ValidatedSt> blocks, CommStrategy strategy,
-                         LocalStubPlant plant, std::size_t trace_capacity)
+                         LocalStubPlant plant, std::size_t trace_capacity, Executor ex)
     : spec_(std::move(spec)),
       cfg_(cfg),
       table_(std::move(table)),
       blocks_(std::move(blocks)),
       strategy_(std::move(strategy)),
       plant_(std::move(plant)),
-      bus_(static_cast<std::uint32_t>(spec_.plc_ids.size()), table_.size(),
+      bus_(ex, static_cast<std::uint32_t>(spec_.plc_ids.size()), table_.size(),
            kCommChannelCapacity),
       trace_(trace_capacity),
-      done_chan_(hce::chan<ScanDone>::make(kCommChannelCapacity)) {
+      done_chan_(ex, kCommChannelCapacity),
+      scan_timer_(ex) {
     const std::uint32_t plc_count = static_cast<std::uint32_t>(spec_.plc_ids.size());
     states_.reserve(plc_count);
     clock_chans_.reserve(plc_count);
     for (std::uint32_t index = 0; index < plc_count; ++index) {
         states_.emplace_back(index, &blocks_[index], table_.size());
-        clock_chans_.push_back(hce::chan<SimClock>::make(1));
+        clock_chans_.push_back(std::make_unique<Channel<SimClock>>(ex, 1));
         latest_outputs_.push_back(IOImage::empty());
         prior_outputs_.push_back(IOImage::empty());
     }
 }
 
-hce::co<void> HostHarness::run() {
+Task HostHarness::run() {
+    const Executor ex = co_await asio::this_coro::executor;
     const std::uint32_t plc_count = static_cast<std::uint32_t>(spec_.plc_ids.size());
-    std::vector<hce::awt<void>> joins;
+    std::vector<asio::experimental::promise<void(std::exception_ptr)>> joins;
     joins.reserve(plc_count);
     for (std::uint32_t index = 0; index < plc_count; ++index) {
-        joins.push_back(hce::schedule(run_plc_scan_loop(PlcExecutionContext{
-            index, cfg_.max_scans, cfg_.scan_period_ms, clock_chans_[index], done_chan_,
-            &bus_, &states_[index], &trace_})));
+        joins.push_back(asio::co_spawn(
+            ex,
+            run_plc_scan_loop(PlcExecutionContext{
+                index, cfg_.max_scans, cfg_.scan_period_ms, clock_chans_[index].get(),
+                &done_chan_, &bus_, &states_[index], &trace_}),
+            asio::experimental::use_promise));
     }
 
-    const auto scan_period = std::chrono::duration_cast<hce::chrono::duration>(
+    const auto scan_period = std::chrono::duration_cast<asio::steady_timer::duration>(
         std::chrono::duration<double, std::milli>(cfg_.scan_period_ms));
 
     bool aborted = false;
     for (std::int64_t scan = 0; scan < cfg_.max_scans && !aborted; ++scan) {
-        co_await hce::sleep(scan_period);
+        scan_timer_.expires_after(scan_period);
+        co_await scan_timer_.async_wait(asio::use_awaitable);
 
         const ActuatorState actuator_state = plant_.read_actuators(latest_outputs_);
         const PlantOutputs plant_out = plant_.step(cfg_.scan_period_ms, actuator_state);
@@ -138,9 +148,11 @@ hce::co<void> HostHarness::run() {
         }
 
         for (std::uint32_t index = 0; index < plc_count && !aborted; ++index) {
-            co_await clock_chans_[index].send(clock_);
-            ScanDone done{};
-            if (!co_await done_chan_.recv(done)) {
+            co_await clock_chans_[index]->async_send(asio::error_code{}, clock_,
+                                                     asio::use_awaitable);
+            const auto [done_ec, done] = co_await done_chan_.async_receive(
+                asio::as_tuple(asio::use_awaitable));
+            if (done_ec) {
                 run_error_ = RunError{RunErrorKind::PlcExited, index, std::nullopt};
                 aborted = true;
                 break;
@@ -181,12 +193,12 @@ hce::co<void> HostHarness::run() {
         clock_ = clock_.advance(cfg_.scan_period_ms);
     }
 
-    for (hce::chan<SimClock>& channel : clock_chans_) {
-        channel.close();
+    for (const std::unique_ptr<Channel<SimClock>>& channel : clock_chans_) {
+        channel->close();
     }
     bus_.close();
-    for (hce::awt<void>& join : joins) {
-        co_await std::move(join);
+    for (auto& join : joins) {
+        co_await join(asio::use_awaitable);
     }
     done_chan_.close();
     co_return;

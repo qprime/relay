@@ -7,8 +7,7 @@
 #include <string_view>
 #include <vector>
 
-#include <hce.hpp>
-
+#include "relay_host/async.hpp"
 #include "relay_host/host_harness.hpp"
 #include "relay_host/spec_loader.hpp"
 #include "relay_host/trace.hpp"
@@ -108,15 +107,16 @@ int main(int argc, char** argv) {
         args->trace_capacity,
     };
 
-    auto lifecycle = hce::initialize();
-    auto harness =
-        relay_host::HostHarness::try_create(std::move(*spec), std::move(*st_blocks), cfg);
+    asio::io_context io;
+    auto harness = relay_host::HostHarness::try_create(
+        std::move(*spec), std::move(*st_blocks), cfg, io.get_executor());
     if (!harness) {
         std::cerr << "host_main: " << harness.error().message << "\n";
         return 1;
     }
 
-    relay_host::join_scheduled(hce::schedule((*harness)->run()));
+    asio::co_spawn(io, (*harness)->run(), asio::detached);
+    io.run();
 
     std::ofstream out(args->out_path);
     if (!out) {

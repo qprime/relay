@@ -5,8 +5,7 @@
 #include <span>
 #include <vector>
 
-#include <hce.hpp>
-
+#include "relay_host/async.hpp"
 #include "relay_host/io_image.hpp"
 
 namespace relay_host {
@@ -32,19 +31,19 @@ class CommBuffer {
 
 class CommBus {
  public:
-    CommBus(std::uint32_t plc_count, std::uint32_t signal_count, int channel_capacity);
+    CommBus(Executor ex, std::uint32_t plc_count, std::uint32_t signal_count,
+            int channel_capacity);
 
-    // The reference is captured by the channel until the returned awaitable
-    // completes; the argument must outlive the co_await of the result.
-    [[nodiscard]] hce::awt<bool> send(std::uint32_t to_plc, const Message& msg);
+    [[nodiscard]] asio::awaitable<bool> send(std::uint32_t to_plc, const Message& msg);
+    [[nodiscard]] bool try_send(std::uint32_t to_plc, const Message& msg);
     void begin_drain(std::uint32_t plc_index) noexcept;
     void fold(std::uint32_t plc_index, const Message& msg) noexcept;
-    [[nodiscard]] hce::chan<Message>& channel_of(std::uint32_t plc_index) noexcept;
+    [[nodiscard]] Channel<Message>& channel_of(std::uint32_t plc_index) noexcept;
     [[nodiscard]] const CommBuffer& buffer(std::uint32_t plc_index) const noexcept;
     void close();
 
  private:
-    std::vector<hce::chan<Message>> channels_;
+    std::vector<Channel<Message>> channels_;
     std::vector<CommBuffer> buffers_;
 };
 

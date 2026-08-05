@@ -1,3 +1,0 @@
-[submodule "host/third_party/hermes"]
-	path = host/third_party/hermes
-	url = https://github.com/durandaltheta/hermesconcurrencyengine.git

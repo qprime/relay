@@ -28,18 +28,24 @@ std::span<const std::uint32_t> CommBuffer::present_ids() const noexcept {
     return order_;
 }
 
-CommBus::CommBus(std::uint32_t plc_count, std::uint32_t signal_count,
+CommBus::CommBus(Executor ex, std::uint32_t plc_count, std::uint32_t signal_count,
                  int channel_capacity) {
     channels_.reserve(plc_count);
     buffers_.reserve(plc_count);
     for (std::uint32_t index = 0; index < plc_count; ++index) {
-        channels_.push_back(hce::chan<Message>::make(channel_capacity));
+        channels_.emplace_back(ex, static_cast<std::size_t>(channel_capacity));
         buffers_.emplace_back(signal_count);
     }
 }
 
-hce::awt<bool> CommBus::send(std::uint32_t to_plc, const Message& msg) {
-    return channels_[to_plc].send(msg);
+asio::awaitable<bool> CommBus::send(std::uint32_t to_plc, const Message& msg) {
+    const auto [ec] = co_await channels_[to_plc].async_send(
+        asio::error_code{}, msg, asio::as_tuple(asio::use_awaitable));
+    co_return !ec;
+}
+
+bool CommBus::try_send(std::uint32_t to_plc, const Message& msg) {
+    return channels_[to_plc].try_send(asio::error_code{}, msg);
 }
 
 void CommBus::begin_drain(std::uint32_t plc_index) noexcept {
@@ -50,7 +56,7 @@ void CommBus::fold(std::uint32_t plc_index, const Message& msg) noexcept {
     buffers_[plc_index].set(msg.signal_id, msg.value);
 }
 
-hce::chan<Message>& CommBus::channel_of(std::uint32_t plc_index) noexcept {
+Channel<Message>& CommBus::channel_of(std::uint32_t plc_index) noexcept {
     return channels_[plc_index];
 }
 
@@ -59,7 +65,7 @@ const CommBuffer& CommBus::buffer(std::uint32_t plc_index) const noexcept {
 }
 
 void CommBus::close() {
-    for (hce::chan<Message>& channel : channels_) {
+    for (Channel<Message>& channel : channels_) {
         channel.close();
     }
 }

@@ -5,8 +5,7 @@
 #include <utility>
 #include <vector>
 
-#include <hce.hpp>
-
+#include "relay_host/async.hpp"
 #include "relay_host/host_harness.hpp"
 #include "relay_host/spec_loader.hpp"
 
@@ -63,16 +62,26 @@ inline ResolvedTaskSpec minimal_two_plc_spec() {
     return spec;
 }
 
-inline std::unique_ptr<HostHarness> run_harness(
-    ResolvedTaskSpec spec, std::vector<std::pair<std::string, std::string>> blocks,
-    HostHarness::Config cfg) {
-    auto harness = HostHarness::try_create(std::move(spec), std::move(blocks), cfg);
+struct HarnessRun {
+    std::unique_ptr<asio::io_context> io;
+    std::unique_ptr<HostHarness> harness;
+
+    HostHarness* operator->() const noexcept { return harness.get(); }
+};
+
+inline HarnessRun run_harness(ResolvedTaskSpec spec,
+                              std::vector<std::pair<std::string, std::string>> blocks,
+                              HostHarness::Config cfg) {
+    auto io = std::make_unique<asio::io_context>();
+    auto harness = HostHarness::try_create(std::move(spec), std::move(blocks), cfg,
+                                           io->get_executor());
     if (!harness) {
         throw std::runtime_error("harness_helpers: try_create failed: " +
                                  harness.error().message);
     }
-    join_scheduled(hce::schedule((*harness)->run()));
-    return std::move(*harness);
+    asio::co_spawn(*io, (*harness)->run(), asio::detached);
+    io->run();
+    return HarnessRun{std::move(io), std::move(*harness)};
 }
 
 }  // namespace relay_host::testing

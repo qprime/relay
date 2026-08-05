@@ -11,14 +11,16 @@ issue [#4](https://github.com/qprime/relay/issues/4) for the full design.
 
 ## Build
 
-Requires GCC 13+ or clang 17+ (`std::expected`), CMake ≥ 3.22, and the Hermes
-submodule:
+Requires GCC 13+ or clang 17+ (`std::expected`) and CMake ≥ 3.22:
 
 ```
-git submodule update --init --recursive
 cmake -S host -B host/build -DCMAKE_BUILD_TYPE=Release
 cmake --build host/build -j
 ```
+
+The first configure fetches asio and googletest via `FetchContent` (pinned
+tags) and needs network access; subsequent builds use the populated
+`host/build/_deps` cache.
 
 `-std=c++23` is load-bearing, not a preference. If the build fails with
 `'expected' in namespace 'std' does not name a template type`, the standard flag
@@ -62,9 +64,10 @@ wrong as the reverse. `witness` and `observed_gap_ms` are informational only.
 `simclock_only_time_source` applies in full, not "in spirit". Every value that
 reaches the trace derives from the injected `SimClock`, advanced by exactly
 `scan_period_ms` per scan. The wall clock is read in exactly one place —
-`HostHarness::run` step 1 (`hce::sleep` between scans) — and affects only how
-long the host takes in real time, never trace content. The PLC scan coroutine
-(`run_plc_scan_loop`) contains no sleep and no wall-clock read.
+`HostHarness::run` step 1 (the inter-scan `asio::steady_timer` wait) — and
+affects only how long the host takes in real time, never trace content. The
+PLC scan coroutine (`run_plc_scan_loop`) contains no sleep and no wall-clock
+read.
 
 Within a scan, the harness releases scan executors **sequentially in `plc_ids`
 order** (send clock *i*, await done *i*, then *i+1*). This mirrors Python's
@@ -72,18 +75,18 @@ single-threaded asyncio wakeup, makes FB-path comm delivery same-scan
 producer-before-consumer, and yields trace-append order = `plc_ids` order — the
 property the golden byte-match depends on.
 
-## Hermes coupling
+## Asio coupling
 
-Hermes (`hce`) is vendored as a git submodule at `third_party/hermes/`, pinned to
-a known-good commit, built as C++20; the host is C++23 and links against it.
-Channels return `hce::awt<bool>` (false on closed); `hce::co<T>` is one stack
-frame — sub-coroutines cannot be `co_await`ed directly, which is why the comm
-drain loop lives in the scan-loop coroutine body. Channel `send` captures a
-pointer to its argument until the awaitable completes: arguments must outlive
-the `co_await` of the result (see `CommBus::send`). The library is
-exception-coupled and cannot build `-fno-exceptions`; host scan bodies remain
-exception-free and record failures as `ScanError` in the trace entry, surfaced
-at the scan boundary.
+Standalone asio (pinned via `FetchContent`) supplies the entire concurrency
+vocabulary through `include/relay_host/async.hpp` — `Executor`, `Channel<T>`,
+`Task`; no other header includes asio directly. Everything runs on one
+`asio::io_context` with `run()` called from exactly one thread —
+single-threaded cooperative scheduling, matching Python's asyncio. PLC scan
+loops are spawned with `asio::experimental::use_promise` because it initiates
+eagerly (`use_awaitable` initiation is lazy and would deadlock the capacity-1
+clock handshake); the promises are awaited for join at shutdown. Host scan
+bodies remain exception-free and record failures as `ScanError` in the trace
+entry, surfaced at the scan boundary.
 
 ## Interim assumption register
 

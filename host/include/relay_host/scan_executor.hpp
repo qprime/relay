@@ -5,8 +5,7 @@
 #include <optional>
 #include <vector>
 
-#include <hce.hpp>
-
+#include "relay_host/async.hpp"
 #include "relay_host/clock.hpp"
 #include "relay_host/comm_bus.hpp"
 #include "relay_host/st_eval.hpp"
@@ -53,13 +52,13 @@ struct PlcExecutionContext {
     std::uint32_t plc_index;
     std::int64_t max_scans;
     double scan_period_ms;
-    hce::chan<SimClock> clock_chan;
-    hce::chan<ScanDone> done_chan;
+    Channel<SimClock>* clock_chan;
+    Channel<ScanDone>* done_chan;
     CommBus* bus;
     PlcScanState* state;
     TraceRing* trace;
 };
 
-[[nodiscard]] hce::co<void> run_plc_scan_loop(PlcExecutionContext ctx);
+[[nodiscard]] Task run_plc_scan_loop(PlcExecutionContext ctx);
 
 }  // namespace relay_host

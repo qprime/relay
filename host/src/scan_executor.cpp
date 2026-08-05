@@ -97,19 +97,22 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
     return std::nullopt;
 }
 
-hce::co<void> run_plc_scan_loop(PlcExecutionContext ctx) {
+Task run_plc_scan_loop(PlcExecutionContext ctx) {
     OutgoingBuffer outgoing;
     for (std::int64_t scan = 0; scan < ctx.max_scans; ++scan) {
-        SimClock clock{};
-        if (!co_await ctx.clock_chan.recv(clock)) {
+        const auto [clock_ec, clock] = co_await ctx.clock_chan->async_receive(
+            asio::as_tuple(asio::use_awaitable));
+        if (clock_ec) {
             co_return;
         }
         ctx.bus->begin_drain(ctx.plc_index);
-        Message msg{};
         while (true) {
-            const hce::channel::result received =
-                co_await ctx.bus->channel_of(ctx.plc_index).try_recv(msg);
-            if (received != hce::channel::success) {
+            Message msg{};
+            const bool received = ctx.bus->channel_of(ctx.plc_index)
+                                      .try_receive([&](asio::error_code, Message m) {
+                                          msg = m;
+                                      });
+            if (!received) {
                 break;
             }
             ctx.bus->fold(ctx.plc_index, msg);
@@ -119,14 +122,18 @@ hce::co<void> run_plc_scan_loop(PlcExecutionContext ctx) {
             execute_one_scan(*ctx.state, ctx.bus->buffer(ctx.plc_index), clock,
                              ctx.scan_period_ms, entry, outgoing);
         if (error.has_value()) {
-            co_await ctx.done_chan.send(ScanDone{ctx.plc_index, false, *error});
+            co_await ctx.done_chan->async_send(asio::error_code{},
+                                               ScanDone{ctx.plc_index, false, *error},
+                                               asio::as_tuple(asio::use_awaitable));
             co_return;
         }
         for (std::uint32_t index = 0; index < outgoing.count; ++index) {
             const OutgoingMessage& message = outgoing.items[index];
             co_await ctx.bus->send(message.target_plc, message.msg);
         }
-        co_await ctx.done_chan.send(ScanDone{ctx.plc_index, true, std::nullopt});
+        co_await ctx.done_chan->async_send(asio::error_code{},
+                                           ScanDone{ctx.plc_index, true, std::nullopt},
+                                           asio::as_tuple(asio::use_awaitable));
     }
     co_return;
 }
