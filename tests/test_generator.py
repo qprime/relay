@@ -108,6 +108,44 @@ def _issues_for(spec: TaskSpec) -> list[str]:
     return exc.value.issues
 
 
+class TestCausesValidationOnGeneratorPath:
+    """`generate_spec` builds a TaskSpec directly and validates via
+    `validate_spec`, never through `load_spec`. CAUSES rules must hold on the
+    LLM-authored path too, or the check guards only hand-written specs."""
+
+    def test_rejects_causes_on_a_plant_routed_cause(self):
+        spec = _minimal_spec(
+            **{"Assertions": ["CAUSES(part_at_b, belt_b_enable)"]}
+        )
+        issues = _issues_for(spec)
+        assert any("part_at_b" in i and "Comm.tags" in i for i in issues), issues
+
+    def test_rejects_self_causing_assertion(self):
+        spec = _minimal_spec(**{"Assertions": ["CAUSES(t, t)"]})
+        issues = _issues_for(spec)
+        assert any("cannot cause itself" in i for i in issues), issues
+
+    def test_accepts_causes_on_a_declared_tag(self):
+        spec = _minimal_spec(
+            **{
+                "Assertions": [
+                    "EVENTUALLY(part_at_b, within: 500ms)",
+                    "CAUSES(t, belt_b_enable)",
+                ]
+            }
+        )
+        validate_spec(spec)
+
+    def test_unrecognized_form_message_names_all_three_forms(self):
+        """An agent extending assertion validation reads this message; naming
+        only two forms teaches that CAUSES is unsupported."""
+        spec = _minimal_spec(**{"Assertions": ["SOMETIMES(a, b)"]})
+        issues = _issues_for(spec)
+        message = next(i for i in issues if "not a recognized form" in i)
+        for form in ("EVENTUALLY", "PRECEDES", "CAUSES"):
+            assert form in message, message
+
+
 class TestBehaviorSchema:
     def test_accepts_minimal_rising_latched_trigger(self):
         validate_spec(_minimal_spec())

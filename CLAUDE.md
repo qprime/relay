@@ -61,8 +61,9 @@ NL intent → task spec YAML → ST function blocks → deterministic scan-cycle
 | trace log | Scan-by-scan record of I/O snapshots and outputs for all PLCs |
 | EVENTUALLY | Assertion: signal becomes true within N ms from simulation start |
 | PRECEDES | Assertion: signal A becomes true no later than signal B, and within a required time budget (`within: Nms`). Ordering is non-strict — same-scan is a pass, since within one scan there is no observable ordering — but a gap larger than the budget fails. The observed gap is reported on every evaluation, pass or fail |
-| CAUSES | Assertion: signal B's first activation is attributable to a received message carrying signal A, matched by a per-sender cumulative send counter recorded at both ends of the trace. Takes no budget — it reads no clock on the pass/fail path, which is what lets it survive the move off lockstep. Only declared `Comm.tags` may be the cause; plant-routed signals carry no attributable sender |
-| send counter | Per-sender, per-key cumulative count of send events, carried on the message and recorded in `ScanRecord.sends`/`recvs`. Message identity in program order — never derived from SimClock |
+| CAUSES | Assertion: signal B's first activation is attributable to a received message carrying signal A. Takes no budget — it reads no clock on the pass/fail path, which is what lets it survive the move off lockstep. Only declared `Comm.tags` may be the cause; plant-routed signals carry no sender and are unattributable |
+| receipt | What a message carried, recorded where it was delivered: `(sender, seq, value)` in `ScanRecord.recvs`. Attribution reads all three from here rather than re-deriving them from the trace's merged signal view, which can neither say who sent a message nor what it delivered. `sender` is None for plant- and strategy-routed messages |
+| send counter | Per-sender, per-key cumulative count of send events, carried on the message and recorded in `ScanRecord.sends`. Sequence numbers are only meaningful within one sender's space — matching them across senders is not attribution. Never derived from SimClock |
 
 ## Skill Routing
 

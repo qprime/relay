@@ -5,7 +5,7 @@ from typing import Any, TextIO
 
 from relay.clock import SimClock
 from relay.io_image import IOImage
-from relay.trace import ScanRecord, TraceLog
+from relay.trace import Receipt, ScanRecord, TraceLog
 
 
 ALLOWED_VALUE_TYPES = (bool, int, float)
@@ -34,8 +34,31 @@ def record_to_dict(record: ScanRecord) -> dict[str, Any]:
         "io_snapshot": _check_values(dict(record.io.values), "io_snapshot"),
         "outputs": _check_values(dict(record.outputs.values), "outputs"),
         "sends": _check_values(dict(record.sends), "sends"),
-        "recvs": _check_values(dict(record.recvs), "recvs"),
+        "recvs": {
+            key: _receipt_to_dict(key, receipt)
+            for key, receipt in record.recvs.items()
+        },
     }
+
+
+def _receipt_to_dict(key: str, receipt: Receipt) -> dict[str, Any]:
+    _check_values({key: receipt.value}, "recvs")
+    return {"sender": receipt.sender, "seq": int(receipt.seq), "value": receipt.value}
+
+
+def _receipt_from_dict(key: str, data: Any) -> Receipt:
+    if not isinstance(data, dict):
+        raise TypeError(
+            f"recvs entry {key!r} is a {type(data).__name__}, not an object with "
+            "'sender', 'seq', and 'value'"
+        )
+    sender = data["sender"]
+    if sender is not None and not isinstance(sender, str):
+        raise TypeError(
+            f"recvs entry {key!r} has sender of type {type(sender).__name__}; "
+            "expected a plc_id string or null"
+        )
+    return Receipt(sender=sender, seq=int(data["seq"]), value=data["value"])
 
 
 def record_from_dict(data: dict[str, Any]) -> ScanRecord:
@@ -45,7 +68,7 @@ def record_from_dict(data: dict[str, Any]) -> ScanRecord:
         io=IOImage(values=data["io_snapshot"]),
         outputs=IOImage(values=data["outputs"]),
         sends={k: int(v) for k, v in data["sends"].items()},
-        recvs={k: int(v) for k, v in data["recvs"].items()},
+        recvs={k: _receipt_from_dict(k, v) for k, v in data["recvs"].items()},
     )
 
 

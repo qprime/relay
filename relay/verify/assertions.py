@@ -121,16 +121,28 @@ def _check_causes(
     """CAUSES asserts attribution, not timing: `effect`'s first activation must be
     explainable by a message carrying `cause` that the acting PLC actually received.
 
-    The claim is established by matching a per-sender, per-key cumulative send
-    count recorded at both ends of the trace, so no clock is read on the pass/fail
-    path. That is what makes it survive the move off lockstep simulation: two
-    physical PLCs share no scan boundary and no clock, but a counter carried on
-    the message is identity that travels with it.
+    The claim rests on message identity recorded where the message was delivered:
+    each receipt carries the sender, that sender's per-key sequence number, and
+    the value the message actually delivered. No clock is read on the pass/fail
+    path, which is what makes the form survive the move off lockstep simulation —
+    two physical PLCs share no scan boundary and no clock, but identity carried
+    on a message travels with it.
 
-    A receipt only counts as activating if it carried a truthy value. A producer
-    that sends every scan — the conveyor's actual shape — delivers `False`
-    messages long before the real handoff, and binding to the first receipt of
-    any value would attribute the effect to a message that said nothing happened.
+    Every part of the claim is read from the receipt rather than re-derived from
+    the trace's merged signal view, because that view cannot answer either
+    question. `_signal_value` prefers `outputs` over `io`, so an output sharing
+    the tag's name would shadow a `False` delivery and manufacture an activation.
+    Sequence numbers are per-sender, so two senders of one key have overlapping
+    number spaces and searching for a matching count can land on a PLC that never
+    sent to this consumer at all.
+
+    A receipt only activates if the delivered value was truthy. A producer that
+    sends every scan — the conveyor's actual shape — delivers `False` long before
+    the real handoff, and binding to the first receipt of any value would
+    attribute the effect to a message that said nothing happened.
+
+    Plant-routed and strategy-routed messages record no sender, so they are
+    unattributable by construction rather than by failing to find a match.
 
     Same-scan receipt and action passes: promotion precedes execution within a
     scan, so a tag that arrives and is acted on in one scan is a causal chain,
@@ -147,17 +159,13 @@ def _check_causes(
         )
 
     plc_id = acting.plc_id
-    receipts = [
-        r
-        for r in trace.for_plc(plc_id)
-        if cause in r.recvs and _signal_value(r, cause)
-    ]
+    on_plc = trace.for_plc(plc_id)
+    receipts = [r for r in on_plc if cause in r.recvs and r.recvs[cause].value]
     activating = next(
         (r for r in receipts if r.clock.tick <= acting.clock.tick), None
     )
     if activating is None:
-        any_receipt = any(cause in r.recvs for r in trace.for_plc(plc_id))
-        if not any_receipt:
+        if not any(cause in r.recvs for r in on_plc):
             reason = (
                 f"'{effect}' became true on '{plc_id}' at tick {acting.clock.tick} "
                 f"but '{cause}' was never received there"
@@ -175,17 +183,37 @@ def _check_causes(
             )
         return AssertionResult(assertion=assertion, passed=False, reason=reason)
 
-    seq = activating.recvs[cause]
+    receipt = activating.recvs[cause]
+    if receipt.sender is None:
+        return AssertionResult(
+            assertion=assertion,
+            passed=False,
+            reason=(
+                f"'{cause}' received on '{plc_id}' at tick {activating.clock.tick} "
+                "records no sender; plant-routed and strategy-routed signals are "
+                "not attributable"
+            ),
+        )
+
+    # Identity is already settled by receipt.sender; this locates which of that
+    # sender's scans emitted the seq. `sends` records the scan's high-water count,
+    # so a multi-consumer tag emitting two messages of one key in a single scan
+    # stores only the last — hence `>=` rather than exact match.
     sender = next(
-        (r for r in trace.records if r.sends.get(cause, 0) >= seq), None
+        (
+            r
+            for r in trace.for_plc(receipt.sender)
+            if r.sends.get(cause, 0) >= receipt.seq
+        ),
+        None,
     )
     if sender is None:
         return AssertionResult(
             assertion=assertion,
             passed=False,
             reason=(
-                f"'{cause}' receipt seq {seq} on '{plc_id}' has no recorded send; "
-                "plant-routed and strategy-routed signals are not attributable"
+                f"'{cause}' receipt seq {receipt.seq} on '{plc_id}' claims sender "
+                f"'{receipt.sender}', which recorded no such send"
             ),
         )
 
@@ -194,7 +222,7 @@ def _check_causes(
         passed=True,
         reason=(
             f"'{effect}' true on '{plc_id}' at tick {acting.clock.tick} is caused by "
-            f"'{cause}' seq {seq} sent by '{sender.plc_id}' at tick "
+            f"'{cause}' seq {receipt.seq} sent by '{receipt.sender}' at tick "
             f"{sender.clock.tick} and received at tick {activating.clock.tick}"
         ),
     )

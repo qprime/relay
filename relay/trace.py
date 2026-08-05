@@ -8,13 +8,30 @@ from relay.io_image import IOImage
 
 
 @dataclass(frozen=True)
+class Receipt:
+    """What a message carried, recorded where it was delivered.
+
+    Attribution needs message identity, not just a counter: `sender` says whose
+    per-sender seq space `seq` belongs to, and `value` is what the message
+    actually delivered — neither can be re-derived from the trace's merged
+    signal view without guessing. `sender` is None for plant-routed and
+    strategy-routed messages, which have no PLC sender and are therefore not
+    attributable.
+    """
+
+    sender: str | None
+    seq: int
+    value: Any
+
+
+@dataclass(frozen=True)
 class ScanRecord:
     plc_id: str
     clock: SimClock
     io: IOImage
     outputs: IOImage
     sends: Mapping[str, int] = field(default_factory=dict)
-    recvs: Mapping[str, int] = field(default_factory=dict)
+    recvs: Mapping[str, Receipt] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for name in ("sends", "recvs"):

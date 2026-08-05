@@ -105,7 +105,7 @@ async def simulate(
     async def _harness_send(target: str, key: str, value: Any) -> None:
         seq = harness_send_counts.get(key, 0) + 1
         harness_send_counts[key] = seq
-        await bus.send(target, key, value, seq)
+        await bus.send(target, key, value, None, seq)
 
     async def _await_done_or_failure() -> None:
         get_task = asyncio.create_task(done_queue.get())

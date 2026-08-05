@@ -38,8 +38,13 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
             entry.error = ScanError{ScanErrorKind::CellOverflow, signal_id};
             return entry.error;
         }
-        entry.recv_slots[entry.recv_count] =
-            SeqSlot{signal_id, comm.seq_of(signal_id)};
+        const std::optional<Receipt> receipt = comm.receipt_of(signal_id);
+        const std::optional<Cell> delivered = comm.get(signal_id);
+        if (!receipt.has_value() || !delivered.has_value()) {
+            continue;
+        }
+        entry.recv_slots[entry.recv_count] = ReceiptSlot{
+            signal_id, receipt->sender_plc, receipt->seq, *delivered};
         ++entry.recv_count;
     }
     for (std::uint32_t signal_id = 0; signal_id < state.io_cells.size(); ++signal_id) {
@@ -82,7 +87,8 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
                 }
                 const std::int64_t seq = ++state.send_counts[binding.signal_id];
                 outgoing.items[outgoing.count] = OutgoingMessage{
-                    binding.send_target_plc, Message{binding.signal_id, value, seq}};
+                    binding.send_target_plc,
+                    Message{binding.signal_id, value, state.plc_index, seq}};
                 ++outgoing.count;
                 entry.send_slots[entry.send_count] = SeqSlot{binding.signal_id, seq};
                 ++entry.send_count;

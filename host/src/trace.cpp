@@ -109,6 +109,42 @@ std::string format_seqs_object(std::span<const SeqSlot> slots, const SignalTable
     return out;
 }
 
+std::expected<std::string, DumpError> format_receipts_object(
+    std::span<const ReceiptSlot> slots, const SignalTable& table,
+    std::span<const std::string> plc_ids, std::int64_t tick) {
+    std::vector<std::pair<std::string, const ReceiptSlot*>> named;
+    named.reserve(slots.size());
+    for (const ReceiptSlot& slot : slots) {
+        named.emplace_back(table.name_of(slot.signal_id), &slot);
+    }
+    std::sort(named.begin(), named.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+    std::string out = "{";
+    bool first = true;
+    for (const auto& [name, slot] : named) {
+        const FormattedCell formatted = format_cell(slot->value);
+        if (!formatted.ok) {
+            return std::unexpected(DumpError{
+                "trace: recvs signal '" + name + "' at tick " + std::to_string(tick) +
+                " is non-finite, which JSON cannot represent portably; signal values "
+                "must be finite"});
+        }
+        if (!first) {
+            out += ", ";
+        }
+        first = false;
+        const std::string sender =
+            slot->sender_plc == kNoSender
+                ? std::string("null")
+                : escape_json_string(plc_ids[slot->sender_plc]);
+        out += escape_json_string(name) + ": {\"sender\": " + sender +
+               ", \"seq\": " + std::to_string(slot->seq) +
+               ", \"value\": " + formatted.text + "}";
+    }
+    out += "}";
+    return out;
+}
+
 }  // namespace
 
 std::string describe(const ScanError& error, const SignalTable& table) {
@@ -230,15 +266,19 @@ std::expected<void, DumpError> TraceRing::dump_to_jsonl(
         if (!outputs_object) {
             return std::unexpected(outputs_object.error());
         }
-        const std::string recvs_object = format_seqs_object(
-            std::span(entry.recv_slots.data(), entry.recv_count), table);
+        auto recvs_object = format_receipts_object(
+            std::span(entry.recv_slots.data(), entry.recv_count), table, plc_ids,
+            entry.clock.tick);
+        if (!recvs_object) {
+            return std::unexpected(recvs_object.error());
+        }
         const std::string sends_object = format_seqs_object(
             std::span(entry.send_slots.data(), entry.send_count), table);
         stream << "{\"elapsed_ms\": " << format_json_double(entry.clock.elapsed_ms)
                << ", \"io_snapshot\": " << *io_object
                << ", \"outputs\": " << *outputs_object
                << ", \"plc_id\": " << escape_json_string(plc_ids[entry.plc_index])
-               << ", \"recvs\": " << recvs_object
+               << ", \"recvs\": " << *recvs_object
                << ", \"sends\": " << sends_object
                << ", \"tick\": " << entry.clock.tick << "}\n";
     }

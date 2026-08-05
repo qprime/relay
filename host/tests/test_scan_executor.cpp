@@ -85,7 +85,7 @@ TEST(TestScanExecutor, test_no_allocation_in_scan_body) {
 
     PlcScanState state(0, &*block, table.size());
     CommBuffer comm(table.size());
-    comm.set(*table.find_id("sensor_a_exit"), Cell{true}, 1);
+    comm.set(*table.find_id("sensor_a_exit"), Cell{true}, kNoSender, 1);
     ScanTraceEntry entry{};
     OutgoingBuffer outgoing;
     SimClock clock = SimClock::zero();

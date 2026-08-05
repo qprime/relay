@@ -90,18 +90,46 @@ class TestCausesConveyor:
         acting = next(
             r for r in trace.for_plc("plc_b") if r.outputs.get("belt_b_enable")
         )
+        receipt = acting.recvs["handoff_signal"]
         result = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", trace)
         assert result.passed, result.reason
-        assert f"seq {acting.recvs['handoff_signal']}" in result.reason
-        assert acting.recvs["handoff_signal"] > 1, (
+        assert f"seq {receipt.seq}" in result.reason
+        assert receipt.seq > 1, (
             "attribution bound to the first send; the activating message is later"
         )
+        assert receipt.sender == "plc_a"
+        assert receipt.value is True
 
     def test_silenced_producer_fails_causes(self):
         spec, blocks = _load_spec_and_blocks(silence_plc_a=True)
         trace = asyncio.run(simulate(spec, blocks))
         result = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", trace)
         assert not result.passed
+
+    def test_plant_routed_receipts_carry_no_sender_in_a_live_trace(self):
+        """The senderless path is exercised end-to-end by crafted traces; here
+        the point is that a live plant route really does record sender None,
+        so nothing downstream can attribute one to a PLC."""
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        plant_routed = [
+            (r.plc_id, key, receipt)
+            for r in trace.records
+            for key, receipt in r.recvs.items()
+            if key in ("part_at_b", "sensor_a_exit")
+        ]
+        assert plant_routed, "expected plant-routed receipts in the conveyor trace"
+        assert all(receipt.sender is None for _, _, receipt in plant_routed)
+
+        tag_routed = [
+            receipt
+            for r in trace.records
+            for key, receipt in r.recvs.items()
+            if key == "handoff_signal"
+        ]
+        assert tag_routed and all(r.sender == "plc_a" for r in tag_routed), (
+            "tag-routed receipts must name their producer"
+        )
 
     def test_causes_verdict_survives_jsonl_round_trip(self):
         import io as io_module

@@ -145,8 +145,9 @@ Task HostHarness::run() {
         for (const RoutedPlantSignal& routed :
              plant_.route_to_plcs(plant_out, prior_plant_out_)) {
             const std::int64_t seq = ++harness_send_counts_[routed.signal_id];
-            co_await bus_.send(routed.to_plc_index,
-                               Message{routed.signal_id, routed.value, seq});
+            co_await bus_.send(
+                routed.to_plc_index,
+                Message{routed.signal_id, routed.value, kNoSender, seq});
         }
 
         for (std::uint32_t index = 0; index < plc_count && !aborted; ++index) {
@@ -186,8 +187,9 @@ Task HostHarness::run() {
                 strategy_);
             for (const Routed& message : routed) {
                 const std::int64_t seq = ++harness_send_counts_[message.signal_id];
-                co_await bus_.send(message.consumer_index,
-                                   Message{message.signal_id, message.value, seq});
+                co_await bus_.send(
+                    message.consumer_index,
+                    Message{message.signal_id, message.value, kNoSender, seq});
             }
         }
 

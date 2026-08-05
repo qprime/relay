@@ -20,7 +20,7 @@ from relay.strategies.plant import (
     get_plant,
     get_plant_prompt_fragment,
 )
-from relay.strategies.assertions import parse_assertion
+from relay.strategies.assertions import causes_issues, parse_assertion
 
 
 _PREAMBLE = """\
@@ -198,9 +198,13 @@ def validate_spec(spec: TaskSpec) -> None:
             if parse_assertion(a) is None:
                 issues.append(
                     f"Assertions[{i}] {a!r} is not a recognized form "
-                    "(use EVENTUALLY(signal, within: Nms) or "
-                    "PRECEDES(a, b, within: Nms); both budgets are required)"
+                    "(use EVENTUALLY(signal, within: Nms), "
+                    "PRECEDES(a, b, within: Nms), or CAUSES(cause, effect); "
+                    "the budget is required on the first two and rejected on CAUSES)"
                 )
+        issues.extend(
+            causes_issues(assertions, comm_block if isinstance(comm_block, dict) else {})
+        )
 
     _validate_assertion_coverage(spec, emit_targets, issues)
 

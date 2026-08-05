@@ -12,7 +12,7 @@ from relay.io_image import IOImage
 from relay.runtime.harness import simulate
 from relay.spec.schema import load_spec
 from relay.strategies.assertions import parse_assertion
-from relay.trace import ScanRecord, TraceLog
+from relay.trace import Receipt, ScanRecord, TraceLog
 from relay.trace_io import dump_jsonl, load_jsonl, record_from_dict, record_to_dict
 from relay.verify.assertions import evaluate_all
 
@@ -122,16 +122,44 @@ class TestTraceIOFormat:
                 "recvs",
             }
 
-    def test_sends_and_recvs_round_trip_as_ints(self):
+    def test_sends_and_recvs_round_trip(self):
         _, trace = _conveyor_spec_and_trace()
         restored = _round_trip(trace)
         for original, loaded in zip(trace.records, restored.records):
             assert dict(loaded.sends) == dict(original.sends)
             assert dict(loaded.recvs) == dict(original.recvs)
-            for value in (*loaded.sends.values(), *loaded.recvs.values()):
-                assert isinstance(value, int) and not isinstance(value, bool)
+            for seq in loaded.sends.values():
+                assert isinstance(seq, int) and not isinstance(seq, bool)
+            for receipt in loaded.recvs.values():
+                assert isinstance(receipt.seq, int)
+                assert receipt.sender is None or isinstance(receipt.sender, str)
         assert any(r.sends for r in restored.records), "no send was recorded to compare"
         assert any(r.recvs for r in restored.records), "no receipt was recorded to compare"
+
+    def test_receipt_carries_sender_and_delivered_value(self):
+        """Attribution needs identity on the receipt, not just a counter: the
+        merged signal view cannot say who sent it or what it delivered."""
+        _, trace = _conveyor_spec_and_trace()
+        acting = next(
+            r for r in _round_trip(trace).for_plc("plc_b")
+            if r.outputs.get("belt_b_enable")
+        )
+        receipt = acting.recvs["handoff_signal"]
+        assert receipt.sender == "plc_a"
+        assert receipt.value is True
+        assert receipt.seq > 1
+
+    def test_plant_routed_receipt_records_no_sender(self):
+        _, trace = _conveyor_spec_and_trace()
+        received = [
+            r.recvs["part_at_b"]
+            for r in _round_trip(trace).for_plc("plc_b")
+            if "part_at_b" in r.recvs
+        ]
+        assert received, "expected plant-routed part_at_b receipts"
+        assert all(r.sender is None for r in received), (
+            "plant-routed messages have no PLC sender and must serialize as null"
+        )
 
     def test_key_order_does_not_affect_bytes(self):
         def _record(values):
@@ -242,18 +270,69 @@ class TestTraceIOTypes:
     def test_seq_counters_load_as_ints(self):
         record = record_from_dict(
             {
-                "plc_id": "plc_a",
-                "tick": 10,
-                "elapsed_ms": 100.0,
-                "io_snapshot": {},
-                "outputs": {},
+                **_MINIMAL_RECORD,
                 "sends": {"handoff_signal": 11.0},
-                "recvs": {"sensor_a_exit": 1.0},
+                "recvs": {
+                    "sensor_a_exit": {"sender": None, "seq": 1.0, "value": True}
+                },
             }
         )
         assert record.sends["handoff_signal"] == 11
         assert isinstance(record.sends["handoff_signal"], int)
-        assert isinstance(record.recvs["sensor_a_exit"], int)
+        assert isinstance(record.recvs["sensor_a_exit"].seq, int)
+
+    @pytest.mark.parametrize("missing", ["sender", "seq", "value"])
+    def test_receipt_missing_field_raises_naming_key(self, missing):
+        full = {"sender": "plc_a", "seq": 1, "value": True}
+        with pytest.raises(KeyError) as exc:
+            _load_from_text(
+                json.dumps(
+                    {
+                        **_MINIMAL_RECORD,
+                        "recvs": {
+                            "tag": {k: v for k, v in full.items() if k != missing}
+                        },
+                    }
+                )
+                + "\n"
+            )
+        assert missing in str(exc.value)
+
+    def test_scalar_receipt_is_rejected(self):
+        """The counter-only shape carries no sender or delivered value, so a
+        trace written to it cannot support attribution — reject, don't coerce."""
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(
+                json.dumps({**_MINIMAL_RECORD, "recvs": {"tag": 3}}) + "\n"
+            )
+        assert "not an object" in str(exc.value)
+
+    def test_non_string_sender_is_rejected(self):
+        with pytest.raises(ValueError) as exc:
+            _load_from_text(
+                json.dumps(
+                    {
+                        **_MINIMAL_RECORD,
+                        "recvs": {"tag": {"sender": 7, "seq": 1, "value": True}},
+                    }
+                )
+                + "\n"
+            )
+        assert "sender" in str(exc.value)
+
+    def test_unserializable_delivered_value_raises_at_dump(self):
+        trace = TraceLog([
+            ScanRecord(
+                plc_id="plc_b",
+                clock=SimClock(tick=0, elapsed_ms=0.0),
+                io=IOImage.empty(),
+                outputs=IOImage.empty(),
+                recvs={"tag": Receipt(sender="plc_a", seq=1, value="running")},
+            )
+        ])
+        with pytest.raises(TypeError) as exc:
+            _dump_to_text(trace)
+        assert "tag" in str(exc.value)
 
 
 class TestGoldenTrace:

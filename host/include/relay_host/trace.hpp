@@ -18,6 +18,10 @@ namespace relay_host {
 
 inline constexpr std::size_t kMaxCellsPerScan = 64;
 
+// Plant-routed and strategy-routed messages have no PLC sender; a receipt
+// carrying this sentinel serializes as null and is unattributable by CAUSES.
+inline constexpr std::uint32_t kNoSender = 0xFFFFFFFFu;
+
 struct CellSlot {
     std::uint32_t signal_id;
     Cell value;
@@ -26,6 +30,13 @@ struct CellSlot {
 struct SeqSlot {
     std::uint32_t signal_id;
     std::int64_t seq;
+};
+
+struct ReceiptSlot {
+    std::uint32_t signal_id;
+    std::uint32_t sender_plc;
+    std::int64_t seq;
+    Cell value;
 };
 
 enum class ScanErrorKind {
@@ -52,7 +63,7 @@ struct ScanTraceEntry {
     std::array<CellSlot, kMaxCellsPerScan> input_cells;
     std::array<CellSlot, kMaxCellsPerScan> output_cells;
     std::array<SeqSlot, kMaxCellsPerScan> send_slots;
-    std::array<SeqSlot, kMaxCellsPerScan> recv_slots;
+    std::array<ReceiptSlot, kMaxCellsPerScan> recv_slots;
     std::optional<ScanError> error;
 };
 

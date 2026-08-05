@@ -48,7 +48,7 @@ class PLCCoroutine:
                 seq = send_counts.get(key, 0) + 1
                 send_counts[key] = seq
                 sends[key] = seq
-                await bus.send(target_plc, key, value, seq)
+                await bus.send(target_plc, key, value, self.plc_id, seq)
 
             for key, value in outputs.values.items():
                 io = io.with_value(key, value)
@@ -60,7 +60,7 @@ class PLCCoroutine:
                     io=snapshot,
                     outputs=outputs,
                     sends=sends,
-                    recvs=dict(comm.counters),
+                    recvs=dict(comm.receipts),
                 )
             )
             await scan_done.put(None)

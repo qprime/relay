@@ -6,7 +6,7 @@ import relay.verify.assertions as verify_assertions
 from relay.clock import SimClock
 from relay.io_image import IOImage
 from relay.strategies.assertions import ParsedAssertion, parse_assertion
-from relay.trace import ScanRecord, TraceLog
+from relay.trace import Receipt, ScanRecord, TraceLog
 from relay.verify.assertions import evaluate_assertion
 
 
@@ -211,7 +211,8 @@ class TestCausesGrammar:
 
 
 def _causal_trace(*scans) -> TraceLog:
-    """Build a two-PLC trace. Each scan is (plc_id, outputs, sends, recvs)."""
+    """Build a multi-PLC trace. Each scan is (plc_id, outputs, sends, recvs),
+    where recvs maps signal -> Receipt as `_recv` builds them."""
     trace = TraceLog()
     ticks: dict[str, int] = {}
     for plc_id, outputs, sends, recvs in scans:
@@ -221,24 +222,29 @@ def _causal_trace(*scans) -> TraceLog:
             ScanRecord(
                 plc_id=plc_id,
                 clock=SimClock(tick=tick, elapsed_ms=tick * 10.0),
-                io=IOImage(values=dict(recvs.get("values", {}))),
+                io=IOImage(values={k: r.value for k, r in recvs.items()}),
                 outputs=IOImage(values=outputs),
                 sends=sends,
-                recvs=recvs.get("seqs", {}),
+                recvs=recvs,
             )
         )
     return trace
 
 
-def _recv(seqs, **values):
-    return {"seqs": seqs, "values": values}
+def _recv(**receipts):
+    """signal=(sender, seq, value) -> {signal: Receipt}. sender None models a
+    plant-routed or strategy-routed message, which carries no PLC sender."""
+    return {
+        key: Receipt(sender=sender, seq=seq, value=value)
+        for key, (sender, seq, value) in receipts.items()
+    }
 
 
 class TestCausesSemantics:
     def test_same_scan_receipt_and_action_passes(self):
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 1}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({"tag": 1}, tag=True)),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=("plc_a", 1, True))),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert result.passed, result.reason
@@ -246,18 +252,18 @@ class TestCausesSemantics:
 
     def test_later_scan_action_passes(self):
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 1}, _recv({})),
-            ("plc_b", {}, {}, _recv({"tag": 1}, tag=True)),
-            ("plc_a", {}, {}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({}, tag=True)),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {}, {}, _recv(tag=("plc_a", 1, True))),
+            ("plc_a", {}, {}, {}),
+            ("plc_b", {"effect": True}, {}, {}),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert result.passed, result.reason
 
     def test_effect_never_true_fails(self):
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 1}, _recv({})),
-            ("plc_b", {"effect": False}, {}, _recv({"tag": 1}, tag=True)),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {"effect": False}, {}, _recv(tag=("plc_a", 1, True))),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert not result.passed
@@ -268,10 +274,10 @@ class TestCausesSemantics:
         anywhere in the trace — passes this. It must fail: the effect fired
         before any message could have caused it."""
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 1}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({})),
-            ("plc_a", {}, {"tag": 2}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({"tag": 2}, tag=True)),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {"effect": True}, {}, {}),
+            ("plc_a", {}, {"tag": 2}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=("plc_a", 2, True))),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert not result.passed
@@ -282,12 +288,12 @@ class TestCausesSemantics:
         False until the real event. Binding to the first receipt of any value
         would attribute the effect to a message that said nothing happened."""
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 1}, _recv({})),
-            ("plc_b", {}, {}, _recv({"tag": 1}, tag=False)),
-            ("plc_a", {}, {"tag": 2}, _recv({})),
-            ("plc_b", {}, {}, _recv({"tag": 2}, tag=False)),
-            ("plc_a", {}, {"tag": 3}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({"tag": 3}, tag=True)),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {}, {}, _recv(tag=("plc_a", 1, False))),
+            ("plc_a", {}, {"tag": 2}, {}),
+            ("plc_b", {}, {}, _recv(tag=("plc_a", 2, False))),
+            ("plc_a", {}, {"tag": 3}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=("plc_a", 3, True))),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert result.passed, result.reason
@@ -295,10 +301,30 @@ class TestCausesSemantics:
             "attribution must bind to the truthy message, not the first False one"
         )
 
+    def test_output_named_like_the_tag_cannot_fake_activation(self):
+        """WRONG-IMPL CATCHER: `_signal_value` prefers `outputs` over `io`, so an
+        evaluator re-deriving the receipt's value from the merged signal view
+        treats a False delivery as activating whenever the acting PLC writes an
+        output of the same name. The delivered value must come from the receipt."""
+        trace = _causal_trace(
+            ("plc_a", {}, {"tag": 1}, {}),
+            (
+                "plc_b",
+                {"tag": True, "effect": True},
+                {},
+                _recv(tag=("plc_a", 1, False)),
+            ),
+        )
+        result = evaluate_assertion("CAUSES(tag, effect)", trace)
+        assert not result.passed, (
+            "a False delivery shadowed by a same-named output must not activate"
+        )
+        assert "false value" in result.reason
+
     def test_cause_never_received_on_acting_plc_fails(self):
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 1}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({})),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {"effect": True}, {}, {}),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert not result.passed
@@ -306,32 +332,70 @@ class TestCausesSemantics:
 
     def test_receipts_all_false_fails_with_distinct_reason(self):
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 1}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({"tag": 1}, tag=False)),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=("plc_a", 1, False))),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert not result.passed
         assert "false value" in result.reason
 
-    def test_unmatched_seq_fails_with_send_hint(self):
-        """A receipt whose seq exceeds every recorded send — the plant-routed
-        and strategy-routed case, which carries no attributable sender."""
+    def test_senderless_receipt_is_unattributable(self):
+        """Plant-routed and strategy-routed messages carry no sender, so they
+        fail by construction rather than by failing to find a matching count."""
         trace = _causal_trace(
-            ("plc_a", {}, {}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({"tag": 7}, tag=True)),
+            ("plc_a", {}, {}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=(None, 7, True))),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert not result.passed
-        assert "no recorded send" in result.reason
+        assert "records no sender" in result.reason
         assert "not attributable" in result.reason
+
+    def test_sender_that_recorded_no_such_send_fails(self):
+        trace = _causal_trace(
+            ("plc_a", {}, {}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=("plc_a", 7, True))),
+        )
+        result = evaluate_assertion("CAUSES(tag, effect)", trace)
+        assert not result.passed
+        assert "recorded no such send" in result.reason
+
+    def test_colliding_seq_from_another_sender_is_not_attributed(self):
+        """WRONG-IMPL CATCHER: counters are per-sender, so seq spaces overlap.
+        An evaluator searching all records for a matching count attributes this
+        to plc_y, which never sent to plc_b at all."""
+        trace = _causal_trace(
+            ("plc_y", {}, {"tag": 1}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=(None, 1, True))),
+        )
+        result = evaluate_assertion("CAUSES(tag, effect)", trace)
+        assert not result.passed, (
+            "a coincidental seq collision with an unrelated sender must not "
+            "manufacture attribution"
+        )
+        assert "records no sender" in result.reason
+
+    def test_attribution_names_the_recorded_sender_not_a_seq_match(self):
+        """Two senders of one key with overlapping seq spaces: attribution must
+        follow the sender the receipt names, not whichever record matches first."""
+        trace = _causal_trace(
+            ("plc_y", {}, {"tag": 1}, {}),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=("plc_a", 1, True))),
+        )
+        result = evaluate_assertion("CAUSES(tag, effect)", trace)
+        assert result.passed, result.reason
+        assert "sent by 'plc_a'" in result.reason
+        assert "plc_y" not in result.reason
 
     def test_multi_consumer_same_scan_sends_both_attributable(self):
         """One tag with two consumers produces two same-scan sends of the same
-        key. Cumulative counts plus `>= seq` matching attribute both."""
+        key; `sends` records only the scan's high-water count, so both receipts
+        must still resolve to that scan."""
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 2}, _recv({})),
-            ("plc_b", {"effect_b": True}, {}, _recv({"tag": 1}, tag=True)),
-            ("plc_c", {"effect_c": True}, {}, _recv({"tag": 2}, tag=True)),
+            ("plc_a", {}, {"tag": 2}, {}),
+            ("plc_b", {"effect_b": True}, {}, _recv(tag=("plc_a", 1, True))),
+            ("plc_c", {"effect_c": True}, {}, _recv(tag=("plc_a", 2, True))),
         )
         for effect in ("effect_b", "effect_c"):
             result = evaluate_assertion(f"CAUSES(tag, {effect})", trace)
@@ -340,8 +404,8 @@ class TestCausesSemantics:
 
     def test_observed_gap_ms_is_none(self):
         trace = _causal_trace(
-            ("plc_a", {}, {"tag": 1}, _recv({})),
-            ("plc_b", {"effect": True}, {}, _recv({"tag": 1}, tag=True)),
+            ("plc_a", {}, {"tag": 1}, {}),
+            ("plc_b", {"effect": True}, {}, _recv(tag=("plc_a", 1, True))),
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert result.passed
@@ -389,8 +453,8 @@ class TestBudgetNarrowing:
         result = evaluate_assertion(
             "CAUSES(tag, effect)",
             _causal_trace(
-                ("plc_a", {}, {"tag": 1}, _recv({})),
-                ("plc_b", {"effect": True}, {}, _recv({"tag": 1}, tag=True)),
+                ("plc_a", {}, {"tag": 1}, {}),
+                ("plc_b", {"effect": True}, {}, _recv(tag=("plc_a", 1, True))),
             ),
         )
         assert result.passed, result.reason

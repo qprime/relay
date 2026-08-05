@@ -5,7 +5,7 @@ from typing import Any
 
 import yaml
 
-from relay.strategies.assertions import parse_assertion
+from relay.strategies.assertions import causes_issues, parse_assertion
 from relay.strategies.comm import get_comm_strategy
 
 
@@ -98,30 +98,6 @@ def _validate_required(raw: dict[str, Any], path: Path | str) -> None:
     if not strategy:
         raise ValueError(f"{path}: 'Comm.strategy' is required (e.g. tag)")
     get_comm_strategy(strategy)
-    _validate_causes(raw, comm, path)
-
-
-def _validate_causes(raw: dict[str, Any], comm: Any, path: Path | str) -> None:
-    tags = comm.get("tags") if isinstance(comm, dict) else None
-    tag_names = {
-        tag["name"]
-        for tag in (tags or [])
-        if isinstance(tag, dict) and isinstance(tag.get("name"), str)
-    }
-    for assertion in raw.get("Assertions", []) or []:
-        parsed = parse_assertion(assertion) if isinstance(assertion, str) else None
-        if parsed is None or parsed.form != "CAUSES":
-            continue
-        cause, effect = parsed.signals
-        if cause == effect:
-            raise ValueError(
-                f"{path}: {assertion!r} names {cause!r} as both cause and effect; "
-                "a signal cannot cause itself"
-            )
-        if cause not in tag_names:
-            known = ", ".join(sorted(tag_names)) or "(none declared)"
-            raise ValueError(
-                f"{path}: {assertion!r} names {cause!r} as the cause, which is not a "
-                f"declared Comm.tags entry; only tag messages carry the sequence "
-                f"counter attribution needs. Declared tags: {known}"
-            )
+    issues = causes_issues(raw.get("Assertions", []), comm if isinstance(comm, dict) else {})
+    if issues:
+        raise ValueError(f"{path}: " + "; ".join(issues))
