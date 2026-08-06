@@ -70,10 +70,15 @@ quietly becomes two formats.
    field's type actually calls for:
    - `io_snapshot`, `outputs`, and receipt `value` → `_check_values`, which
      rejects any type outside `(bool, int, float)` and any non-finite float.
-   - `sends` and receipt `seq` → `_check_counters`, which rejects `bool` as
-     well as non-`int`. Send counters are integers; the signal-value predicate
+   - send `count` and receipt `seq` → `_check_counters`, which rejects `bool`
+     as well as non-`int`. Counters are integers; the signal-value predicate
      is the wrong one for them, because it admits `True` and `0.9` where
      `int()` would then silently truncate them to `1` and `0`.
+   - `sends` entries are objects of `{count, value}`, guarded field by field
+     with the predicate each field calls for — `_check_counters` on `count`,
+     `_check_values` on `value`. The pairing mirrors `recvs`: a counter alone
+     cannot say what a message carried, which is what makes a send-side
+     timing endpoint measurable (#21).
    - `plc_id` → `_check_str`.
    - `io_snapshot`, `outputs`, `sends`, and `recvs` are each checked to be a
      JSON object before iteration, so a non-object raises `TypeError` through

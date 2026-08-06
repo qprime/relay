@@ -88,22 +88,32 @@ std::expected<std::string, DumpError> format_cells_object(
     return out;
 }
 
-std::string format_seqs_object(std::span<const SeqSlot> slots, const SignalTable& table) {
-    std::vector<std::pair<std::string, std::int64_t>> named;
+std::expected<std::string, DumpError> format_seqs_object(std::span<const SeqSlot> slots,
+                                                        const SignalTable& table,
+                                                        std::int64_t tick) {
+    std::vector<std::pair<std::string, const SeqSlot*>> named;
     named.reserve(slots.size());
     for (const SeqSlot& slot : slots) {
-        named.emplace_back(table.name_of(slot.signal_id), slot.seq);
+        named.emplace_back(table.name_of(slot.signal_id), &slot);
     }
     std::sort(named.begin(), named.end(),
               [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
     std::string out = "{";
     bool first = true;
-    for (const auto& [name, seq] : named) {
+    for (const auto& [name, slot] : named) {
+        const FormattedCell formatted = format_cell(slot->value);
+        if (!formatted.ok) {
+            return std::unexpected(DumpError{
+                "trace: sends signal '" + name + "' at tick " + std::to_string(tick) +
+                " is non-finite, which JSON cannot represent portably; signal values "
+                "must be finite"});
+        }
         if (!first) {
             out += ", ";
         }
         first = false;
-        out += escape_json_string(name) + ": " + std::to_string(seq);
+        out += escape_json_string(name) + ": {\"count\": " + std::to_string(slot->seq) +
+               ", \"value\": " + formatted.text + "}";
     }
     out += "}";
     return out;
@@ -285,14 +295,18 @@ std::expected<void, DumpError> TraceRing::dump_to_jsonl(
         if (!recvs_object) {
             return std::unexpected(recvs_object.error());
         }
-        const std::string sends_object = format_seqs_object(
-            std::span(entry.send_slots.data(), entry.send_count), table);
+        auto sends_object = format_seqs_object(
+            std::span(entry.send_slots.data(), entry.send_count), table,
+            entry.clock.tick);
+        if (!sends_object) {
+            return std::unexpected(sends_object.error());
+        }
         stream << "{\"elapsed_ms\": " << format_json_double(entry.clock.elapsed_ms)
                << ", \"io_snapshot\": " << *io_object
                << ", \"outputs\": " << *outputs_object
                << ", \"plc_id\": " << escape_json_string(plc_ids[entry.plc_index])
                << ", \"recvs\": " << *recvs_object
-               << ", \"sends\": " << sends_object
+               << ", \"sends\": " << *sends_object
                << ", \"tick\": " << entry.clock.tick << "}\n";
     }
     return {};

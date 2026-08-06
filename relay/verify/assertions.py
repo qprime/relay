@@ -42,13 +42,45 @@ def _signal_value(record, name: str):
     return record.io.get(name)
 
 
+def _is_comm_tag(name: str, trace: TraceLog) -> bool:
+    return any(name in r.sends for r in trace.records)
+
+
+def _first_true_ms(name: str, trace: TraceLog) -> float | None:
+    """When a signal first became true, read on the side that emitted it.
+
+    A comm tag is emitted on its producer and delivered to its consumers, and
+    the merged signal view cannot tell those apart: `_signal_value` searches
+    every PLC's records, so a tag resolves off whichever PLC happens to appear
+    first — the consumer, since the producer never writes a tag to its output
+    image. Reading a tag from `sends` anchors it to the emission that the name
+    actually denotes, on the PLC that performed it.
+
+    The value is read from the send, not merely counted. A producer that sends
+    every scan carries `False` long before the real event, so binding to the
+    first send of any value would time the run from a message that said
+    nothing happened.
+    """
+    if _is_comm_tag(name, trace):
+        return next(
+            (
+                r.clock.elapsed_ms
+                for r in trace.records
+                if name in r.sends and r.sends[name].value
+            ),
+            None,
+        )
+    return next(
+        (r.clock.elapsed_ms for r in trace.records if _signal_value(r, name)), None
+    )
+
+
 def _check_eventually(
     assertion: str, signal_name: str, within_ms: float, trace: TraceLog
 ) -> AssertionResult:
-    for record in trace.records:
-        value = _signal_value(record, signal_name)
-        if value and record.clock.elapsed_ms <= within_ms:
-            return AssertionResult(assertion=assertion, passed=True, reason=f"signal '{signal_name}' true at {record.clock.elapsed_ms:.1f}ms")
+    first_ms = _first_true_ms(signal_name, trace)
+    if first_ms is not None and first_ms <= within_ms:
+        return AssertionResult(assertion=assertion, passed=True, reason=f"signal '{signal_name}' true at {first_ms:.1f}ms")
     return AssertionResult(
         assertion=assertion,
         passed=False,
@@ -75,17 +107,17 @@ def _check_precedes(
     Ordering is checked before budget: a reversed pair reports the ordering
     violation, since reporting a budget overrun for it would mislead.
 
+    A comm tag endpoint is read from the producer's `sends`, not from the
+    merged signal view — see `_first_true_ms`. Before that rule, a tag resolved
+    only through the consumer's I/O image, in the scan where it was promoted
+    and acted on, so both endpoints came off one ScanRecord and the form
+    compared a clock with itself.
+
     observed_gap_ms is set on every evaluation where both signals became true,
     pass or fail, so budgets can be derived from measurement rather than guessed.
     """
-    first_ms: float | None = None
-    second_ms: float | None = None
-
-    for record in trace.records:
-        if first_ms is None and _signal_value(record, first):
-            first_ms = record.clock.elapsed_ms
-        if second_ms is None and _signal_value(record, second):
-            second_ms = record.clock.elapsed_ms
+    first_ms = _first_true_ms(first, trace)
+    second_ms = _first_true_ms(second, trace)
 
     if first_ms is None:
         return AssertionResult(assertion=assertion, passed=False, reason=f"signal '{first}' never became true")
@@ -203,7 +235,7 @@ def _check_causes(
         (
             r
             for r in trace.for_plc(receipt.sender)
-            if r.sends.get(cause, 0) >= receipt.seq
+            if cause in r.sends and r.sends[cause].count >= receipt.seq
         ),
         None,
     )

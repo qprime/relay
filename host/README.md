@@ -107,8 +107,17 @@ host guarantees instead is **verdict determinism with quantified headroom**
 — the same certified verdicts on every run, gated by ten consecutive passes
 in `tests/test_host_satisfies_expectations.py`, with the headroom of each
 assertion form against interleaving skew measured in #14 (`CAUSES` is
-timing-free by construction; the placeholder 500ms budgets hold with ~490ms
-and 1.7× to spare).
+timing-free by construction; the placeholder 500ms `EVENTUALLY` budget holds
+with 1.7× to spare, 290.0ms observed).
+
+The `PRECEDES` budget's former "~490ms to spare" is withdrawn rather than
+restated. It was headroom against a gap of `0.0` that no measurement produced:
+a comm tag resolved only through the consumer's I/O image, so the form read
+both endpoints off one `ScanRecord` and compared a clock with itself (#21).
+The gap on `conveyor_handoff` is still `0.0`, but it is now a measurement —
+`plc_a`'s first truthy send and `plc_b`'s action genuinely share an
+`elapsed_ms`, because the comm bus charges nothing for delivery (#16). A
+meaningful `PRECEDES` margin needs #16 landed and is #8's to state.
 
 ## Asio coupling
 

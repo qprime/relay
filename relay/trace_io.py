@@ -5,7 +5,7 @@ from typing import Any, TextIO
 
 from relay.clock import SimClock
 from relay.io_image import IOImage
-from relay.trace import Receipt, ScanRecord, TraceLog
+from relay.trace import Receipt, ScanRecord, SendRecord, TraceLog
 
 
 ALLOWED_VALUE_TYPES = (bool, int, float)
@@ -53,10 +53,29 @@ def _check_counters(counters: Any, where: str) -> dict[str, Any]:
     return counters
 
 
+def _send_to_dict(key: str, send: SendRecord) -> dict[str, Any]:
+    _check_values({key: send.value}, "sends")
+    _check_counters({key: send.count}, "sends")
+    return {"count": send.count, "value": send.value}
+
+
+def _send_from_dict(key: str, data: Any) -> SendRecord:
+    if not isinstance(data, dict):
+        raise TypeError(
+            f"sends entry {key!r} is a {type(data).__name__}, not an object with "
+            "'count' and 'value'"
+        )
+    value = data["value"]
+    _check_values({key: value}, "sends")
+    count = data["count"]
+    _check_counters({key: count}, "sends")
+    return SendRecord(count=count, value=value)
+
+
 def _check_object(data: Any, where: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError(
-            f"{where} is a {type(data).__name__}, not an object of receipts"
+            f"{where} is a {type(data).__name__}, not an object keyed by signal name"
         )
     return data
 
@@ -68,7 +87,9 @@ def record_to_dict(record: ScanRecord) -> dict[str, Any]:
         "elapsed_ms": record.clock.elapsed_ms,
         "io_snapshot": _check_values(dict(record.io.values), "io_snapshot"),
         "outputs": _check_values(dict(record.outputs.values), "outputs"),
-        "sends": _check_counters(dict(record.sends), "sends"),
+        "sends": {
+            key: _send_to_dict(key, send) for key, send in record.sends.items()
+        },
         "recvs": {
             key: _receipt_to_dict(key, receipt)
             for key, receipt in record.recvs.items()
@@ -107,7 +128,10 @@ def record_from_dict(data: dict[str, Any]) -> ScanRecord:
         clock=SimClock(tick=int(data["tick"]), elapsed_ms=float(data["elapsed_ms"])),
         io=IOImage(values=_check_values(data["io_snapshot"], "io_snapshot")),
         outputs=IOImage(values=_check_values(data["outputs"], "outputs")),
-        sends=dict(_check_counters(data["sends"], "sends")),
+        sends={
+            k: _send_from_dict(k, v)
+            for k, v in _check_object(data["sends"], "sends").items()
+        },
         recvs={
             k: _receipt_from_dict(k, v)
             for k, v in _check_object(data["recvs"], "recvs").items()

@@ -356,3 +356,9 @@ def _validate_assertion_coverage(
                 f"assertion signal {signal!r} is not covered by any trigger emit target, "
                 "plant route, or tag declaration"
             )
+        elif signal in tag_names and signal not in emit_targets:
+            issues.append(
+                f"assertion signal {signal!r} is a declared tag that no trigger emits; "
+                "a tag resolves from the producer's sends, so an unemitted tag resolves "
+                "to nothing and the assertion would silently report never-true"
+            )

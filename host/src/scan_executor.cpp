@@ -92,7 +92,8 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
                     binding.send_target_plc,
                     Message{binding.signal_id, value, state.plc_index, seq}};
                 ++outgoing.count;
-                entry.send_slots[entry.send_count] = SeqSlot{binding.signal_id, seq};
+                entry.send_slots[entry.send_count] =
+                    SeqSlot{binding.signal_id, seq, value};
                 ++entry.send_count;
                 break;
             }

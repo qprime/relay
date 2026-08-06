@@ -6,7 +6,7 @@ from typing import Any, Callable
 from relay.clock import DEFAULT_SCAN_PERIOD_MS, SimClock
 from relay.io_image import IOImage
 from relay.runtime.comm import CommBuffer, CommBus
-from relay.trace import TraceLog, ScanRecord
+from relay.trace import ScanRecord, SendRecord, TraceLog
 
 
 FBExecutor = Callable[
@@ -43,11 +43,11 @@ class PLCCoroutine:
 
             outputs, outgoing = self.executor(snapshot, comm, clock, self.scan_period_ms)
 
-            sends: dict[str, int] = {}
+            sends: dict[str, SendRecord] = {}
             for target_plc, key, value in outgoing:
                 seq = send_counts.get(key, 0) + 1
                 send_counts[key] = seq
-                sends[key] = seq
+                sends[key] = SendRecord(count=seq, value=value)
                 await bus.send(target_plc, key, value, self.plc_id, seq)
 
             for key, value in outputs.values.items():

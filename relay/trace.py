@@ -25,12 +25,32 @@ class Receipt:
 
 
 @dataclass(frozen=True)
+class SendRecord:
+    """What a message carried, recorded where it was emitted.
+
+    The send counter alone cannot answer "when did this PLC first emit a
+    truthy value" — a producer that sends every scan carries `False` long
+    before the real event, and a count rising from 10 to 11 says a message
+    left, not what it said. Timing claims need the value at the sending end:
+    PRECEDES reads its first endpoint here rather than walking back from a
+    receipt, so a send's timestamp does not depend on who consumed it, or on
+    whether anyone did.
+
+    `count` is this sender's cumulative per-key send count, the same number
+    receipts carry as `seq`.
+    """
+
+    count: int
+    value: Any
+
+
+@dataclass(frozen=True)
 class ScanRecord:
     plc_id: str
     clock: SimClock
     io: IOImage
     outputs: IOImage
-    sends: Mapping[str, int] = field(default_factory=dict)
+    sends: Mapping[str, SendRecord] = field(default_factory=dict)
     recvs: Mapping[str, Receipt] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

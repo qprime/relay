@@ -238,3 +238,173 @@ class TestCausesSpecValidation:
     def test_declared_tag_cause_loads(self, tmp_path):
         path = self._spec_text_with("CAUSES(handoff_signal, belt_b_enable)", tmp_path)
         assert load_spec(path).assertions == ["CAUSES(handoff_signal, belt_b_enable)"]
+
+
+class TestCommTagLatencyIsMeasurable:
+    """#21: a comm tag's send-side emission must be visible to the verifier.
+
+    Before this, a tag resolved only through the consumer's I/O image — in the
+    scan where it was promoted and acted on — so PRECEDES read both endpoints
+    off one ScanRecord and compared a clock with itself. These tests run a real
+    two-PLC spec end to end; the pre-existing PRECEDES semantics tests build
+    synthetic traces that never touch a comm tag, so they pass either way.
+    """
+
+    def _consumer_debounced(self, tmp_path: Path, debounce_ms: int):
+        import yaml
+
+        raw = yaml.safe_load(
+            (Path(__file__).parent.parent / "specs" / "conveyor_pulse_release.yaml")
+            .read_text()
+        )
+        raw["System"]["name"] = f"consumer_debounced_{debounce_ms}"
+        raw["Behavior"]["plc_a"]["triggers"][0]["when"].pop("debounce_ms", None)
+        raw["Behavior"]["plc_b"]["triggers"][0]["when"]["debounce_ms"] = debounce_ms
+        out = tmp_path / "spec.yaml"
+        out.write_text(yaml.safe_dump(raw))
+        return load_spec(out)
+
+    def test_known_nonzero_gap_is_reported_exactly(self, tmp_path):
+        """The consumer cannot act in the producer's send scan, so a real gap
+        exists and is derivable: plc_a first sends truthy at 100.0ms, plc_b's
+        30ms debounce spans two 10ms scans, and the pulse asserts at 120.0ms."""
+        spec = self._consumer_debounced(tmp_path, 30)
+        trace = asyncio.run(simulate(spec, compile_st_blocks(spec)))
+        result = evaluate_assertion(
+            "PRECEDES(release_request, belt_b_enable, within: 500ms)", trace
+        )
+        assert result.passed, result.reason
+        assert result.observed_gap_ms == 20.0, result.reason
+
+    def test_gap_is_anchored_to_the_first_truthy_send(self, tmp_path):
+        """The failure a passing-looking implementation ships. plc_a sends
+        every scan from tick 0 carrying False; anchoring to the first send of
+        any value would report 120.0ms and measure time since a message that
+        said nothing happened."""
+        spec = self._consumer_debounced(tmp_path, 30)
+        trace = asyncio.run(simulate(spec, compile_st_blocks(spec)))
+        sends = [
+            r for r in trace.for_plc("plc_a") if "release_request" in r.sends
+        ]
+        assert not sends[0].sends["release_request"].value, (
+            "fixture must include false sends before the real event"
+        )
+        result = evaluate_assertion(
+            "PRECEDES(release_request, belt_b_enable, within: 500ms)", trace
+        )
+        assert result.observed_gap_ms != 120.0, (
+            "gap anchored to the producer's first False send"
+        )
+        assert result.observed_gap_ms == 20.0
+
+    def test_conveyor_handoff_still_reports_zero_from_the_bus(self):
+        """The control case. conveyor_handoff's zero must now come from the bus
+        charging no delivery latency (#16), not from resolution: the endpoint
+        is plc_a's first truthy send, not plc_b's delivery."""
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        result = evaluate_assertion(
+            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
+        )
+        assert result.observed_gap_ms == 0.0
+        first_truthy = next(
+            r for r in trace.for_plc("plc_a")
+            if "handoff_signal" in r.sends and r.sends["handoff_signal"].value
+        )
+        assert first_truthy.clock.elapsed_ms == 100.0
+        assert "at 100.0ms precedes" in result.reason
+
+    def test_tag_endpoint_reads_the_producer_not_the_consumer(self):
+        """A tag never enters the producer's output image and is delivered into
+        the consumer's, so the merged signal view resolves it on the consumer.
+        The endpoint must come from the producer's sends instead."""
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        assert all(
+            "handoff_signal" not in r.outputs.values for r in trace.for_plc("plc_a")
+        )
+        assert any(
+            "handoff_signal" in r.sends for r in trace.for_plc("plc_a")
+        )
+        assert all("handoff_signal" not in r.sends for r in trace.for_plc("plc_b"))
+
+    def test_producer_side_pair_no_longer_resolves_cross_plc(self):
+        """Both names must resolve on plc_a. Before this, sensor_a_exit read
+        from plc_a's image and handoff_signal from plc_b's, so the assertion
+        read as a producer-side latency claim and silently measured a
+        cross-PLC delivery instead."""
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        result = evaluate_assertion(
+            "PRECEDES(sensor_a_exit, handoff_signal, within: 500ms)", trace
+        )
+        arrival = next(
+            r for r in trace.for_plc("plc_a") if r.io.get("sensor_a_exit")
+        )
+        emission = next(
+            r for r in trace.for_plc("plc_a")
+            if "handoff_signal" in r.sends and r.sends["handoff_signal"].value
+        )
+        assert arrival.clock.elapsed_ms == emission.clock.elapsed_ms
+        assert result.observed_gap_ms == 0.0
+
+    def test_multi_consumer_send_stores_high_water_count_and_last_value(
+        self, tmp_path
+    ):
+        """A tag with two consumers emits two messages of one key per scan, and
+        `sends` holds one entry: the scan's high-water count and the last value
+        written. Pinned rather than inherited from CAUSES's comment, since the
+        endpoint rule now reads `value` from here."""
+        import yaml
+
+        raw = yaml.safe_load(_spec_path().read_text())
+        raw["System"]["name"] = "multi_consumer_probe"
+        raw["System"]["plcs"].append({"id": "plc_c", "role": "downstream"})
+        raw["Comm"]["tags"][0]["consumed_by"] = ["plc_b", "plc_c"]
+        raw["Behavior"]["plc_c"] = {
+            "triggers": [
+                {
+                    "id": "latch_on_handoff",
+                    "when": {"signal": "handoff_signal", "edge": "rising"},
+                    "emit": {"output": "c_belt_enable", "mode": "latched"},
+                }
+            ]
+        }
+        out = tmp_path / "spec.yaml"
+        out.write_text(yaml.safe_dump(raw))
+        spec = load_spec(out)
+        trace = asyncio.run(simulate(spec, compile_st_blocks(spec), max_scans=20))
+
+        counts = [
+            r.sends["handoff_signal"].count
+            for r in trace.for_plc("plc_a")
+            if "handoff_signal" in r.sends
+        ]
+        assert counts[:2] == [2, 4], "two consumers means two sends per scan"
+
+        result = evaluate_assertion(
+            "PRECEDES(handoff_signal, c_belt_enable, within: 500ms)", trace
+        )
+        assert result.passed, result.reason
+        assert result.observed_gap_ms == 0.0
+
+    def test_eventually_resolves_a_tag_the_same_way_precedes_does(self):
+        """Both forms must read a tag on the same side. Leaving EVENTUALLY on
+        the merged signal view would make one name mean the producer's
+        emission in one form and the consumer's delivery in another — the
+        divergence becomes observable once the bus charges delivery latency."""
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        eventually = evaluate_assertion(
+            "EVENTUALLY(handoff_signal, within: 500ms)", trace
+        )
+        precedes = evaluate_assertion(
+            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
+        )
+        assert eventually.passed and precedes.passed
+        emission = next(
+            r for r in trace.for_plc("plc_a")
+            if "handoff_signal" in r.sends and r.sends["handoff_signal"].value
+        )
+        assert f"true at {emission.clock.elapsed_ms:.1f}ms" in eventually.reason
+        assert f"at {emission.clock.elapsed_ms:.1f}ms precedes" in precedes.reason

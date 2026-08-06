@@ -12,7 +12,7 @@ from relay.io_image import IOImage
 from relay.runtime.harness import simulate
 from relay.spec.schema import load_spec
 from relay.strategies.assertions import parse_assertion
-from relay.trace import Receipt, ScanRecord, TraceLog
+from relay.trace import Receipt, ScanRecord, SendRecord, TraceLog
 from relay.trace_io import dump_jsonl, load_jsonl, record_from_dict, record_to_dict
 from relay.verify.assertions import evaluate_all
 
@@ -130,8 +130,8 @@ class TestTraceIOFormat:
         for original, loaded in zip(trace.records, restored.records):
             assert dict(loaded.sends) == dict(original.sends)
             assert dict(loaded.recvs) == dict(original.recvs)
-            for seq in loaded.sends.values():
-                assert isinstance(seq, int) and not isinstance(seq, bool)
+            for send in loaded.sends.values():
+                assert isinstance(send.count, int) and not isinstance(send.count, bool)
             for receipt in loaded.recvs.values():
                 assert isinstance(receipt.seq, int)
                 assert receipt.sender is None or isinstance(receipt.sender, str)
@@ -273,12 +273,12 @@ class TestTraceIOTypes:
         record = record_from_dict(
             {
                 **_MINIMAL_RECORD,
-                "sends": {"handoff_signal": 11},
+                "sends": {"handoff_signal": {"count": 11, "value": True}},
                 "recvs": {"sensor_a_exit": {"sender": None, "seq": 1, "value": True}},
             }
         )
-        assert record.sends["handoff_signal"] == 11
-        assert isinstance(record.sends["handoff_signal"], int)
+        assert record.sends["handoff_signal"].count == 11
+        assert isinstance(record.sends["handoff_signal"].count, int)
         assert isinstance(record.recvs["sensor_a_exit"].seq, int)
 
     @pytest.mark.parametrize("value", [11.0, 0.9, True, "11", None])
@@ -291,7 +291,12 @@ class TestTraceIOTypes:
         an int64."""
         with pytest.raises(ValueError) as exc:
             _load_from_text(
-                json.dumps({**_MINIMAL_RECORD, "sends": {"handoff_signal": value}})
+                json.dumps(
+                    {
+                        **_MINIMAL_RECORD,
+                        "sends": {"handoff_signal": {"count": value, "value": True}},
+                    }
+                )
                 + "\n"
             )
         assert "handoff_signal" in str(exc.value)
@@ -319,10 +324,10 @@ class TestTraceIOTypes:
             clock=SimClock(tick=0, elapsed_ms=0.0),
             io=IOImage.empty(),
             outputs=IOImage.empty(),
-            sends={"handoff_signal": 11},
+            sends={"handoff_signal": SendRecord(count=11, value=True)},
         )
         restored = _round_trip(TraceLog([record])).records[0]
-        assert restored.sends == {"handoff_signal": 11}
+        assert restored.sends == {"handoff_signal": SendRecord(count=11, value=True)}
 
     @pytest.mark.parametrize("value", [True, 0.9])
     def test_non_int_send_counter_rejected_at_dump(self, value):
@@ -332,7 +337,7 @@ class TestTraceIOTypes:
                 clock=SimClock(tick=0, elapsed_ms=0.0),
                 io=IOImage.empty(),
                 outputs=IOImage.empty(),
-                sends={"handoff_signal": value},
+                sends={"handoff_signal": SendRecord(count=value, value=True)},
             )
         ])
         with pytest.raises(TypeError) as exc:
@@ -556,20 +561,34 @@ class TestTraceIOErrors:
 
 
 class TestIOSnapshotIsLoadBearing:
-    def test_dropping_io_snapshot_breaks_precedes(self):
+    def test_dropping_io_snapshot_breaks_a_plant_routed_assertion(self):
+        """A plant-routed signal reaches the verifier only through the I/O
+        image: it is nobody's output and nobody's send. Dropping the snapshot
+        must therefore break EVENTUALLY(part_at_b) loudly."""
+        spec, trace = _conveyor_spec_and_trace()
+        stripped = "\n".join(
+            json.dumps({**json.loads(line), "io_snapshot": {}}, sort_keys=True)
+            for line in _dump_to_text(trace).splitlines()
+        )
+        assertion = "EVENTUALLY(part_at_b, within: 500ms)"
+        before = evaluate_all([assertion], trace)[0]
+        after = evaluate_all([assertion], _load_from_text(stripped))[0]
+        assert before.passed
+        assert not after.passed
+
+    def test_precedes_on_a_tag_survives_dropping_io_snapshot(self):
+        """The inverse of the rule above, pinned deliberately (#21). A comm tag
+        resolves from the producer's `sends`, so PRECEDES no longer depends on
+        the consumer's I/O image. Before #21 this assertion read both endpoints
+        off the consumer's record and measured a clock against itself."""
         spec, trace = _conveyor_spec_and_trace()
         stripped = "\n".join(
             json.dumps({**json.loads(line), "io_snapshot": {}}, sort_keys=True)
             for line in _dump_to_text(trace).splitlines()
         )
         assertion = _precedes_assertion(spec)
-        before = evaluate_all([assertion], trace)[0]
         after = evaluate_all([assertion], _load_from_text(stripped))[0]
-        assert before.passed
-        assert not after.passed, (
-            "io_snapshot is load-bearing: handoff_signal is never a plc_b output, "
-            "so PRECEDES must fail once the io snapshot is dropped"
-        )
+        assert after.passed
 
     def test_handoff_signal_absent_from_plc_b_outputs(self):
         _, trace = _conveyor_spec_and_trace()

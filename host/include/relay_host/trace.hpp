@@ -30,6 +30,7 @@ struct CellSlot {
 struct SeqSlot {
     std::uint32_t signal_id;
     std::int64_t seq;
+    Cell value;
 };
 
 struct ReceiptSlot {

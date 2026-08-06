@@ -61,6 +61,36 @@ TEST(TestRingBufferTrace, test_dump_jsonl_round_trip) {
     EXPECT_EQ(second["outputs"]["motor"], 2.5);
 }
 
+TEST(TestRingBufferTrace, test_sends_carry_count_and_value) {
+    const TraceFixture fixture = make_fixture();
+    TraceRing ring(2);
+    ScanTraceEntry& entry = ring.next_entry();
+    entry = make_entry(0, 0.0, Cell{true}, Cell{false});
+    entry.send_count = 1;
+    entry.send_slots[0] = SeqSlot{1, 11, Cell{false}};
+    std::ostringstream stream;
+    ASSERT_TRUE(ring.dump_to_jsonl(stream, fixture.table, fixture.plc_ids).has_value());
+
+    const nlohmann::json record = nlohmann::json::parse(stream.str());
+    EXPECT_EQ(record["sends"]["motor"]["count"], 11);
+    EXPECT_EQ(record["sends"]["motor"]["value"], false)
+        << "the sent value is what makes a send-side endpoint measurable; a "
+           "bare count cannot say whether a message carried the real event";
+}
+
+TEST(TestRingBufferTrace, test_non_finite_send_value_rejected_at_dump) {
+    const TraceFixture fixture = make_fixture();
+    TraceRing ring(2);
+    ScanTraceEntry& entry = ring.next_entry();
+    entry = make_entry(0, 0.0, Cell{true}, Cell{false});
+    entry.send_count = 1;
+    entry.send_slots[0] = SeqSlot{1, 1, Cell{std::nan("")}};
+    std::ostringstream stream;
+    const auto dumped = ring.dump_to_jsonl(stream, fixture.table, fixture.plc_ids);
+    ASSERT_FALSE(dumped.has_value());
+    EXPECT_NE(dumped.error().message.find("sends"), std::string::npos);
+}
+
 TEST(TestRingBufferTrace, test_keys_emitted_in_sorted_order) {
     const TraceFixture fixture = make_fixture();
     TraceRing ring(2);

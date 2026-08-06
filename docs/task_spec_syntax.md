@@ -187,9 +187,25 @@ nothing produces.
 | `PRECEDES(a, b, within: Nms)` | `a` first becomes true no later than `b`, and `b_ms - a_ms` fits the budget | Required |
 | `CAUSES(a, b)` | `b`'s first activation is attributable to a received message carrying `a` | None — rejected if given |
 
-Signal resolution is `outputs` first, then the I/O image, searched across every
-PLC's records. A signal need not be in the output image; a plant-routed input
-resolves too.
+Signal resolution depends on what kind of signal the name denotes.
+
+A **comm tag** resolves on its **producer**, from the send the producer
+recorded — not from the consumer's I/O image where it is delivered. A tag is
+emitted in one place and delivered in others, and the name denotes the
+emission. The value is read from the send too, so a producer that sends every
+scan carrying `False` anchors to its first *truthy* send rather than to its
+first message. A declared tag that no trigger emits resolves to nothing and is
+rejected at validation.
+
+Every **other** signal resolves `outputs` first, then the I/O image, searched
+across every PLC's records. A signal need not be in the output image; a
+plant-routed input resolves too.
+
+The split matters for cross-PLC assertions. `PRECEDES(sensor_a_exit,
+handoff_signal, within: 500ms)` reads as a producer-side latency claim, and it
+is one: both names resolve on the producer. Before the tag rule, the tag
+resolved off the *consumer's* image and the assertion silently measured a
+delivery instead.
 
 ### `PRECEDES`
 

@@ -673,3 +673,23 @@ class TestHarnessIntegration:
         del blocks["plc_b"]
         with pytest.raises(ValueError, match="missing ST blocks"):
             asyncio.run(simulate(spec, blocks))
+
+
+class TestAssertionTagResolvability:
+    """#21: a tag resolves from the producer's `sends`, so a declared tag that
+    no trigger emits resolves to nothing. Left unvalidated, the assertion is a
+    silent false at verification time rather than a spec error."""
+
+    def test_rejects_assertion_on_a_declared_but_unemitted_tag(self):
+        spec = _minimal_spec()
+        spec.raw["Comm"]["tags"].append(
+            {"name": "orphan", "produced_by": "plc_a", "consumed_by": ["plc_b"]}
+        )
+        spec.raw["Assertions"] = ["PRECEDES(orphan, belt_b_enable, within: 500ms)"]
+        issues = _issues_for(spec)
+        assert any("orphan" in i and "no trigger emits" in i for i in issues)
+
+    def test_accepts_assertion_on_an_emitted_tag(self):
+        spec = _minimal_spec()
+        spec.raw["Assertions"] = ["PRECEDES(t, belt_b_enable, within: 500ms)"]
+        validate_spec(spec)
