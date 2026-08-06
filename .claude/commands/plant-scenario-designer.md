@@ -1,5 +1,5 @@
 ---
-description: Design plant scenarios and environments for RELAY. Use when creating new demo domains, stress-testing existing scenarios with edge cases, expanding coverage across control patterns, or composing scenarios into integrated environments.
+description: Design and author RELAY task specs — the scenario YAML under specs/ — from intent through to a sim-certified artifact. Use when creating a new demo domain, writing or changing a task spec, stress-testing a scenario with edge cases, diagnosing a spec-validation failure, expanding coverage across control patterns, or composing scenarios into environments. Not for GitHub issue implementation specs; that is /spec.
 ---
 
 # /plant-scenario-designer
@@ -17,10 +17,14 @@ Design plant scenarios for RELAY — the simulated physical process that PLCs co
 ## When to invoke
 
 - User wants a new demo domain beyond conveyor handoff
+- User wants a task spec written or an existing one changed
+- User hit a spec-validation failure and wants it diagnosed
 - User wants to stress-test an existing scenario with edge cases
 - User wants to expand coverage across control patterns
 - User is unsure what scenario best demonstrates a capability
 - User wants to compose existing scenarios into a larger environment
+
+Design and authoring are one conversation here, not two roles. Nobody decides what to test and then hands it off to be typed up — the same pass picks the failure mode, writes the YAML, and certifies it.
 
 ## Core principles
 
@@ -58,7 +62,7 @@ A scenario **is** a RELAY task spec. Do not invent a parallel dialect.
 
 Spec syntax has one authority: [docs/task_spec_syntax.md](../../docs/task_spec_syntax.md). Read it before emitting YAML — it carries the block structure, the trigger IR fields, the assertion grammar, and the rules the validator enforces. `specs/conveyor_handoff.yaml` and `specs/conveyor_pulse_release.yaml` are the worked examples. This file deliberately does not restate any of it; two copies of the spec shape is how the last one drifted.
 
-What this skill adds on top of the syntax is scenario *design*: which coordination failure mode the spec isolates, what it deliberately does not test, and which scan-boundary conditions would expose bad generated logic.
+What this skill adds on top of the syntax is judgment the manual and the validator cannot supply: which coordination failure mode the spec isolates, what it deliberately does not test, which scan-boundary conditions would expose bad generated logic, and — under Critical Rules below — whether the assertions claim the right thing at all.
 
 Run `python -m tools.validate_spec <path>` on every spec you emit. The validator is the gate; a scenario that hasn't passed it isn't finished.
 
@@ -88,6 +92,34 @@ The three forms and their rules are in [docs/task_spec_syntax.md](../../docs/tas
 - It is a claim that one PLC's action was **caused by** another's message → `CAUSES`. This is the only form that distinguishes causation from coincidence, and it only works when the cause is a declared comm tag.
 
 If a scenario needs a form the evaluator doesn't support (e.g. `ALWAYS`, `NEVER`), call that out explicitly — it's a framework extension, not a spec extension.
+
+## Critical Rules
+
+`tools/validate_spec.py` rejects malformed specs. Nothing rejects a well-formed spec that asserts the wrong claim — and a spec that is legal but says the wrong thing produces legal-looking wrong ST and a clean PASS on behavior nobody wanted. These are the errors the validator cannot see.
+
+**Assert the signal the claim is about, not the one that is convenient.** `EVENTUALLY(belt_b_enable, ...)` asserts that a PLC decided to run the belt. `EVENTUALLY(part_at_b, ...)` asserts that the part actually arrived. The first passes even if the plant never moves. When a plant sensor and a PLC output both describe "the thing happened," the sensor is the stronger claim and usually the intended one — the output only proves the controller's intent.
+
+**A budget is a requirement, not a measurement.** `within: 500ms` says the system must do this in 500 ms. If nobody knows the real deadline, write a loose one and comment that it is an unvalidated placeholder. A precise-looking `120ms` reads as measured and misleads every later reader. Never copy a budget from `observed_gap_ms` and present it as a requirement — that inverts the direction of the claim, turning "what we require" into "what it happened to do," and it will fail the first time timing shifts legitimately.
+
+**`PRECEDES` is not causation.** It bounds a gap between two first-activations. Two signals that always fire together for unrelated reasons satisfy it forever. When the claim is "B happened *because* A arrived," write `CAUSES` — it is the only form that reads message attribution.
+
+**Match the edge to the physical event.** `rising` fires on a transition; `level` fires continuously while true. A trigger that should act once per part but reads `level` re-fires every scan; with `mode: steady` its output chatters. Ask what the sensor physically does before choosing — and remember `Plant.routes[].trigger` is a second, independent edge detector stacked in front of `when.edge`.
+
+**`debounce_ms` moves the event, it doesn't just filter it.** A debounced `rising` fires when the signal has *already been high* for the window, not at the transition. Any budget written downstream of a debounced trigger must include the debounce window, or it encodes a deadline the system cannot meet for reasons that have nothing to do with the behavior under test.
+
+**`latched` never clears.** There is no reset primitive. If the scenario needs the signal to drop — a cycle that repeats, a fault that clears — `latched` is wrong and the spec will look correct while modeling a one-shot machine.
+
+**Every assertion must be able to fail.** Before finishing, ask of each one: what behavior change would make this fail? If nothing plausible would, it certifies nothing. An `EVENTUALLY` with a budget far beyond any real timing, or one naming a signal that is true in the first scan, is decoration. This is the same discipline as "state what this scenario does NOT test," applied one assertion at a time.
+
+## Diagnosing a validation failure
+
+Read the message before changing the spec — the validator's errors name the resolution rule they enforce, and the fix usually follows from the rule rather than from guessing.
+
+- **"does not resolve to a Plant route as_key for this PLC or a Comm tag it consumes"** — the PLC cannot read that signal. A tag a PLC *produces* is not readable by it; route it or consume it.
+- **"collides with a Plant route as_key"** — the output would mask the sensor during assertion resolution. Rename the output; do not rename the sensor to dodge it.
+- **"one trigger per target"** — two triggers on one PLC write the same target. Merge the conditions into one trigger.
+- **Terminal selector error** — an unregistered `Comm.strategy` or `Plant.type` stops validation before anything else runs, so it is the only issue reported. Fix it and re-run to see the rest.
+- **`System.name` collision** (from `regenerate_expectations`, not the validator) — two specs claim one name and would share one artifact. Rename the new one.
 
 ## Environment spec format
 
@@ -139,3 +171,7 @@ For environments, emit the `Environment:` manifest and list the constituent task
 - Physics fidelity that outruns the PLC's observability (fluid dynamics detail the sensors can't see)
 - Scenarios with more than 4 PLCs (coordination complexity outruns observability — if you need more, it's an environment)
 - Scenarios where success is subjective or aesthetic
+- Declaring a `Plant.type` that is not registered — `conveyor` is the only Python plant today, so a new plant model is a framework change, not a spec change
+- Hand-writing an expectations artifact — it is generated from a simulation run
+- Weakening or deleting an assertion to make the sim pass — if a validated spec fails under simulation, the behavior and the claims disagree; diagnose which is wrong and say which
+- Restating `docs/task_spec_syntax.md` back to the user — link it

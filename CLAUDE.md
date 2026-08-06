@@ -74,8 +74,13 @@ Task spec YAML → ST function blocks → deterministic scan-cycle simulation �
 | Debug an issue | `/debug` |
 | Implement a feature or fix | `/engineer` |
 | Review code, specs, or system | `/review` |
-| Write an implementation spec (a GitHub issue) | `/spec` |
-| Write or fix a task spec YAML | `/spec-author` |
+| Write a GitHub issue implementation spec — prose about a code change | `/spec` |
+| Write, fix, or design a task spec YAML under `specs/` | `/plant-scenario-designer` |
+
+"Spec" alone is ambiguous here: unqualified, it means the task spec YAML. A
+GitHub issue implementation spec is always called an *issue spec*. If the user
+says "write me a spec" and which one they mean is not clear from context, ask —
+the two produce unrelated artifacts.
 
 ## Invariants
 
