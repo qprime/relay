@@ -78,8 +78,10 @@ System:
 
 `name` and every `plcs[].id` must match `[a-z][a-z0-9_]*`. `name` is what the
 expectations artifact is filed under (`specs/expectations/<name>.expected.json`),
-so it must be unique across `specs/`. `role` is required and is free-form prose;
-nothing downstream reads it.
+so it must be unique across `specs/` — `tools.regenerate_expectations` refuses to
+write anything when two specs claim one name, since whichever the glob reached
+last would otherwise overwrite the other's certified verdicts. `role` is required
+and is free-form prose; nothing downstream reads it.
 
 The declared `id`s are the only valid PLC names anywhere else in the spec —
 `Behavior` keys, `produced_by` / `consumed_by`, `to_plc`, `from_plc`.
