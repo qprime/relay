@@ -51,6 +51,12 @@ class HostHarness {
     [[nodiscard]] const std::optional<RunError>& run_error() const noexcept {
         return run_error_;
     }
+    [[nodiscard]] std::int64_t dropped_sends(std::uint32_t plc_index) const noexcept {
+        return bus_.dropped(plc_index);
+    }
+    [[nodiscard]] std::int64_t dropped_sends_total() const noexcept {
+        return bus_.dropped_total();
+    }
 
  private:
     HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,

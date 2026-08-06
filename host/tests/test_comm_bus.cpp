@@ -91,5 +91,61 @@ TEST(TestCommBus, send_after_close_returns_false) {
     EXPECT_FALSE(bus.try_send(0, Message{0, Cell{true}, 0, 1}));
 }
 
+TEST(TestCommBus, send_to_closed_receiver_drops_instead_of_parking) {
+    asio::io_context io;
+    CommBus bus(io.get_executor(), 1, 4, 1);
+    bus.close_receiver(0);
+
+    bool completed = false;
+    bool accepted = true;
+    asio::co_spawn(
+        io,
+        [&]() -> asio::awaitable<void> {
+            for (int index = 0; index < 8; ++index) {
+                accepted = co_await bus.send(0, Message{0, Cell{true}, 0, index});
+            }
+            completed = true;
+            co_return;
+        },
+        asio::detached);
+    io.run();
+
+    EXPECT_TRUE(completed) << "a send to a closed receiver must not park; the "
+                              "channel capacity of 1 would otherwise deadlock";
+    EXPECT_FALSE(accepted);
+    EXPECT_EQ(bus.dropped(0), 8);
+}
+
+TEST(TestCommBus, drops_are_counted_per_receiver) {
+    asio::io_context io;
+    CommBus bus(io.get_executor(), 2, 4, 64);
+    bus.close_receiver(1);
+    EXPECT_TRUE(bus.try_send(0, Message{0, Cell{true}, 0, 1}));
+    EXPECT_FALSE(bus.try_send(1, Message{0, Cell{true}, 0, 1}));
+    EXPECT_EQ(bus.dropped(0), 0);
+    EXPECT_EQ(bus.dropped(1), 1);
+    EXPECT_EQ(bus.dropped_total(), 1);
+}
+
+TEST(TestCommBus, closing_a_receiver_leaves_others_open) {
+    asio::io_context io;
+    CommBus bus(io.get_executor(), 2, 4, 64);
+    bus.close_receiver(0);
+    EXPECT_FALSE(bus.receiver_open(0));
+    EXPECT_TRUE(bus.receiver_open(1));
+}
+
+TEST(TestCommBus, close_receiver_still_yields_already_queued_messages) {
+    asio::io_context io;
+    CommBus bus(io.get_executor(), 1, 4, 64);
+    send(bus, 0, Message{2, Cell{true}, 0, 1});
+    bus.close_receiver(0);
+    drain(bus, 0);
+    ASSERT_TRUE(bus.buffer(0).get(2).has_value())
+        << "a PLC closes its receiver after its final drain; messages already "
+           "queued must survive the close";
+    EXPECT_EQ(bus.dropped(0), 0);
+}
+
 }  // namespace
 }  // namespace relay_host

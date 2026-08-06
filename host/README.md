@@ -124,6 +124,17 @@ record failures as `ScanError` in the trace entry, surfaced at the scan
 boundary. A socket round-trip inside a plant call suspends on `co_await` —
 there is no blocking call on the scan thread.
 
+Each PLC closes its own `CommBus` receive channel as its scan loop exits, and
+a send addressed to a closed receiver is **dropped and counted** rather than
+queued (#22). This models a fieldbus dropping frames to an offline consumer,
+and it is what keeps a sender from parking forever on a full channel no one
+will ever drain — the channel holds `kCommChannelCapacity` messages, and
+before this the 65th send to a departed PLC never woke. Closing a channel
+still yields messages already queued on it, so a PLC's final drain is
+unaffected. `host_main` reports any drops on stderr, per consumer; a
+tail-of-run drop is expected whenever the plant routes a level-triggered
+signal to a PLC that has finished its scan budget.
+
 ## Interim assumption register
 
 Per the project's standing rule on interim steps: every scaffold in `host/` is

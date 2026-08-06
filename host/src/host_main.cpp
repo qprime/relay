@@ -143,6 +143,17 @@ int main(int argc, char** argv) {
                   << (*harness)->trace().dropped()
                   << " oldest entries; rerun with a larger --trace-capacity\n";
     }
+    if ((*harness)->dropped_sends_total() > 0) {
+        const auto plc_ids = (*harness)->plc_ids();
+        for (std::uint32_t index = 0; index < plc_ids.size(); ++index) {
+            const std::int64_t dropped = (*harness)->dropped_sends(index);
+            if (dropped > 0) {
+                std::cerr << "host_main: warning: dropped " << dropped
+                          << " message(s) addressed to '" << plc_ids[index]
+                          << "' after its scan loop exited\n";
+            }
+        }
+    }
 
     if (const auto& error = (*harness)->run_error(); error.has_value()) {
         if (error->kind == relay_host::RunErrorKind::PlantFailed) {

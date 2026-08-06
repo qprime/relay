@@ -51,11 +51,17 @@ class CommBus {
     void fold(std::uint32_t plc_index, const Message& msg) noexcept;
     [[nodiscard]] Channel<Message>& channel_of(std::uint32_t plc_index) noexcept;
     [[nodiscard]] const CommBuffer& buffer(std::uint32_t plc_index) const noexcept;
+    void close_receiver(std::uint32_t plc_index);
+    [[nodiscard]] bool receiver_open(std::uint32_t plc_index) const noexcept;
+    [[nodiscard]] std::int64_t dropped(std::uint32_t plc_index) const noexcept;
+    [[nodiscard]] std::int64_t dropped_total() const noexcept;
     void close();
 
  private:
     std::vector<Channel<Message>> channels_;
     std::vector<CommBuffer> buffers_;
+    std::vector<bool> receiver_open_;
+    std::vector<std::int64_t> dropped_;
 };
 
 }  // namespace relay_host

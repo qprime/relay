@@ -196,6 +196,7 @@ Task run_plc_scan_loop(PlcExecutionContext ctx) {
         prior_outputs = std::move(outputs);
         clock = clock.advance(ctx.scan_period_ms);
     }
+    ctx.bus->close_receiver(ctx.plc_index);
     ++ctx.run->plcs_done;
     co_return;
 }

@@ -113,6 +113,23 @@ TEST(TestHostHarness, test_trace_dump_order_is_sorted_by_tick_then_plc) {
     EXPECT_EQ(count, 200u);
 }
 
+TEST(TestHostHarness, test_plant_route_to_stopped_plc_does_not_hang) {
+    ResolvedTaskSpec spec = conveyor_spec();
+    spec.plant.routes = {
+        ResolvedRoute{"sensor_a_exit_triggered", "plc_a", "sensor_a_exit", "level"},
+        ResolvedRoute{"part_at_b", "plc_b", "part_at_b", "level"},
+    };
+    spec.plant.actuators = {};
+
+    const auto harness = run_harness(spec, conveyor_blocks(),
+                                     HostHarness::Config{1.0, 400, 100000});
+    ASSERT_FALSE(harness->run_error().has_value())
+        << "with belt B never enabled the part parks at A's exit and the "
+           "level-triggered route fires every plant scan; the run must still "
+           "complete rather than park in bus_.send";
+    EXPECT_EQ(harness->trace().size(), 800u);
+}
+
 TEST(TestHostHarness, test_dead_plc_coroutine_surfaces_error_not_hang) {
     const auto harness = run_harness(
         minimal_two_plc_spec(), {{"plc_a", "x := 1 / 0;"}, {"plc_b", ""}},

@@ -79,8 +79,10 @@ TEST(TestScanExecutor, test_conveyor_runs_to_completion) {
 }
 
 struct FreeRunRig {
-    explicit FreeRunRig(ResolvedTaskSpec spec_arg) : spec(std::move(spec_arg)) {
-        std::array<StProgram, 2> programs{*parse_st(""), *parse_st("")};
+    explicit FreeRunRig(ResolvedTaskSpec spec_arg,
+                        std::array<const char*, 2> sources = {"", ""})
+        : spec(std::move(spec_arg)) {
+        std::array<StProgram, 2> programs{*parse_st(sources[0]), *parse_st(sources[1])};
         table = build_signal_table(spec, programs);
         blocks.reserve(2);
         states.reserve(2);
@@ -140,6 +142,25 @@ TEST(TestScanExecutor, test_plcs_reach_different_ticks) {
     EXPECT_LT(*fast_last, *slow_late)
         << "independently paced PLCs must not be held to a shared scan index; a "
            "reintroduced barrier would force them to advance together";
+}
+
+TEST(TestScanExecutor, test_send_to_exited_plc_drops_instead_of_hanging) {
+    ResolvedTaskSpec spec = testing::minimal_two_plc_spec();
+    FreeRunRig rig(spec, {"_send_plc_b_flag := TRUE;", ""});
+
+    const std::int64_t sender_scans = 300;
+    asio::co_spawn(rig.io, run_plc_scan_loop(rig.context(0, sender_scans, 1.0)),
+                   asio::detached);
+    asio::co_spawn(rig.io, run_plc_scan_loop(rig.context(1, 2, 1.0)), asio::detached);
+    rig.io.run();
+
+    ASSERT_TRUE(append_position(rig.trace, 0, sender_scans - 1).has_value())
+        << "the sender must run its full scan budget; before the fix it parked in "
+           "bus->send once plc_b's 64-slot channel filled and never woke";
+    EXPECT_FALSE(rig.bus->receiver_open(1));
+    EXPECT_GT(rig.bus->dropped(1), 0)
+        << "messages sent to an exited PLC must be counted, not silently lost";
+    EXPECT_EQ(rig.bus->dropped(0), 0);
 }
 
 TEST(TestScanExecutor, test_scan_overrun_does_not_accumulate_drift) {
