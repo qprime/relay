@@ -87,7 +87,9 @@ Assertions:
   - "CAUSES(handoff_signal, belt_b_enable)"
 ```
 
-The `Comm` block selects a comm strategy (currently `tag`; see below) and declares the inter-PLC signals it routes. The `Plant` block selects a plant model (`conveyor` in-process, or `remote_socket` for a plant in another process) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching.
+The `Comm` block selects a comm strategy (currently `tag`; see below) and declares the inter-PLC signals it routes. The `Plant` block selects a plant model (`conveyor` is the only one the Python registry holds today) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching. The C++ host keeps its own plant registry, which adds `remote_socket` for a plant in another process; that is a host-side selection, not a `Plant.type` a task spec can declare (see [host/README.md](host/README.md)).
+
+Full field-by-field syntax, including the rules the validator enforces and the ones it can't, is in [docs/task_spec_syntax.md](docs/task_spec_syntax.md); the tables below are the summary.
 
 The `Behavior` block is the trigger IR the ST compiler reads. Each PLC declares a list of triggers, and each trigger compiles to one ST stanza:
 
@@ -95,7 +97,7 @@ The `Behavior` block is the trigger IR the ST compiler reads. Each PLC declares 
 |-------|--------|---------|
 | `when.signal` | string | A `Plant.routes[].as_key` targeting this PLC, or a `Comm.tags[]` entry it consumes |
 | `when.edge` | `rising` \| `falling` \| `level` | Transition to detect; `level` fires while the signal is true |
-| `when.debounce_ms` | int ≥ 0 | Source must hold stable this long before the trigger fires |
+| `when.debounce_ms` | int ≥ 0 | Source must hold stable this long before the trigger fires — which shifts the edge, not just the timing ([details](docs/task_spec_syntax.md#debounce_ms-shifts-the-edge-not-only-the-timing)) |
 | `emit.tag` \| `emit.output` | string (exactly one) | A tag this PLC produces, or a local output name |
 | `emit.mode` | `latched` \| `pulse` \| `steady` | `latched` sets once and holds; `steady` follows the condition down; `pulse` asserts for `duration_ms` |
 | `emit.duration_ms` | int > 0 | Required when `mode: pulse`, rejected otherwise |

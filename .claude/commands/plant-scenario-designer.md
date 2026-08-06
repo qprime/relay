@@ -54,39 +54,13 @@ Build scenarios first. Compose them into environments when the user wants the bi
 
 ## Scenario spec format
 
-A scenario **is** a RELAY task spec. Emit the same YAML shape that `relay.spec.schema.load_spec` consumes and that `specs/conveyor_handoff.yaml` exemplifies. Do not invent a parallel dialect.
+A scenario **is** a RELAY task spec. Do not invent a parallel dialect.
 
-```yaml
-System:
-  name: <snake_case>          # matches scenario name
-  plcs:
-    - id: <plc_id>
-      role: <short description>
-  comm: modbus_tcp
+Spec syntax has one authority: [docs/task_spec_syntax.md](../../docs/task_spec_syntax.md). Read it before emitting YAML — it carries the block structure, the trigger IR fields, the assertion grammar, and the rules the validator enforces. `specs/conveyor_handoff.yaml` and `specs/conveyor_pulse_release.yaml` are the worked examples. This file deliberately does not restate any of it; two copies of the spec shape is how the last one drifted.
 
-Plant:
-  # Minimal physics — only what's needed to generate sensor values.
-  # Use the same flat key style as conveyor_handoff.yaml.
-  <key>: <value>              # e.g. belt_speed: 0.5m/s
-  actuator_latency: <N>ms
-  sensor_debounce: <N>ms      # include when the scenario probes debounce boundaries
+What this skill adds on top of the syntax is scenario *design*: which coordination failure mode the spec isolates, what it deliberately does not test, and which scan-boundary conditions would expose bad generated logic.
 
-Behavior:
-  <plc_id>:
-    triggers:
-      - id: <snake_case, unique within this PLC>
-        when:
-          signal: <a Plant route as_key targeting this PLC, or a Comm tag it consumes>
-          edge: rising | falling | level
-          debounce_ms: <int >= 0, optional>
-        emit:
-          tag: <a Comm tag this PLC produces>    # exactly one of tag / output
-          output: <snake_case local output name>
-          mode: latched | pulse | steady
-          duration_ms: <int > 0, required iff mode is pulse>
-```
-
-`Behavior` is a structured trigger IR compiled directly to ST — there is no free-form rule text, and no `owns` list. Every timing decision the scenario depends on (edge vs level, debounce window, pulse width) must be written here explicitly; if a scenario needs a primitive these fields can't express, that's a framework extension, not something to describe in prose. `when.signal` and `emit.tag` are cross-validated against the `Plant` and `Comm` blocks, so they must name signals those blocks actually declare.
+Run `python -m tools.validate_spec <path>` on every spec you emit. The validator is the gate; a scenario that hasn't passed it isn't finished.
 
 Design-time annotations go **next to** the task spec, not inside it (the loader ignores unknown top-level keys but keep the consumed shape clean):
 
@@ -107,20 +81,13 @@ Scenario:
 
 ### Assertions
 
-Assertions are strings in the DSL that `relay.verify.assertions.evaluate_assertion` recognizes. Current grammar:
+The three forms and their rules are in [docs/task_spec_syntax.md](../../docs/task_spec_syntax.md). What matters at design time is choosing among them:
 
-- `EVENTUALLY(<signal>, within: <N>ms)` — signal becomes true within N ms of sim start.
-- `PRECEDES(<a>, <b>, within: <N>ms)` — signal `a` becomes true no later than signal `b`, and no more than N ms before it. The budget is required. **Ordering is non-strict:** both becoming true in the same scan is a pass, because within one scan there is no observable ordering. Don't rely on `PRECEDES` to prove causation between signals that resolve in the same scan — a budget bounds the gap, it does not establish causation, and `PRECEDES` still can't distinguish causation from coincidence.
+- The scenario's success condition is a **temporal** claim → `EVENTUALLY`.
+- It is an **ordering with a deadline** → `PRECEDES`. The budget is a real requirement; state it from what the scenario needs, not from what the sim does.
+- It is a claim that one PLC's action was **caused by** another's message → `CAUSES`. This is the only form that distinguishes causation from coincidence, and it only works when the cause is a declared comm tag.
 
-Signal names must be identifiers (`\w+`) present in the PLC output image. If a scenario needs a form the evaluator doesn't support (e.g. `ALWAYS`, `NEVER`), call that out explicitly — it's a framework extension, not a spec extension.
-
-**Choosing a `PRECEDES` budget.** The budget is a real temporal requirement, so state it from the scenario's needs, not from what the sim currently does. When the real constraint is unknown, state a generously loose budget and say in a comment that it is an unvalidated placeholder — an obviously loose number is honest, whereas a precise-looking one (`50ms`, `120ms`) reads as measured and misleads. Tighten it later from the `observed_gap_ms` the verifier reports on every evaluation, pass or fail.
-
-```yaml
-Assertions:
-  - "EVENTUALLY(<signal>, within: <N>ms)"
-  - "PRECEDES(<signal_a>, <signal_b>, within: <N>ms)"
-```
+If a scenario needs a form the evaluator doesn't support (e.g. `ALWAYS`, `NEVER`), call that out explicitly — it's a framework extension, not a spec extension.
 
 ## Environment spec format
 
@@ -153,13 +120,15 @@ Flag explicitly when composition requires runtime work that doesn't exist yet (e
 
 5. Identify the specific scan-boundary or comm-timing conditions that would expose bad generated logic. These become the edge cases.
 
-6. Verify every assertion is expressible in the current DSL (`EVENTUALLY`, `PRECEDES` — both carry a required `within:` budget, so ordering with a bounded gap is expressible). If not, name the framework extension required and keep it out of the spec until built.
+6. Verify every assertion is expressible in the current DSL. If not, name the framework extension required and keep it out of the spec until built.
 
-7. Verify every signal named in assertions resolves to a trigger `emit` target, a `Plant` route `as_key`, or a declared `Comm` tag. `validate_spec` enforces this, so a miss is a loud spec-validation error rather than a silent pass — but catching it at design time is cheaper than discovering it when the scenario won't validate.
+7. Run `python -m tools.validate_spec <path>` and fix what it reports. It catches the mechanical errors — unresolvable signals, colliding names, a trigger emitting a target another already emits — so design review can spend its attention on whether the spec asserts the right thing.
+
+8. Sim-certify before saving to `specs/`: `python -m tools.expectations <path>` must show every assertion passing, and the committed artifact must be regenerated (`python -m tools.regenerate_expectations`). CI diffs `specs/expectations/`, so a spec landing without its artifact reddens the build.
 
 ## Output
 
-A complete task spec in the `System`/`Plant`/`Behavior`/`Assertions` shape, with the `Scenario:` design-note block attached. Save it to `specs/<name>.yaml` when the user confirms. Include a brief rationale explaining which coordination failure mode it isolates and why it's worth building.
+A complete task spec in the `System`/`Comm`/`Plant`/`Behavior`/`Assertions` shape, with the `Scenario:` design-note block attached. Save it to `specs/<name>.yaml` when the user confirms, sim-certified and with its expectations artifact. Include a brief rationale explaining which coordination failure mode it isolates and why it's worth building.
 
 For environments, emit the `Environment:` manifest and list the constituent task specs plus any cross-scenario assertions that only make sense at the integration level. Flag any runtime work required to actually run the composition.
 

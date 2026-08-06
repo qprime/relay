@@ -1,0 +1,20 @@
+{
+  "assertions": [
+    {
+      "observed_gap_ms": null,
+      "passed": true,
+      "text": "EVENTUALLY(part_at_b, within: 500ms)",
+      "witness": "signal 'part_at_b' true at 290.0ms"
+    },
+    {
+      "observed_gap_ms": null,
+      "passed": true,
+      "text": "CAUSES(release_request, belt_b_enable)",
+      "witness": "'belt_b_enable' true on 'plc_b' at tick 11 is caused by 'release_request' seq 12 sent by 'plc_a' at tick 11 and received at tick 11"
+    }
+  ],
+  "generated_from": "specs/conveyor_pulse_release.yaml",
+  "max_scans": 100,
+  "scan_period_ms": 10.0,
+  "system_name": "conveyor_pulse_release"
+}

@@ -13,6 +13,7 @@ Task spec YAML → ST function blocks → deterministic scan-cycle simulation �
 | Project context | [README.md](README.md) |
 | Load-bearing rules | [docs/invariants/](docs/invariants/) |
 | Slash-command personas | [.claude/commands/](.claude/commands/) |
+| Task spec syntax | [docs/task_spec_syntax.md](docs/task_spec_syntax.md) |
 | Task spec examples | [specs/](specs/) |
 | C++ deployment host | [host/README.md](host/README.md) |
 | Expectations artifacts (sim-certified verdicts) | [specs/expectations/](specs/expectations/) |
@@ -73,7 +74,8 @@ Task spec YAML → ST function blocks → deterministic scan-cycle simulation �
 | Debug an issue | `/debug` |
 | Implement a feature or fix | `/engineer` |
 | Review code, specs, or system | `/review` |
-| Write an implementation spec | `/spec` |
+| Write an implementation spec (a GitHub issue) | `/spec` |
+| Write or fix a task spec YAML | `/spec-author` |
 
 ## Invariants
 

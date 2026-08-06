@@ -1,0 +1,60 @@
+System:
+  name: conveyor_pulse_release
+  plcs:
+    - id: plc_a
+      role: upstream
+    - id: plc_b
+      role: downstream
+
+Comm:
+  strategy: tag
+  tags:
+    - name: release_request
+      produced_by: plc_a
+      consumed_by: [plc_b]
+
+Plant:
+  type: conveyor
+  config:
+    belt_speed_m_per_s: 0.5
+    sensor_trigger_threshold_m: 0.1
+    actuator_latency_ms: 50.0
+  routes:
+    - sensor: sensor_a_exit_triggered
+      to_plc: plc_a
+      as_key: sensor_a_exit
+      trigger: level
+    - sensor: part_at_b
+      to_plc: plc_b
+      as_key: part_at_b
+      trigger: level
+  actuators:
+    - from_plc: plc_b
+      key: belt_b_enable
+      as: belt_b_enable_signal
+
+Behavior:
+  plc_a:
+    triggers:
+      - id: request_on_stable_exit
+        when:
+          signal: sensor_a_exit
+          edge: rising
+          debounce_ms: 20
+        emit:
+          tag: release_request
+          mode: latched
+  plc_b:
+    triggers:
+      - id: pulse_belt_on_request
+        when:
+          signal: release_request
+          edge: rising
+        emit:
+          output: belt_b_enable
+          mode: pulse
+          duration_ms: 100
+
+Assertions:
+  - "EVENTUALLY(part_at_b, within: 500ms)"
+  - "CAUSES(release_request, belt_b_enable)"
