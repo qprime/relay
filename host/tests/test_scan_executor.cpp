@@ -93,23 +93,20 @@ struct FreeRunRig {
         for (std::uint32_t index = 0; index < 2; ++index) {
             states.emplace_back(index, &blocks[index], table.size());
         }
-        strategy = *build_comm_strategy(spec, table);
         bus.emplace(io.get_executor(), 2, table.size(), 64);
     }
 
     PlcExecutionContext context(std::uint32_t index, std::int64_t max_scans,
                                 double period_ms) {
-        return PlcExecutionContext{index,  max_scans,      period_ms,
-                                   &*bus,  &states[index], &trace,
-                                   &table, &strategy,      &latest[index],
-                                   &run};
+        return PlcExecutionContext{index, max_scans,      period_ms,
+                                   &*bus, &states[index], &trace,
+                                   &table, &latest[index], &run};
     }
 
     ResolvedTaskSpec spec;
     SignalTable table;
     std::vector<ValidatedSt> blocks;
     std::vector<PlcScanState> states;
-    CommStrategy strategy;
     asio::io_context io;
     std::optional<CommBus> bus;
     TraceRing trace{1000};

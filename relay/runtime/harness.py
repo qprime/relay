@@ -58,7 +58,7 @@ async def simulate(
 
     plant_factory = get_plant(spec.plant_type)
     plant = plant_factory(spec.plant_block)
-    comm_strategy = build_comm_strategy(spec.comm_strategy, spec.comm_block)
+    build_comm_strategy(spec.comm_strategy, spec.comm_block)
 
     bus = CommBus()
     trace = TraceLog()
@@ -70,7 +70,6 @@ async def simulate(
     }
 
     latest_outputs: dict[str, IOImage] = {pid: IOImage.empty() for pid in plc_ids}
-    prior_outputs: dict[str, IOImage] = {pid: IOImage.empty() for pid in plc_ids}
 
     clock_queues: dict[str, asyncio.Queue[SimClock]] = {
         pid: asyncio.Queue() for pid in plc_ids
@@ -139,13 +138,6 @@ async def simulate(
             for _ in plc_ids:
                 await _await_done_or_failure()
 
-            for pid in plc_ids:
-                for target, key, value in comm_strategy.route(
-                    pid, latest_outputs[pid], prior_outputs[pid]
-                ):
-                    await _harness_send(target, key, value)
-
-            prior_outputs = {pid: latest_outputs[pid] for pid in plc_ids}
             prior_plant_out = plant_out
             clock = clock.advance(scan_period_ms)
     finally:

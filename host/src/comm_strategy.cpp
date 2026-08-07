@@ -15,16 +15,6 @@ std::optional<std::uint32_t> index_of(std::span<const std::string> plc_ids,
     return static_cast<std::uint32_t>(it - plc_ids.begin());
 }
 
-bool optional_cells_equal(const std::optional<Cell>& lhs, const std::optional<Cell>& rhs) {
-    if (lhs.has_value() != rhs.has_value()) {
-        return false;
-    }
-    if (!lhs.has_value()) {
-        return true;
-    }
-    return cells_equal(*lhs, *rhs);
-}
-
 }  // namespace
 
 std::expected<TagStrategy, StrategyError> TagStrategy::try_create(
@@ -59,36 +49,7 @@ std::expected<TagStrategy, StrategyError> TagStrategy::try_create(
         }
         strategy.tags_.push_back(std::move(resolved));
     }
-    std::size_t max_routed = 0;
-    for (const Tag& tag : strategy.tags_) {
-        max_routed += tag.consumer_indices.size();
-    }
-    strategy.scratch_.resize(max_routed);
     return strategy;
-}
-
-std::span<const Routed> TagStrategy::route(std::uint32_t producer_index,
-                                           const IOImage& outputs,
-                                           const IOImage& prior_outputs) noexcept {
-    std::size_t count = 0;
-    for (const Tag& tag : tags_) {
-        if (tag.producer_index != producer_index) {
-            continue;
-        }
-        const std::optional<Cell> current = outputs.get(tag.name);
-        const std::optional<Cell> prior = prior_outputs.get(tag.name);
-        if (optional_cells_equal(current, prior)) {
-            continue;
-        }
-        if (!current.has_value()) {
-            continue;
-        }
-        for (const std::uint32_t consumer : tag.consumer_indices) {
-            scratch_[count] = Routed{consumer, tag.signal_id, *current};
-            ++count;
-        }
-    }
-    return std::span<const Routed>(scratch_.data(), count);
 }
 
 std::expected<CommStrategy, StrategyError> build_comm_strategy(

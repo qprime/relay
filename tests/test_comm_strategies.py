@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from relay.io_image import IOImage
 from relay.spec.schema import TaskSpec
 from relay.strategies.comm import (
     AddressStrategy,
@@ -59,60 +58,6 @@ class TestTagStrategy:
         issues = strat.validate_config(block, spec)
         assert any("duplicated" in i for i in issues), issues
 
-    def test_routes_on_change(self):
-        block = {
-            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]
-        }
-        strat = TagStrategy(block)
-        outputs = IOImage(values={"x": True})
-        prior = IOImage(values={"x": False})
-        emitted = strat.route("plc_a", outputs, prior)
-        assert emitted == [("plc_b", "x", True)]
-
-        # next scan: no change → nothing emitted
-        emitted = strat.route("plc_a", outputs, outputs)
-        assert emitted == []
-
-    def test_routes_deassertion(self):
-        block = {
-            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]
-        }
-        strat = TagStrategy(block)
-        outputs = IOImage(values={"x": False})
-        prior = IOImage(values={"x": True})
-        emitted = strat.route("plc_a", outputs, prior)
-        assert emitted == [("plc_b", "x", False)]
-
-    def test_routes_to_all_consumers(self):
-        block = {
-            "tags": [
-                {"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b", "plc_c"]}
-            ]
-        }
-        strat = TagStrategy(block)
-        outputs = IOImage(values={"x": True})
-        prior = IOImage.empty()
-        emitted = strat.route("plc_a", outputs, prior)
-        assert sorted(emitted) == [("plc_b", "x", True), ("plc_c", "x", True)]
-
-    def test_present_to_absent_emits_nothing(self):
-        block = {
-            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]
-        }
-        strat = TagStrategy(block)
-        prior = IOImage(values={"x": True})
-        emitted = strat.route("plc_a", IOImage.empty(), prior)
-        assert emitted == []
-
-    def test_first_scan_treats_prior_as_empty(self):
-        block = {
-            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]
-        }
-        strat = TagStrategy(block)
-        outputs = IOImage(values={"x": True})
-        emitted = strat.route("plc_a", outputs, IOImage.empty())
-        assert emitted == [("plc_b", "x", True)]
-
 
 class TestStrategyRegistry:
     def test_address_registered_but_validate_raises(self):
@@ -127,9 +72,8 @@ class TestStrategyRegistry:
 
     def test_build_comm_strategy_passes_block_to_tag(self):
         block = {
-            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]
+            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_z"]}]
         }
         strat = build_comm_strategy("tag", block)
-        outputs = IOImage(values={"x": True})
-        emitted = strat.route("plc_a", outputs, IOImage.empty())
-        assert emitted == [("plc_b", "x", True)]
+        issues = strat.validate_config(block, _spec())
+        assert any("plc_z" in i for i in issues), issues

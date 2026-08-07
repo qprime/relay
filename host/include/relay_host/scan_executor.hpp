@@ -73,7 +73,6 @@ struct PlcExecutionContext {
     PlcScanState* state;
     TraceRing* trace;
     const SignalTable* table;
-    CommStrategy* strategy;
     IOImage* latest_output;
     RunState* run;
 };

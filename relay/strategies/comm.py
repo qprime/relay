@@ -1,7 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Protocol
-
-from relay.io_image import IOImage
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from relay.spec.schema import TaskSpec
@@ -12,27 +10,12 @@ class CommStrategy(Protocol):
 
     def validate_config(self, comm_block: dict, spec: "TaskSpec") -> list[str]: ...
 
-    def route(
-        self,
-        producer_id: str,
-        outputs: IOImage,
-        prior_outputs: IOImage,
-    ) -> list[tuple[str, str, Any]]: ...
-
 
 class TagStrategy:
     name = "tag"
 
     def __init__(self, comm_block: dict | None = None) -> None:
-        self._by_producer: dict[str, list[tuple[str, list[str]]]] = {}
-        block = comm_block or {}
-        for tag in block.get("tags", []) or []:
-            producer = tag.get("produced_by")
-            name = tag.get("name")
-            consumers = list(tag.get("consumed_by") or [])
-            if not producer or not name:
-                continue
-            self._by_producer.setdefault(producer, []).append((name, consumers))
+        self._comm_block = comm_block or {}
 
     def validate_config(self, comm_block: dict, spec: "TaskSpec") -> list[str]:
         issues: list[str] = []
@@ -70,27 +53,6 @@ class TagStrategy:
                         )
         return issues
 
-    def route(
-        self,
-        producer_id: str,
-        outputs: IOImage,
-        prior_outputs: IOImage,
-    ) -> list[tuple[str, str, Any]]:
-        emitted: list[tuple[str, str, Any]] = []
-        for tag_name, consumers in self._tags_for(producer_id):
-            current = outputs.get(tag_name)
-            prior = prior_outputs.get(tag_name)
-            if current == prior:
-                continue
-            if current is None:
-                continue
-            for consumer in consumers:
-                emitted.append((consumer, tag_name, current))
-        return emitted
-
-    def _tags_for(self, producer_id: str) -> list[tuple[str, list[str]]]:
-        return self._by_producer.get(producer_id, [])
-
 
 class AddressStrategy:
     name = "address"
@@ -99,14 +61,6 @@ class AddressStrategy:
         self._comm_block = comm_block or {}
 
     def validate_config(self, comm_block: dict, spec: "TaskSpec") -> list[str]:
-        raise NotImplementedError("address-based comm not yet implemented")
-
-    def route(
-        self,
-        producer_id: str,
-        outputs: IOImage,
-        prior_outputs: IOImage,
-    ) -> list[tuple[str, str, Any]]:
         raise NotImplementedError("address-based comm not yet implemented")
 
 

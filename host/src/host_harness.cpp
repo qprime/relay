@@ -179,7 +179,7 @@ Task HostHarness::run() {
             ex,
             run_plc_scan_loop(PlcExecutionContext{
                 index, cfg_.max_scans, cfg_.scan_period_ms, &bus_, &states_[index],
-                &trace_, &table_, &strategy_, &latest_outputs_[index], &run_state_}),
+                &trace_, &table_, &latest_outputs_[index], &run_state_}),
             asio::experimental::use_promise));
     }
     joins.push_back(asio::co_spawn(ex, run_plant_loop(), asio::experimental::use_promise));

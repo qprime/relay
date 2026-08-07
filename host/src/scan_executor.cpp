@@ -129,9 +129,6 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
 Task run_plc_scan_loop(PlcExecutionContext ctx) {
     OutgoingBuffer outgoing;
     SimClock clock = SimClock::zero();
-    IOImage prior_outputs = IOImage::empty();
-    std::vector<std::int64_t> routed_send_counts(ctx.table->size(), 0);
-    std::vector<Routed> routed_copy;
     asio::steady_timer timer(co_await asio::this_coro::executor);
     const auto period = std::chrono::duration_cast<asio::steady_timer::duration>(
         std::chrono::duration<double, std::milli>(ctx.scan_period_ms));
@@ -180,21 +177,7 @@ Task run_plc_scan_loop(PlcExecutionContext ctx) {
                 ctx.table->name_of(ctx.state->outputs[cell].signal_id),
                 ctx.state->outputs[cell].value);
         }
-        const std::span<const Routed> routed = std::visit(
-            [&](auto& strategy) {
-                return strategy.route(ctx.plc_index, outputs, prior_outputs);
-            },
-            *ctx.strategy);
-        routed_copy.assign(routed.begin(), routed.end());
-        for (const Routed& message : routed_copy) {
-            const std::int64_t seq = ++routed_send_counts[message.signal_id];
-            co_await ctx.bus->send(
-                message.consumer_index,
-                Message{message.signal_id, message.value, kNoSender, seq});
-        }
-
-        *ctx.latest_output = outputs;
-        prior_outputs = std::move(outputs);
+        *ctx.latest_output = std::move(outputs);
         clock = clock.advance(ctx.scan_period_ms);
     }
     ctx.bus->close_receiver(ctx.plc_index);

@@ -43,15 +43,6 @@ bool ever_delivered(const TraceRing& trace, const SignalTable& table,
     return false;
 }
 
-TEST(TestHostHarness, test_strategy_routed_tag_is_delivered) {
-    ResolvedTaskSpec spec = minimal_two_plc_spec();
-    spec.comm.tags = {ResolvedTag{"relayed", "plc_a", {"plc_b"}}};
-    const auto harness = run_harness(
-        spec, {{"plc_a", "relayed := TRUE;"}, {"plc_b", ""}}, fast_config(4));
-    ASSERT_FALSE(harness->run_error().has_value());
-    EXPECT_TRUE(ever_delivered(harness->trace(), harness->signal_table(), 1, "relayed"));
-}
-
 TEST(TestHostHarness, test_fb_outgoing_send_is_delivered) {
     const auto harness = run_harness(
         minimal_two_plc_spec(),
