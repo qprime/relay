@@ -171,6 +171,41 @@ class TestPrecedesSemantics:
         assert result.observed_gap_ms is None
 
 
+class TestEventuallySemantics:
+    def test_witness_ms_reported_on_pass(self):
+        trace = _trace({}, {}, {"a": True})
+        result = evaluate_assertion("EVENTUALLY(a, within: 500ms)", trace)
+        assert result.passed, result.reason
+        assert result.witness_ms == 20.0
+
+    def test_witness_ms_reported_when_true_after_budget(self):
+        trace = _trace({}, {}, {"a": True})
+        result = evaluate_assertion("EVENTUALLY(a, within: 10ms)", trace)
+        assert not result.passed
+        assert result.witness_ms == 20.0
+        assert "first true at 20.0ms" in result.reason
+        assert "after the 10.0ms budget" in result.reason
+
+    def test_witness_ms_none_when_never_true(self):
+        trace = _trace({}, {})
+        result = evaluate_assertion("EVENTUALLY(a, within: 500ms)", trace)
+        assert not result.passed
+        assert result.witness_ms is None
+        assert "never true" in result.reason
+
+    def test_zero_witness_ms_survives_at_tick_zero(self):
+        trace = _trace({"a": True})
+        result = evaluate_assertion("EVENTUALLY(a, within: 500ms)", trace)
+        assert result.passed
+        assert result.witness_ms == 0.0
+        assert result.witness_ms is not None
+
+    def test_precedes_and_causes_leave_witness_ms_none(self):
+        trace = _trace({"a": True}, {"a": True, "b": True})
+        result = evaluate_assertion("PRECEDES(a, b, within: 500ms)", trace)
+        assert result.witness_ms is None
+
+
 class TestCausesGrammar:
     def test_causes_parses(self):
         parsed = parse_assertion("CAUSES(a, b)")

@@ -3,20 +3,23 @@
     {
       "observed_gap_ms": null,
       "passed": true,
-      "text": "EVENTUALLY(part_at_b, within: 500ms)",
-      "witness": "signal 'part_at_b' true at 290.0ms"
+      "text": "EVENTUALLY(part_at_b, within: 400ms)",
+      "witness": "signal 'part_at_b' true at 290.0ms",
+      "witness_ms": 290.0
     },
     {
       "observed_gap_ms": 10.0,
       "passed": true,
-      "text": "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)",
-      "witness": "'handoff_signal' at 100.0ms precedes 'belt_b_enable' at 110.0ms (gap 10.0ms, budget 500.0ms)"
+      "text": "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)",
+      "witness": "'handoff_signal' at 100.0ms precedes 'belt_b_enable' at 110.0ms (gap 10.0ms, budget 50.0ms)",
+      "witness_ms": null
     },
     {
       "observed_gap_ms": null,
       "passed": true,
       "text": "CAUSES(handoff_signal, belt_b_enable)",
-      "witness": "'belt_b_enable' true on 'plc_b' at tick 11 is caused by 'handoff_signal' seq 11 sent by 'plc_a' at tick 10 and received at tick 11"
+      "witness": "'belt_b_enable' true on 'plc_b' at tick 11 is caused by 'handoff_signal' seq 11 sent by 'plc_a' at tick 10 and received at tick 11",
+      "witness_ms": null
     }
   ],
   "generated_from": "specs/conveyor_handoff.yaml",

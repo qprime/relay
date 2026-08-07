@@ -146,11 +146,11 @@ class TestHostSatisfiesExpectations:
             cpp_trace, "plc_b", "belt_b_enable", delay_scans=60
         )
         precedes = evaluate_assertion(
-            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", skewed
+            "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", skewed
         )
         causes = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", skewed)
         assert not precedes.passed, (
-            f"600ms of injected skew must exhaust the 500ms budget: {precedes.reason}"
+            f"600ms of injected skew must exhaust the 50ms budget: {precedes.reason}"
         )
         assert causes.passed, (
             "CAUSES reads no clock on the pass/fail path and must survive delays "

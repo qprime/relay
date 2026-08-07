@@ -87,9 +87,10 @@ quietly becomes two formats.
    `tick` and `elapsed_ms` remain symmetric `int()` / `float()` conversions on
    load — a known weaker spot, tolerated because it is symmetric and a corrupt
    clock surfaces as a divergence scan rather than a confident wrong verdict.
-3. **`relay/verdict_io.py`** guards all four fields from both directions:
+3. **`relay/verdict_io.py`** guards all five fields from both directions:
    `assertion` and `reason` are `str`, `passed` is `bool`, `observed_gap_ms`
-   is a finite number or `None`.
+   and `witness_ms` are each a finite number or `None` — the same `_check_ms`
+   predicate, named per field.
 4. **`passed` is rejected, never coerced.** `bool(data["passed"])` turns
    `"yes"` into `True`, `"false"` into `True`, and `[]` into `False`. A corrupt
    verdict file would not fail to load; it would load with an inverted

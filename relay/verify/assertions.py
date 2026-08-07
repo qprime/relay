@@ -11,6 +11,7 @@ class AssertionResult:
     passed: bool
     reason: str
     observed_gap_ms: float | None = None
+    witness_ms: float | None = None
 
 
 def evaluate_assertion(assertion: str, trace: TraceLog) -> AssertionResult:
@@ -80,7 +81,22 @@ def _check_eventually(
 ) -> AssertionResult:
     first_ms = _first_true_ms(signal_name, trace)
     if first_ms is not None and first_ms <= within_ms:
-        return AssertionResult(assertion=assertion, passed=True, reason=f"signal '{signal_name}' true at {first_ms:.1f}ms")
+        return AssertionResult(
+            assertion=assertion,
+            passed=True,
+            reason=f"signal '{signal_name}' true at {first_ms:.1f}ms",
+            witness_ms=first_ms,
+        )
+    if first_ms is not None:
+        return AssertionResult(
+            assertion=assertion,
+            passed=False,
+            reason=(
+                f"signal '{signal_name}' first true at {first_ms:.1f}ms, "
+                f"after the {within_ms}ms budget"
+            ),
+            witness_ms=first_ms,
+        )
     return AssertionResult(
         assertion=assertion,
         passed=False,

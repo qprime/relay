@@ -3,14 +3,16 @@
     {
       "observed_gap_ms": null,
       "passed": true,
-      "text": "EVENTUALLY(part_at_b, within: 500ms)",
-      "witness": "signal 'part_at_b' true at 290.0ms"
+      "text": "EVENTUALLY(part_at_b, within: 400ms)",
+      "witness": "signal 'part_at_b' true at 290.0ms",
+      "witness_ms": 290.0
     },
     {
       "observed_gap_ms": null,
       "passed": true,
       "text": "CAUSES(release_request, belt_b_enable)",
-      "witness": "'belt_b_enable' true on 'plc_b' at tick 12 is caused by 'release_request' seq 12 sent by 'plc_a' at tick 11 and received at tick 12"
+      "witness": "'belt_b_enable' true on 'plc_b' at tick 12 is caused by 'release_request' seq 12 sent by 'plc_a' at tick 11 and received at tick 12",
+      "witness_ms": null
     }
   ],
   "generated_from": "specs/conveyor_pulse_release.yaml",

@@ -105,25 +105,27 @@ There is no scan barrier and no shared scan index. Record interleaving and
 message-arrival scans are genuinely nondeterministic run to run; what the
 host guarantees instead is **verdict determinism with quantified headroom**
 — the same certified verdicts on every run, gated by ten consecutive passes
-in `tests/test_host_satisfies_expectations.py`, with the headroom of each
-assertion form against interleaving skew measured in #14 (`CAUSES` is
-timing-free by construction; the placeholder 500ms `EVENTUALLY` budget holds
-with 1.7× to spare, 290.0ms observed).
+in `tests/test_host_satisfies_expectations.py`. The budgets are measured
+(#8), and the headroom of each against the worst observed side:
 
-The `PRECEDES` budget's former "~490ms to spare" is withdrawn rather than
-restated. It was headroom against a gap of `0.0` that no measurement produced:
-a comm tag resolved only through the consumer's I/O image, so the form read
-both endpoints off one `ScanRecord` and compared a clock with itself (#21).
+| Assertion | Sim | Host (in-process) | Host (socket) | Budget | Headroom |
+|---|---|---|---|---|---|
+| `EVENTUALLY(part_at_b)` | 290.0ms | 300.0ms | 300.0ms | 400ms | 100ms = 10 scan periods |
+| `PRECEDES(handoff_signal, belt_b_enable)` | 10.0ms | 0.0ms | 0.0ms | 50ms | 40ms = 4 scan periods |
 
-The sim now reports `10.0ms` on `conveyor_handoff` — one consumer scan period
-of charged delivery latency (#16) — against a 500ms placeholder budget. The
-host reports `0.0ms` on the same spec, and that difference is by design: the
-host's clock referent is the wall clock and its in-process channel models a
-backplane, so it pays between zero and roughly one period where the sim always
-charges one. The sim is therefore the **conservative** oracle, and a budget
-derived from its measurement covers a host that is at worst as slow. Verdict
-equality is per-assertion pass/fail, so the differing gaps do not affect it.
-Replacing the placeholder with a measured budget is #8's to state.
+`CAUSES` is timing-free by construction and carries no budget. The margins
+are additive scan periods, not multipliers: the variability mechanism is
+interleaving skew under free-running clocks, which is bounded in periods and
+does not scale with the observation.
+
+The gap difference on `PRECEDES` is by design: the host's clock referent is
+the wall clock and its in-process channel models a backplane, so it pays
+between zero and roughly one period where the sim always charges one (#16).
+For comm latency the sim is therefore the **conservative** oracle. That claim
+does not extend to plant transit: the host observes `part_at_b` one scan
+period later than the sim (300.0ms against 290.0ms), so the `EVENTUALLY`
+budget derives from the host's observation, the worst side. Verdict equality
+is per-assertion pass/fail, so the differing gaps do not affect it.
 
 ## Asio coupling
 

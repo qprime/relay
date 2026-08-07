@@ -44,6 +44,7 @@ def build_expectations(
                 "passed": result.passed,
                 "witness": result.reason,
                 "observed_gap_ms": result.observed_gap_ms,
+                "witness_ms": result.witness_ms,
             }
         )
     return {

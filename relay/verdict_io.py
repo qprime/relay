@@ -22,20 +22,20 @@ def _check_bool(value: Any, field: str, assertion: Any) -> Any:
     return value
 
 
-def _check_gap(gap: Any, assertion: Any) -> Any:
-    if gap is None:
+def _check_ms(value: Any, field: str, assertion: Any) -> Any:
+    if value is None:
         return None
-    if isinstance(gap, bool) or not isinstance(gap, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(
-            f"assertion {assertion!r} has observed_gap_ms of type "
-            f"{type(gap).__name__}; expected a number or None"
+            f"assertion {assertion!r} has {field} of type "
+            f"{type(value).__name__}; expected a number or None"
         )
-    if not math.isfinite(gap):
+    if not math.isfinite(value):
         raise ValueError(
-            f"assertion {assertion!r} has observed_gap_ms of {gap}, which JSON "
-            "cannot represent portably; gaps must be finite"
+            f"assertion {assertion!r} has {field} of {value}, which JSON "
+            "cannot represent portably; milliseconds must be finite"
         )
-    return gap
+    return value
 
 
 def verdict_to_dict(result) -> dict[str, Any]:
@@ -44,7 +44,8 @@ def verdict_to_dict(result) -> dict[str, Any]:
         "assertion": _check_str(assertion, "assertion", assertion),
         "passed": _check_bool(result.passed, "passed", assertion),
         "reason": _check_str(result.reason, "reason", assertion),
-        "observed_gap_ms": _check_gap(result.observed_gap_ms, assertion),
+        "observed_gap_ms": _check_ms(result.observed_gap_ms, "observed_gap_ms", assertion),
+        "witness_ms": _check_ms(result.witness_ms, "witness_ms", assertion),
     }
 
 
@@ -54,7 +55,8 @@ def verdict_from_dict(data: dict[str, Any]) -> dict[str, Any]:
         "assertion": _check_str(assertion, "assertion", assertion),
         "passed": _check_bool(data["passed"], "passed", assertion),
         "reason": _check_str(data["reason"], "reason", assertion),
-        "observed_gap_ms": _check_gap(data["observed_gap_ms"], assertion),
+        "observed_gap_ms": _check_ms(data["observed_gap_ms"], "observed_gap_ms", assertion),
+        "witness_ms": _check_ms(data["witness_ms"], "witness_ms", assertion),
     }
 
 

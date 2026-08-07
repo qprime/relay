@@ -54,11 +54,12 @@ Behavior:
           mode: latched
 
 Assertions:
-  - "EVENTUALLY(part_at_b, within: 500ms)"
-  # Budget is an UNVALIDATED PLACEHOLDER chosen for scale, not measured.
-  # Observed gap today is 0ms (both signals land in the same scan).
-  # Tighten once real timing data exists — see observed_gap_ms in AssertionResult.
-  - "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)"
+  # 300.0ms worst observed (C++ host, both plant modes; sim observes 290.0ms)
+  # + 100ms headroom, a stated choice of 10 scan periods for interleaving skew.
+  - "EVENTUALLY(part_at_b, within: 400ms)"
+  # 10.0ms observed (sim: one consumer scan period of charged delivery; host
+  # observes 0.0ms) + 40ms headroom, a stated choice of 4 scan periods.
+  - "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)"
   # Attribution, not timing: belt_b_enable must be traceable to a received
   # handoff_signal message, matched by sequence counter. Carries no budget —
   # that is PRECEDES's job, and a budget would reintroduce the clock dependency

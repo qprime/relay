@@ -43,13 +43,13 @@ class TestExpectations:
         source = CONVEYOR_SPEC.read_text()
         broken.write_text(
             source.replace(
-                '"EVENTUALLY(part_at_b, within: 500ms)"',
-                '"EVENTUALLY(signal_that_never_fires, within: 500ms)"',
+                '"EVENTUALLY(part_at_b, within: 400ms)"',
+                '"EVENTUALLY(signal_that_never_fires, within: 400ms)"',
             )
         )
         artifact = build_expectations(broken)
         entry = artifact["assertions"][0]
-        assert entry["text"] == "EVENTUALLY(signal_that_never_fires, within: 500ms)"
+        assert entry["text"] == "EVENTUALLY(signal_that_never_fires, within: 400ms)"
         assert entry["passed"] is False
         assert "signal_that_never_fires" in entry["witness"]
 

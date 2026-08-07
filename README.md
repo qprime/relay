@@ -43,7 +43,7 @@ Exports and adapters into OpenPLC, CODESYS, Factory I/O, or PLCverif are the obv
 
 The project's first end-to-end scenario: a two-PLC conveyor with a part handoff between belts.
 
-**Intent:** When PLC A's exit sensor sees a part, signal PLC B; PLC B enables its belt; the part should arrive at B within 500 ms, the handoff signal must precede belt B enabling, and belt B must enable *because of* the handoff message rather than coincidentally.
+**Intent:** When PLC A's exit sensor sees a part, signal PLC B; PLC B enables its belt; the part should arrive at B within 400 ms, the handoff signal must precede belt B enabling, and belt B must enable *because of* the handoff message rather than coincidentally.
 
 **Task spec** ([`specs/conveyor_handoff.yaml`](specs/conveyor_handoff.yaml)):
 
@@ -84,8 +84,8 @@ Behavior:
         emit: { output: belt_b_enable, mode: latched }
 
 Assertions:
-  - "EVENTUALLY(part_at_b, within: 500ms)"
-  - "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)"
+  - "EVENTUALLY(part_at_b, within: 400ms)"
+  - "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)"
   - "CAUSES(handoff_signal, belt_b_enable)"
 ```
 
@@ -124,7 +124,7 @@ _send_plc_b_handoff_signal := _scratch_latched_handoff_on_exit;
 
 ```python
 trace = _run_simulation()
-result = evaluate_assertion("EVENTUALLY(part_at_b, within: 500ms)", trace)
+result = evaluate_assertion("EVENTUALLY(part_at_b, within: 400ms)", trace)
 assert result.passed, result.reason
 ```
 

@@ -27,14 +27,14 @@ class TestConveyorHandoff:
     def test_part_arrives_at_b_within_timeout(self):
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        result = evaluate_assertion("EVENTUALLY(part_at_b, within: 500ms)", trace)
+        result = evaluate_assertion("EVENTUALLY(part_at_b, within: 400ms)", trace)
         assert result.passed, result.reason
 
     def test_handoff_signal_precedes_belt_b_enable(self):
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
         result = evaluate_assertion(
-            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
+            "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace
         )
         assert result.passed, result.reason
 
@@ -44,14 +44,14 @@ class TestConveyorHandoff:
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
         result = evaluate_assertion(
-            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
+            "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace
         )
         assert result.observed_gap_ms == 10.0, result.reason
 
     def test_part_never_arrives_when_sensor_a_never_triggers(self):
         spec, blocks = _load_spec_and_blocks(silence_plc_a=True)
         trace = asyncio.run(simulate(spec, blocks))
-        result = evaluate_assertion("EVENTUALLY(part_at_b, within: 500ms)", trace)
+        result = evaluate_assertion("EVENTUALLY(part_at_b, within: 400ms)", trace)
         assert not result.passed, "expected failure when plc_a never signals handoff"
 
     def test_scan_loop_io_image_immutable_during_execution(self):
@@ -203,8 +203,8 @@ class TestSpecLoading:
         spec = load_spec(_spec_path())
         assert spec.system_name == "conveyor_handoff"
         assert {p["id"] for p in spec.plcs} == {"plc_a", "plc_b"}
-        assert "EVENTUALLY(part_at_b, within: 500ms)" in spec.assertions
-        assert "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)" in spec.assertions
+        assert "EVENTUALLY(part_at_b, within: 400ms)" in spec.assertions
+        assert "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)" in spec.assertions
         assert "CAUSES(handoff_signal, belt_b_enable)" in spec.assertions
         assert spec.comm_strategy == "tag"
         assert spec.plant_type == "conveyor"
@@ -307,7 +307,7 @@ class TestCommTagLatencyIsMeasurable:
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
         result = evaluate_assertion(
-            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
+            "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace
         )
         assert result.observed_gap_ms == 10.0
         first_truthy = next(
@@ -402,7 +402,7 @@ class TestCommTagLatencyIsMeasurable:
             "EVENTUALLY(handoff_signal, within: 500ms)", trace
         )
         precedes = evaluate_assertion(
-            "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
+            "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace
         )
         assert eventually.passed and precedes.passed
         emission = next(
@@ -463,7 +463,7 @@ class TestBusChargesDeliveryLatency:
 
         raw = yaml.safe_load(_spec_path().read_text())
         raw["System"]["plcs"] = list(reversed(raw["System"]["plcs"]))
-        assertion = "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)"
+        assertion = "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)"
 
         forward_spec, forward_blocks = _load_spec_and_blocks()
         forward = evaluate_assertion(

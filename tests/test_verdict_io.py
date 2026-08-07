@@ -42,10 +42,11 @@ def _round_trip(results):
 
 def _result(**overrides) -> AssertionResult:
     fields = {
-        "assertion": "EVENTUALLY(part_at_b, within: 500ms)",
+        "assertion": "EVENTUALLY(part_at_b, within: 400ms)",
         "passed": True,
         "reason": "signal 'part_at_b' true at 60.0ms",
         "observed_gap_ms": None,
+        "witness_ms": None,
     }
     fields.update(overrides)
     return AssertionResult(**fields)
@@ -61,6 +62,7 @@ class TestVerdictIORoundTrip:
             assert restored["passed"] == original.passed
             assert restored["reason"] == original.reason
             assert restored["observed_gap_ms"] == original.observed_gap_ms
+            assert restored["witness_ms"] == original.witness_ms
 
     def test_empty_results_round_trips(self):
         assert _round_trip([]) == []
@@ -79,6 +81,10 @@ class TestVerdictIORoundTrip:
     def test_negative_gap_survives_with_sign(self):
         restored = _round_trip([_result(passed=False, observed_gap_ms=-40.0)])[0]
         assert restored["observed_gap_ms"] == -40.0
+
+    def test_witness_ms_round_trips_with_value(self):
+        restored = _round_trip([_result(witness_ms=290.0)])[0]
+        assert restored["witness_ms"] == 290.0
 
     def test_unparseable_assertion_result_round_trips(self):
         result = _result(
@@ -112,7 +118,7 @@ class TestVerdictFormat:
         )
         assert document["counts"] == {"total": 3, "passed": 2, "failed": 1}
 
-    def test_every_result_has_four_keys(self):
+    def test_every_result_has_five_keys(self):
         document = json.loads(_dump_to_text(_conveyor_results()))
         for entry in document["results"]:
             assert set(entry) == {
@@ -120,6 +126,7 @@ class TestVerdictFormat:
                 "passed",
                 "reason",
                 "observed_gap_ms",
+                "witness_ms",
             }
 
     def test_key_order_does_not_affect_bytes(self):
@@ -135,13 +142,22 @@ class TestVerdictFormat:
             _dump_to_text([_result(observed_gap_ms=gap)])
         assert "observed_gap_ms" in str(exc.value)
 
+    @pytest.mark.parametrize(
+        "ms", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
+    )
+    def test_non_finite_witness_ms_raises_at_dump(self, ms):
+        with pytest.raises(ValueError) as exc:
+            _dump_to_text([_result(witness_ms=ms)])
+        assert "witness_ms" in str(exc.value)
+
 
 def _entry(**overrides) -> dict:
     fields = {
-        "assertion": "EVENTUALLY(part_at_b, within: 500ms)",
+        "assertion": "EVENTUALLY(part_at_b, within: 400ms)",
         "passed": True,
         "reason": "signal 'part_at_b' true at 60.0ms",
         "observed_gap_ms": None,
+        "witness_ms": None,
     }
     fields.update(overrides)
     return fields
@@ -182,6 +198,12 @@ class TestVerdictLoadGuards:
         with pytest.raises(ValueError) as exc:
             _load_entry(_entry(observed_gap_ms=value))
         assert "observed_gap_ms" in str(exc.value)
+
+    @pytest.mark.parametrize("value", ["not-a-number", True, [1]])
+    def test_non_numeric_witness_ms_rejected_at_load(self, value):
+        with pytest.raises(ValueError) as exc:
+            _load_entry(_entry(witness_ms=value))
+        assert "witness_ms" in str(exc.value)
 
     @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
     def test_non_finite_gap_rejected_at_load(self, literal):

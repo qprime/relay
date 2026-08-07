@@ -219,8 +219,10 @@ The budget is a real temporal requirement, so state it from what the scenario
 needs, not from what the sim currently does. When the real constraint is
 unknown, write a generously loose budget and say in a comment that it is an
 unvalidated placeholder — an obviously loose number is honest, whereas a
-precise-looking `120ms` reads as measured. `observed_gap_ms` is reported on
-every evaluation, pass or fail, so budgets can be tightened from measurement.
+precise-looking `120ms` reads as measured. `observed_gap_ms` (`PRECEDES`) and
+`witness_ms` (`EVENTUALLY`) are reported on every evaluation where the signals
+became true, pass or fail, so budgets can be tightened from measurement —
+`tools/observed_timings.py` aggregates them across trace files.
 
 A gap that crosses PLCs includes at least one **consumer scan period** of
 delivery latency, because the comm bus charges for the hop. A budget tighter

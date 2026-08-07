@@ -56,5 +56,7 @@ Behavior:
           duration_ms: 100
 
 Assertions:
-  - "EVENTUALLY(part_at_b, within: 500ms)"
+  # 300.0ms worst observed (C++ host, both plant modes; sim observes 290.0ms)
+  # + 100ms headroom, a stated choice of 10 scan periods for interleaving skew.
+  - "EVENTUALLY(part_at_b, within: 400ms)"
   - "CAUSES(release_request, belt_b_enable)"
