@@ -7,7 +7,7 @@ import pytest
 
 from relay.generator.st import compile_st_blocks
 from relay.runtime.harness import simulate
-from relay.spec.schema import load_spec
+from relay.spec.schema import TaskSpec, load_spec
 from relay.verify.assertions import evaluate_assertion
 
 
@@ -38,13 +38,15 @@ class TestConveyorHandoff:
         )
         assert result.passed, result.reason
 
-    def test_conveyor_precedes_observed_gap_is_zero(self):
+    def test_conveyor_precedes_gap_is_one_consumer_scan(self):
+        """The bus charges one consumer scan period for delivery (#16), so the
+        handoff costs exactly the 10ms scan period rather than nothing."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
         result = evaluate_assertion(
             "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
         )
-        assert result.observed_gap_ms == 0.0, result.reason
+        assert result.observed_gap_ms == 10.0, result.reason
 
     def test_part_never_arrives_when_sensor_a_never_triggers(self):
         spec, blocks = _load_spec_and_blocks(silence_plc_a=True)
@@ -266,20 +268,21 @@ class TestCommTagLatencyIsMeasurable:
 
     def test_known_nonzero_gap_is_reported_exactly(self, tmp_path):
         """The consumer cannot act in the producer's send scan, so a real gap
-        exists and is derivable: plc_a first sends truthy at 100.0ms, plc_b's
-        30ms debounce spans two 10ms scans, and the pulse asserts at 120.0ms."""
+        exists and is derivable: plc_a first sends truthy at 100.0ms, delivery
+        costs one 10ms consumer scan, plc_b's 30ms debounce spans two more
+        scans, and the pulse asserts at 130.0ms."""
         spec = self._consumer_debounced(tmp_path, 30)
         trace = asyncio.run(simulate(spec, compile_st_blocks(spec)))
         result = evaluate_assertion(
             "PRECEDES(release_request, belt_b_enable, within: 500ms)", trace
         )
         assert result.passed, result.reason
-        assert result.observed_gap_ms == 20.0, result.reason
+        assert result.observed_gap_ms == 30.0, result.reason
 
     def test_gap_is_anchored_to_the_first_truthy_send(self, tmp_path):
         """The failure a passing-looking implementation ships. plc_a sends
         every scan from tick 0 carrying False; anchoring to the first send of
-        any value would report 120.0ms and measure time since a message that
+        any value would report 130.0ms and measure time since a message that
         said nothing happened."""
         spec = self._consumer_debounced(tmp_path, 30)
         trace = asyncio.run(simulate(spec, compile_st_blocks(spec)))
@@ -292,21 +295,21 @@ class TestCommTagLatencyIsMeasurable:
         result = evaluate_assertion(
             "PRECEDES(release_request, belt_b_enable, within: 500ms)", trace
         )
-        assert result.observed_gap_ms != 120.0, (
+        assert result.observed_gap_ms != 130.0, (
             "gap anchored to the producer's first False send"
         )
-        assert result.observed_gap_ms == 20.0
+        assert result.observed_gap_ms == 30.0
 
-    def test_conveyor_handoff_still_reports_zero_from_the_bus(self):
-        """The control case. conveyor_handoff's zero must now come from the bus
-        charging no delivery latency (#16), not from resolution: the endpoint
-        is plc_a's first truthy send, not plc_b's delivery."""
+    def test_conveyor_handoff_gap_is_the_charged_delivery_latency(self):
+        """The endpoint is plc_a's first truthy send, not plc_b's delivery, so
+        the gap now measures what the bus charges: one consumer scan period.
+        Before #16 this read 0.0 because the bus charged nothing."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
         result = evaluate_assertion(
             "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)", trace
         )
-        assert result.observed_gap_ms == 0.0
+        assert result.observed_gap_ms == 10.0
         first_truthy = next(
             r for r in trace.for_plc("plc_a")
             if "handoff_signal" in r.sends and r.sends["handoff_signal"].value
@@ -386,7 +389,7 @@ class TestCommTagLatencyIsMeasurable:
             "PRECEDES(handoff_signal, c_belt_enable, within: 500ms)", trace
         )
         assert result.passed, result.reason
-        assert result.observed_gap_ms == 0.0
+        assert result.observed_gap_ms == 10.0
 
     def test_eventually_resolves_a_tag_the_same_way_precedes_does(self):
         """Both forms must read a tag on the same side. Leaving EVENTUALLY on
@@ -408,3 +411,81 @@ class TestCommTagLatencyIsMeasurable:
         )
         assert f"true at {emission.clock.elapsed_ms:.1f}ms" in eventually.reason
         assert f"at {emission.clock.elapsed_ms:.1f}ms precedes" in precedes.reason
+
+
+class TestBusChargesDeliveryLatency:
+    """#16 item 1: a message sent during a scan must not be readable by a
+    consumer scan at the same SimClock time.
+
+    Before this, the live delivery path was the PLC's own in-scan `bus.send`,
+    and coroutines ran in `System.plcs` declaration order with nothing in the
+    scan path suspending. A producer declared before its consumer completed
+    its whole scan, send included, before the consumer's drain ran — so
+    latency was zero along declaration order and one scan against it.
+    """
+
+    def _receipt_lag_ticks(self, spec):
+        trace = asyncio.run(simulate(spec, compile_st_blocks(spec)))
+        sends = {
+            r.sends["handoff_signal"].count: r.clock.tick
+            for r in trace.for_plc("plc_a")
+            if "handoff_signal" in r.sends
+        }
+        lags = [
+            r.clock.tick - sends[r.recvs["handoff_signal"].seq]
+            for r in trace.for_plc("plc_b")
+            if "handoff_signal" in r.recvs
+            and r.recvs["handoff_signal"].seq in sends
+        ]
+        assert lags, "no receipt was matched to a send"
+        return set(lags)
+
+    def test_receipt_never_lands_in_the_sending_tick(self):
+        spec, _ = _load_spec_and_blocks()
+        assert self._receipt_lag_ticks(spec) == {1}
+
+    def test_latency_is_identical_in_both_declaration_orders(self):
+        """The test that kills the ordering dependence. Reversing System.plcs
+        must not change observable timing; before the fix it flipped delivery
+        between zero and one scan."""
+        import yaml
+
+        forward = load_spec(_spec_path())
+        raw = yaml.safe_load(_spec_path().read_text())
+        raw["System"]["plcs"] = list(reversed(raw["System"]["plcs"]))
+        reversed_spec = TaskSpec(raw=raw)
+
+        assert self._receipt_lag_ticks(forward) == {1}
+        assert self._receipt_lag_ticks(reversed_spec) == {1}
+
+    def test_gap_is_identical_in_both_declaration_orders(self):
+        import yaml
+
+        raw = yaml.safe_load(_spec_path().read_text())
+        raw["System"]["plcs"] = list(reversed(raw["System"]["plcs"]))
+        assertion = "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)"
+
+        forward_spec, forward_blocks = _load_spec_and_blocks()
+        forward = evaluate_assertion(
+            assertion, asyncio.run(simulate(forward_spec, forward_blocks))
+        )
+        rev_spec = TaskSpec(raw=raw)
+        rev = evaluate_assertion(
+            assertion,
+            asyncio.run(simulate(rev_spec, compile_st_blocks(rev_spec))),
+        )
+        assert forward.observed_gap_ms == 10.0
+        assert rev.observed_gap_ms == forward.observed_gap_ms
+
+    def test_plant_routes_are_exempt_from_the_charge(self):
+        """A plant route models a sensor wired to the input terminals and
+        sampled at scan top, not a network. Plant sends carry no stamp and
+        deliver at the consumer's next drain, as before."""
+        spec, blocks = _load_spec_and_blocks()
+        trace = asyncio.run(simulate(spec, blocks))
+        first_sensor = next(
+            r for r in trace.for_plc("plc_a") if r.io.get("sensor_a_exit")
+        )
+        assert first_sensor.clock.tick == 10, (
+            "a charged plant route would push the sensor a scan later"
+        )

@@ -222,6 +222,11 @@ unvalidated placeholder — an obviously loose number is honest, whereas a
 precise-looking `120ms` reads as measured. `observed_gap_ms` is reported on
 every evaluation, pass or fail, so budgets can be tightened from measurement.
 
+A gap that crosses PLCs includes at least one **consumer scan period** of
+delivery latency, because the comm bus charges for the hop. A budget tighter
+than the consumer's period cannot be met by any cross-PLC handoff, however
+fast the logic is. A same-PLC gap pays nothing.
+
 `PRECEDES` bounds a gap. It does not establish causation, and cannot distinguish
 causation from coincidence.
 

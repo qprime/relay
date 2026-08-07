@@ -114,10 +114,16 @@ The `PRECEDES` budget's former "~490ms to spare" is withdrawn rather than
 restated. It was headroom against a gap of `0.0` that no measurement produced:
 a comm tag resolved only through the consumer's I/O image, so the form read
 both endpoints off one `ScanRecord` and compared a clock with itself (#21).
-The gap on `conveyor_handoff` is still `0.0`, but it is now a measurement —
-`plc_a`'s first truthy send and `plc_b`'s action genuinely share an
-`elapsed_ms`, because the comm bus charges nothing for delivery (#16). A
-meaningful `PRECEDES` margin needs #16 landed and is #8's to state.
+
+The sim now reports `10.0ms` on `conveyor_handoff` — one consumer scan period
+of charged delivery latency (#16) — against a 500ms placeholder budget. The
+host reports `0.0ms` on the same spec, and that difference is by design: the
+host's clock referent is the wall clock and its in-process channel models a
+backplane, so it pays between zero and roughly one period where the sim always
+charges one. The sim is therefore the **conservative** oracle, and a budget
+derived from its measurement covers a host that is at worst as slow. Verdict
+equality is per-assertion pass/fail, so the differing gaps do not affect it.
+Replacing the placeholder with a measured budget is #8's to state.
 
 ## Asio coupling
 

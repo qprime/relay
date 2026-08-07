@@ -29,6 +29,16 @@ free of latency that real signals would pay. Tests that exercise the bypassed
 path pass; tests that exercise the modeled path catch real bugs. The
 asymmetry is invisible from any single test or any single file.
 
+Routing everything through one channel is necessary but not sufficient: the
+channel has to actually charge the cost. Until #16 the bus routed correctly
+and charged nothing — a PLC's in-scan `bus.send` was readable by any consumer
+whose coroutine had not yet run in the same harness iteration, so latency was
+zero along `System.plcs` declaration order and one scan against it. `CommBus`
+now stamps each message with the sending scan's `elapsed_ms` and delivers only
+entries stamped strictly earlier than the consumer's scan top. Plant routes
+carry no stamp and stay exempt, because a sensor wired to the input terminals
+is sampled at scan top rather than delivered over a network.
+
 ## What this looks like
 
 1. **One `CommBus` instance per simulation.** Constructed in the harness;

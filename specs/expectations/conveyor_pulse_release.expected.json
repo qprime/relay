@@ -10,7 +10,7 @@
       "observed_gap_ms": null,
       "passed": true,
       "text": "CAUSES(release_request, belt_b_enable)",
-      "witness": "'belt_b_enable' true on 'plc_b' at tick 11 is caused by 'release_request' seq 12 sent by 'plc_a' at tick 11 and received at tick 11"
+      "witness": "'belt_b_enable' true on 'plc_b' at tick 12 is caused by 'release_request' seq 12 sent by 'plc_a' at tick 11 and received at tick 12"
     }
   ],
   "generated_from": "specs/conveyor_pulse_release.yaml",

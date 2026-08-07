@@ -35,7 +35,7 @@ class PLCCoroutine:
         for _ in range(max_scans):
             clock = await clock_source.get()
 
-            comm = await bus.drain(self.plc_id)
+            comm = await bus.drain(self.plc_id, clock.elapsed_ms)
             for key, value in comm.promote().items():
                 io = io.with_value(key, value)
 
@@ -48,7 +48,9 @@ class PLCCoroutine:
                 seq = send_counts.get(key, 0) + 1
                 send_counts[key] = seq
                 sends[key] = SendRecord(count=seq, value=value)
-                await bus.send(target_plc, key, value, self.plc_id, seq)
+                await bus.send(
+                    target_plc, key, value, self.plc_id, seq, clock.elapsed_ms
+                )
 
             for key, value in outputs.values.items():
                 io = io.with_value(key, value)
