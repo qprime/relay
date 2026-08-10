@@ -66,8 +66,9 @@ def _run_cpp_verifier(resolved_path: Path, trace_path: Path, out_path: Path):
         text=True,
         timeout=120,
     )
-    assert completed.returncode != 2, (
-        f"relay_host_verify could not read its inputs: {completed.stderr}"
+    assert completed.returncode in (0, 1), (
+        f"relay_host_verify exited {completed.returncode}; a verifier exits 0 or 1, "
+        f"and 2 means it could not read its inputs: {completed.stderr}"
     )
     with out_path.open() as stream:
         return completed.returncode, load_json(stream)

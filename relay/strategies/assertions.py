@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 import re
 from dataclasses import dataclass
 from typing import Literal
@@ -62,21 +63,43 @@ def causes_issues(assertions: list, comm_block: dict) -> list[str]:
     return issues
 
 
+def _finite_budget(text: str) -> float | None:
+    """A budget too large for a double is not a budget.
+
+    The grammar admits any digit string, so `within: <400 digits>ms` reaches
+    here. `float()` yields `inf`, which would make EVENTUALLY pass for any
+    signal that ever became true — a budget that cannot be exceeded is not one.
+    Rejecting at the grammar makes it an unrecognized form on both sides, so
+    `generator.validate_spec` fails the spec instead of the verifier quietly
+    passing it.
+    """
+    value = float(text)
+    return value if math.isfinite(value) else None
+
+
 def parse_assertion(s: str) -> ParsedAssertion | None:
     s = s.strip()
     m = EVENTUALLY_RE.fullmatch(s)
     if m:
-        return ParsedAssertion(
-            form="EVENTUALLY",
-            signals=(m.group(1),),
-            within_ms=float(m.group(2)),
+        budget = _finite_budget(m.group(2))
+        return (
+            None
+            if budget is None
+            else ParsedAssertion(
+                form="EVENTUALLY", signals=(m.group(1),), within_ms=budget
+            )
         )
     m = PRECEDES_RE.fullmatch(s)
     if m:
-        return ParsedAssertion(
-            form="PRECEDES",
-            signals=(m.group(1), m.group(2)),
-            within_ms=float(m.group(3)),
+        budget = _finite_budget(m.group(3))
+        return (
+            None
+            if budget is None
+            else ParsedAssertion(
+                form="PRECEDES",
+                signals=(m.group(1), m.group(2)),
+                within_ms=budget,
+            )
         )
     m = CAUSES_RE.fullmatch(s)
     if m:

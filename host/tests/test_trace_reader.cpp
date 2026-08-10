@@ -96,6 +96,51 @@ TEST(TestTraceReader, test_reads_null_sender_as_absent) {
            "unattributable by construction";
 }
 
+TEST(TestTraceReader, test_multibyte_plc_id_survives_a_dump_and_reload) {
+    // Escaping every byte above 0x7e as \u00XX spelled each byte of a
+    // multi-byte sequence as its own code point, so the name came back as a
+    // different string. relay/spec/schema.py puts no ASCII restriction on
+    // plc_id, and this function reaches the verdict's assertion text and
+    // attribution fields too.
+    const std::string name = "pi\xC3\xA8" "ce";
+    SignalTable table;
+    table.add(name);
+    const std::vector<std::string> plc_ids{name};
+    TraceRing ring(2);
+    ScanTraceEntry& entry = ring.next_entry();
+    entry.plc_index = 0;
+    entry.clock = SimClock{0, 0.0};
+    entry.output_count = 1;
+    entry.output_cells[0] = CellSlot{0, Cell{true}};
+    std::ostringstream dumped;
+    ASSERT_TRUE(ring.dump_to_jsonl(dumped, table, plc_ids).has_value());
+
+    const auto trace = read(dumped.str());
+    ASSERT_TRUE(trace.has_value()) << trace.error().message;
+    EXPECT_EQ(trace->records.front().plc_id, name);
+    EXPECT_EQ(trace->records.front().outputs.count(name), 1u);
+}
+
+TEST(TestTraceReader, test_control_characters_are_still_escaped) {
+    SignalTable table;
+    table.add(std::string("a\nb"));
+    const std::vector<std::string> plc_ids{"plc_a"};
+    TraceRing ring(2);
+    ScanTraceEntry& entry = ring.next_entry();
+    entry.plc_index = 0;
+    entry.clock = SimClock{0, 0.0};
+    entry.output_count = 1;
+    entry.output_cells[0] = CellSlot{0, Cell{true}};
+    std::ostringstream dumped;
+    ASSERT_TRUE(ring.dump_to_jsonl(dumped, table, plc_ids).has_value());
+    EXPECT_EQ(dumped.str().find('\n'), dumped.str().size() - 1)
+        << "a raw newline inside a string would split the JSONL record in two";
+
+    const auto trace = read(dumped.str());
+    ASSERT_TRUE(trace.has_value()) << trace.error().message;
+    EXPECT_EQ(trace->records.front().outputs.count(std::string("a\nb")), 1u);
+}
+
 TEST(TestTraceReader, test_reads_committed_sim_trace) {
     const std::string path =
         std::string(RELAY_REPO_ROOT) + "/tests/golden/conveyor_trace.jsonl";

@@ -68,8 +68,15 @@ const TraceRecord* earliest(const Trace& trace, Pred pred) {
     return best;
 }
 
+// Deliberately a different key from `earliest`: this one orders by tick, not by
+// elapsed_ms, because its only caller is CAUSES — a form that reads no clock on
+// the pass/fail path, which is what lets it survive independent per-PLC clocks.
+// Within one PLC the two orderings coincide today; #23 does not change that,
+// since elapsed_ms stays monotonic in tick for a given PLC. Do not "unify" the
+// two by giving this one elapsed_ms.
 template <typename Pred>
-const TraceRecord* earliest_on_plc(const Trace& trace, std::string_view plc_id, Pred pred) {
+const TraceRecord* earliest_by_tick_on_plc(const Trace& trace, std::string_view plc_id,
+                                           Pred pred) {
     const TraceRecord* best = nullptr;
     for (const TraceRecord& record : trace.records) {
         if (record.plc_id != plc_id || !pred(record)) {
@@ -205,17 +212,17 @@ AssertionResult check_causes(std::string assertion, const std::string& cause,
     const std::string effect_where = quoted(effect) + " became true on " + quoted(plc_id) +
                                      " at tick " + std::to_string(acting->tick);
     const TraceRecord* activating =
-        earliest_on_plc(trace, plc_id, [&](const TraceRecord& r) {
+        earliest_by_tick_on_plc(trace, plc_id, [&](const TraceRecord& r) {
             return received_truthy(r, cause) && r.tick <= acting->tick;
         });
     if (activating == nullptr) {
-        const TraceRecord* any_receipt = earliest_on_plc(
+        const TraceRecord* any_receipt = earliest_by_tick_on_plc(
             trace, plc_id, [&](const TraceRecord& r) { return r.recvs.contains(cause); });
         if (any_receipt == nullptr) {
             return failed(std::move(assertion), effect_where + " but " + quoted(cause) +
                                                     " was never received there");
         }
-        const TraceRecord* truthy_receipt = earliest_on_plc(
+        const TraceRecord* truthy_receipt = earliest_by_tick_on_plc(
             trace, plc_id, [&](const TraceRecord& r) { return received_truthy(r, cause); });
         if (truthy_receipt == nullptr) {
             return failed(std::move(assertion),
@@ -243,7 +250,7 @@ AssertionResult check_causes(std::string assertion, const std::string& cause,
     // count, so a multi-consumer tag emitting two messages of one key in a
     // single scan stores only the last — hence `>=` rather than exact match.
     const TraceRecord* sender =
-        earliest_on_plc(trace, *receipt.sender, [&](const TraceRecord& r) {
+        earliest_by_tick_on_plc(trace, *receipt.sender, [&](const TraceRecord& r) {
             const auto it = r.sends.find(cause);
             return it != r.sends.end() && it->second.count >= receipt.seq;
         });

@@ -104,7 +104,11 @@ test able to see it.
 
 The JSONL format is normatively defined by [relay/trace_io.py](../relay/trace_io.py):
 sorted keys, integral doubles keep their trailing `.0`, non-finite floats are
-rejected at dump time. Records are dumped sorted by `(tick, plc_id)` so file
+rejected at dump time. One deliberate byte-level difference: Python escapes
+non-ASCII as `\uXXXX` because `json.dumps` defaults to `ensure_ascii`, while the
+host writes UTF-8 directly and escapes only control characters. Both are valid
+JSON decoding to the same string, and the contract is verdict equality, not byte
+equality. Records are dumped sorted by `(tick, plc_id)` so file
 order is a deterministic function of trace *content*; in-memory append order
 is completion order and is genuinely nondeterministic under free-running scan
 cycles. The former byte-match against

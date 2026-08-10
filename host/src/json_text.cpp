@@ -70,7 +70,16 @@ std::string escape_json_string(std::string_view text) {
             case '\r': out += "\\r"; break;
             case '\t': out += "\\t"; break;
             default:
-                if (uc < 0x20 || uc > 0x7e) {
+                // Only control characters need escaping; JSON carries UTF-8
+                // directly. Escaping every byte above 0x7e as \u00XX spelled
+                // each byte of a multi-byte sequence as its own code point, so
+                // a two-byte character round-tripped through Python as two
+                // Latin-1 characters — a different string, not a different
+                // spelling of one. Python escapes non-ASCII here instead,
+                // because json.dumps defaults to ensure_ascii; both forms
+                // decode to the same string, and byte equality with the sim's
+                // trace was retired with #14.
+                if (uc < 0x20) {
                     char buf[8];
                     std::snprintf(buf, sizeof(buf), "\\u%04x", uc);
                     out += buf;

@@ -138,6 +138,12 @@ int main(int argc, char** argv) {
         std::cerr << "host_main: " << dumped.error().message << "\n";
         return 1;
     }
+    out.flush();
+    if (!out) {
+        std::cerr << "host_main: failed writing the trace to '" << args->out_path
+                  << "'\n";
+        return 1;
+    }
     // A dropped prefix moves every first-occurrence anchor later, so the
     // verifier reports late witnesses and spurious "never received" against a
     // trace that reads as complete. A warning was adequate when the output was

@@ -102,6 +102,7 @@ add_executable(relay_host_tests
     tests/test_trace_reader.cpp
     tests/test_assertion_parser.cpp
     tests/test_verifier.cpp
+    tests/test_verdict_writer.cpp
 )
 target_compile_options(relay_host_tests PRIVATE ${RELAY_HOST_WARNINGS})
 target_compile_definitions(relay_host_tests PRIVATE

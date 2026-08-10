@@ -55,6 +55,34 @@ TEST(TestAssertionParser, test_accepts_fractional_budget) {
     EXPECT_EQ(parsed->within_ms, 12.5);
 }
 
+TEST(TestAssertionParser, test_rejects_a_budget_too_large_for_a_double) {
+    const std::string huge(400, '9');
+    const std::string text = "EVENTUALLY(part_at_b, within: " + huge + "ms)";
+    EXPECT_FALSE(parse_assertion(text).has_value())
+        << "std::stod throws out_of_range here and aborts the process; "
+           "returning inf instead would make the form pass for any signal that "
+           "ever became true";
+
+    Trace trace;
+    TraceRecord record;
+    record.plc_id = "plc_a";
+    record.tick = 0;
+    record.elapsed_ms = 0.0;
+    record.outputs.emplace("part_at_b", Cell{true});
+    trace.records.push_back(record);
+    const AssertionResult result = evaluate_assertion(text, trace);
+    EXPECT_FALSE(result.passed);
+    EXPECT_NE(result.reason.find("unrecognized assertion form"), std::string::npos);
+}
+
+TEST(TestAssertionParser, test_accepts_a_large_but_representable_budget) {
+    const auto parsed = parse_assertion("EVENTUALLY(part_at_b, within: 1e0ms)");
+    EXPECT_FALSE(parsed.has_value()) << "the grammar has no exponent form";
+    const auto plain = parse_assertion("EVENTUALLY(part_at_b, within: 100000000000ms)");
+    ASSERT_TRUE(plain.has_value());
+    EXPECT_EQ(plain->within_ms, 100000000000.0);
+}
+
 TEST(TestAssertionParser, test_rejects_non_word_signal_names) {
     EXPECT_FALSE(parse_assertion("EVENTUALLY(part.at.b, within: 400ms)").has_value());
     EXPECT_FALSE(parse_assertion("CAUSES(a, )").has_value());

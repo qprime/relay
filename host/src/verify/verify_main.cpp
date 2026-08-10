@@ -118,6 +118,15 @@ int main(int argc, char** argv) {
         std::cerr << "verify_main: " << written.error().message << "\n";
         return 2;
     }
+    // A short write would otherwise leave a truncated verdict behind an exit
+    // code saying the run was green — the same failure shape the ring-drop
+    // change closed on the input side.
+    out.flush();
+    if (!out) {
+        std::cerr << "verify_main: failed writing the verdict to '" << args->out_path
+                  << "'\n";
+        return 2;
+    }
 
     // A failing assertion is a normal outcome, not an error: exit 1 says the
     // verdict is red, and exit 2 is reserved for usage and load failures so a

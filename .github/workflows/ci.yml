@@ -21,3 +21,31 @@ jobs:
         run: |
           uv run python -m tools.regenerate_expectations
           git diff --exit-code specs/expectations/
+
+  # Without this job the host is never built, so relay_host_tests never runs and
+  # both host-dependent pytest files skip on the missing binary — including
+  # test_cross_verifier_agreement.py, which is the entire claim of #25.
+  cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: host/build/_deps
+          key: host-deps-${{ runner.os }}-${{ hashFiles('host/CMakeLists.txt') }}
+      - run: cmake -S host -B host/build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build host/build -j
+      - run: ctest --test-dir host/build --output-on-failure
+      - run: uv sync
+      - name: Host-dependent tests actually run
+        run: |
+          set -euo pipefail
+          uv run pytest -q --no-header -rs \
+            tests/test_host_satisfies_expectations.py \
+            tests/test_cross_verifier_agreement.py \
+            | tee /tmp/host_pytest.log
+          ! grep -q skipped /tmp/host_pytest.log

@@ -83,6 +83,55 @@ class TestGrammarAnchoring:
         assert parse_assertion(assertion) is not None
 
 
+class TestBudgetRepresentability:
+    """A budget too large for a double is not a budget.
+
+    The grammar admits any digit string, so `float()` yields `inf` and the
+    assertion becomes one no signal can fail. The C++ port cannot even
+    represent it — `std::stod` throws and aborts the process — so both sides
+    reject at the grammar and `validate_spec` fails the spec.
+    """
+
+    @pytest.mark.parametrize(
+        "assertion",
+        [
+            "EVENTUALLY(a, within: " + "9" * 400 + "ms)",
+            "PRECEDES(a, b, within: " + "9" * 400 + "ms)",
+            "EVENTUALLY(a, within: 1" + "0" * 400 + ".5ms)",
+        ],
+    )
+    def test_unrepresentable_budget_is_an_unrecognized_form(self, assertion):
+        assert parse_assertion(assertion) is None
+
+    def test_a_large_but_representable_budget_still_parses(self):
+        parsed = parse_assertion("EVENTUALLY(a, within: 100000000000ms)")
+        assert parsed is not None
+        assert parsed.within_ms == 100000000000.0
+
+    def test_unrepresentable_budget_fails_the_verifier_rather_than_passing(self):
+        result = evaluate_assertion(
+            "EVENTUALLY(a, within: " + "9" * 400 + "ms)", _trace({"a": True})
+        )
+        assert not result.passed
+        assert "unrecognized assertion form" in result.reason
+
+    def test_unrepresentable_budget_is_a_spec_validation_issue(self):
+        """Rejecting at the grammar is what moves this from a verification-time
+        surprise to a spec-load failure."""
+        from relay.generator.spec import SpecValidationError, validate_spec
+        from relay.spec.schema import TaskSpec
+
+        spec = TaskSpec(
+            raw={
+                "System": {"name": "s", "plcs": [{"id": "plc_a"}]},
+                "Assertions": ["EVENTUALLY(a, within: " + "9" * 400 + "ms)"],
+            }
+        )
+        with pytest.raises(SpecValidationError) as exc:
+            validate_spec(spec)
+        assert any("not a recognized form" in issue for issue in exc.value.issues)
+
+
 class TestGrammarWhitespaceSymmetry:
     """Task specs are hand-written, so internal padding is tolerated the same
     way in both forms rather than only before `ms`."""
