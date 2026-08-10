@@ -1,4 +1,5 @@
 from __future__ import annotations
+import sys
 from pathlib import Path
 
 import pytest
@@ -215,6 +216,28 @@ class TestRenderReportMain:
         assert "sim only — host binary not built" in page
         assert "<th>host</th>" not in page
         assert (out / "index.html").exists()
+
+    def test_pdf_flag_writes_a_sibling_pdf_per_page(self, tmp_path, monkeypatch):
+        pytest.importorskip("weasyprint")
+        monkeypatch.setattr(render_report, "_DEFAULT_HOST_BINARY", tmp_path / "absent")
+        out = tmp_path / "report"
+        assert render_report.main([str(CONVEYOR_SPEC), "--out", str(out), "--pdf"]) == 0
+        for name in ("conveyor_handoff", "index"):
+            pdf = out / f"{name}.pdf"
+            assert pdf.exists(), f"{name}.pdf was not written"
+            assert pdf.read_bytes().startswith(b"%PDF"), f"{name}.pdf is not a PDF"
+
+    def test_pdf_without_weasyprint_reports_the_install_command(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(render_report, "_DEFAULT_HOST_BINARY", tmp_path / "absent")
+        monkeypatch.setitem(sys.modules, "weasyprint", None)
+        out = tmp_path / "report"
+        assert render_report.main([str(CONVEYOR_SPEC), "--out", str(out), "--pdf"]) == 1
+        assert (out / "conveyor_handoff.html").exists(), (
+            "a missing PDF dependency must not discard the HTML that already rendered"
+        )
+        assert not (out / "conveyor_handoff.pdf").exists()
 
     def test_explicit_missing_host_binary_is_an_error(self, tmp_path):
         with pytest.raises(SystemExit) as excinfo:

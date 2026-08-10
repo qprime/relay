@@ -265,6 +265,19 @@ uv run pytest tests/test_host_satisfies_expectations.py   # verdict equality vs 
 
 The expectations artifact is generated, never hand-authored.
 
+### 7. Render the checkpoint report
+
+```bash
+uv run python -m tools.render_report              # HTML into report/
+uv run python -m tools.render_report --pdf        # HTML + a sibling PDF per page
+```
+
+Runs every spec through all three execution lanes — Python sim, C++ host in-process, C++ host over the plant socket — and writes `report/index.html` plus one page per scenario. Each page leads with a verdict table of assertions against lanes, then the readable spec with each trigger's compiled ST as collapsed provenance, then the trace evidence with idle scans elided. Verdicts are evaluated from the traces, never read from `specs/expectations/`; a page built from those always-green artifacts could never show a failure.
+
+Without the C++ host built the report degrades to the sim lane alone and says so on the page. A host lane that fails to run is marked failed and the command exits non-zero.
+
+`--pdf` needs the optional dependency (`uv sync`, or `pip install 'relay[pdf]'` outside the dev environment). PDFs print landscape and expand every collapsed section, so a scenario runs to roughly fifty pages — paper has no disclosure widget, and the full per-lane trace is the evidence half of the report.
+
 ## Project structure
 
 ```
@@ -285,7 +298,8 @@ relay/
 └── verdict_io.py  Verification verdicts as inspectable JSON
 host/               C++23 deployment host (see host/README.md)
 tools/              Language-boundary utilities: host input emission,
-                    plant socket server, expectations regeneration
+                    plant socket server, expectations regeneration,
+                    checkpoint report rendering (HTML + PDF)
 specs/              Task spec YAML examples
 └── expectations/   Sim-certified verdict artifacts
 tests/              End-to-end scenario tests and cross-language conformance

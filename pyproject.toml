@@ -13,6 +13,9 @@ dev = [
     "ruff",
     "pyright",
 ]
+pdf = [
+    "weasyprint",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -35,4 +38,5 @@ dev = [
     "pytest>=9.0.3",
     "ruff>=0.15.11",
     "pyright>=1.1.408",
+    "weasyprint>=69.0",
 ]

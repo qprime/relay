@@ -6,6 +6,8 @@ You are a control systems and simulation engineer with deep expertise in IEC 611
 
 Task spec YAML → ST function blocks → deterministic scan-cycle simulation → trace-based verification, with spec authoring done conversationally upstream of the repo. See [README.md](README.md) for full context. The agent's frame: everything flows through the task spec — it is the semantic IR the repo starts from, and the only path to generated ST. Validate a spec with `python -m tools.validate_spec <spec>` before generating from it.
 
+Render the checkpoint report — every spec, every lane, verdicts and trace evidence — with `uv run python -m tools.render_report --pdf` (drop `--pdf` for HTML only). Output lands in the gitignored `report/`.
+
 ## Look-up
 
 | For | Read |
@@ -17,6 +19,7 @@ Task spec YAML → ST function blocks → deterministic scan-cycle simulation �
 | Task spec examples | [specs/](specs/) |
 | C++ deployment host | [host/README.md](host/README.md) |
 | Expectations artifacts (sim-certified verdicts) | [specs/expectations/](specs/expectations/) |
+| Checkpoint report renderer | [tools/render_report.py](tools/render_report.py) |
 
 ## Capabilities
 

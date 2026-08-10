@@ -52,6 +52,19 @@ summary { cursor: pointer; color: #555; }
 .trace td { font-family: ui-monospace, monospace; font-size: 0.85em; }
 """
 
+_PRINT_CSS = """
+@page { size: letter landscape; margin: 1.2cm; }
+body { max-width: none; margin: 0; }
+tr { break-inside: avoid; }
+h1, h2, h3 { break-after: avoid; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+table.trace td { font-size: 0.78em; }
+table.trace td:nth-child(-n+3) { white-space: nowrap; }
+table.trace td:nth-child(n+4) { overflow-wrap: anywhere; }
+.verdicts td { overflow-wrap: break-word; }
+a { text-decoration: none; }
+"""
+
 
 @dataclass(frozen=True)
 class Lane:
@@ -492,6 +505,42 @@ def render_index(entries: list[tuple[TaskSpec, list[Lane]]]) -> str:
     return _page("relay checkpoint report", body)
 
 
+class MissingPdfSupport(Exception):
+    pass
+
+
+def write_pdfs(html_paths: list[Path]) -> list[Path]:
+    """Render each page to a sibling PDF under `_PRINT_CSS`.
+
+    The screen stylesheet is wrong on paper in two ways that lose content
+    silently. `pre` and the trace table scroll under `overflow-x: auto` in a
+    browser; paper has no scrollbar, so the ST stanzas clip at the right margin
+    and the trace's `recvs` column runs off the page entirely. Landscape plus
+    per-column wrapping fits all seven trace columns, and the first three are
+    pinned `nowrap` because wrapping `plc_a` down three lines is unreadable.
+
+    Every `<details>` prints expanded, so a PDF carries the full trace for each
+    lane and runs to roughly fifty pages. That is deliberate: a reader cannot
+    expand a disclosure widget on paper, and dropping the evidence half of the
+    report would misrepresent it as shorter than it is.
+    """
+    try:
+        from weasyprint import CSS, HTML
+    except ImportError as exc:
+        raise MissingPdfSupport(
+            "PDF rendering needs weasyprint, which is not installed; "
+            "run `uv sync` or `pip install 'relay[pdf]'`"
+        ) from exc
+
+    stylesheet = CSS(string=_PRINT_CSS)
+    written: list[Path] = []
+    for html_path in html_paths:
+        pdf_path = html_path.with_suffix(".pdf")
+        HTML(filename=str(html_path)).write_pdf(pdf_path, stylesheets=[stylesheet])
+        written.append(pdf_path)
+    return written
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Render each task spec plus its execution traces as self-contained HTML"
@@ -501,6 +550,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host-binary", type=Path, default=None)
     parser.add_argument("--max-scans", type=int, default=DEFAULT_MAX_SCANS)
     parser.add_argument("--scan-period-ms", type=float, default=DEFAULT_SCAN_PERIOD_MS)
+    parser.add_argument(
+        "--pdf",
+        action="store_true",
+        help="also write a sibling PDF per page (needs the 'pdf' extra)",
+    )
     args = parser.parse_args(argv)
 
     if args.host_binary is None:
@@ -533,13 +587,24 @@ def main(argv: list[str] | None = None) -> int:
         entries.append((spec, lanes))
 
     args.out.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
     for spec, lanes in entries:
         out_path = args.out / f"{spec.system_name}.html"
         out_path.write_text(render_detail(spec, lanes, compile_st_blocks(spec)))
-        print(out_path)
+        written.append(out_path)
     index_path = args.out / "index.html"
     index_path.write_text(render_index(entries))
-    print(index_path)
+    written.append(index_path)
+    for path in written:
+        print(path)
+
+    if args.pdf:
+        try:
+            for path in write_pdfs(written):
+                print(path)
+        except MissingPdfSupport as e:
+            print(e, file=sys.stderr)
+            return 1
     return 1 if lane_failed else 0
 
 
