@@ -18,6 +18,7 @@ from relay.generator.st import compile_st_blocks
 from relay.runtime.harness import simulate
 from relay.spec.schema import TaskSpec, load_spec
 from relay.strategies.assertions import ParsedAssertion, parse_assertion
+from relay.strategies.comm import comm_signals
 from relay.trace import ScanRecord, TraceLog
 from relay.trace_io import load_jsonl
 from relay.verify.assertions import AssertionResult, evaluate_all
@@ -352,14 +353,14 @@ def _scenario_section(spec: TaskSpec, st_blocks: dict[str, str]) -> str:
     comm = spec.comm_block
     parts.append("<h3>Comm</h3>")
     parts.append(f"<p>strategy: <code>{_h(comm.get('strategy'))}</code></p>")
-    tags = comm.get("tags") or []
-    if tags:
+    signals = comm_signals(spec)
+    if signals:
         parts.append("<ul>")
-        for tag in tags:
-            consumers = ", ".join(tag.get("consumed_by") or [])
+        for signal in signals:
+            consumers = ", ".join(signal.consumed_by)
             parts.append(
-                f"<li><code>{_h(tag.get('name'))}</code> produced by "
-                f"<code>{_h(tag.get('produced_by'))}</code>, consumed by "
+                f"<li><code>{_h(signal.name)}</code> produced by "
+                f"<code>{_h(signal.produced_by)}</code>, consumed by "
                 f"<code>{_h(consumers)}</code></li>"
             )
         parts.append("</ul>")

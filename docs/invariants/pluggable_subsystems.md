@@ -96,10 +96,13 @@ badly instead of two protocols correctly.
 
 - **Comm strategies**: registry in [relay/strategies/comm.py](../../relay/strategies/comm.py)
   (`build_comm_strategy` / `get_comm_strategy`), selected by `Comm.strategy` in
-  the task spec; raises on unknown. Today two strategies are registered:
-  `tag` (live; used by the conveyor demo) and `address` (a stub whose
-  `validate_config` and `route` raise `NotImplementedError`, reserved for a
-  future Modbus TCP-style register-map implementation). The registry lives in
+  the task spec; raises on unknown. Both registered strategies are live:
+  `tag` (Logix-style named tags, used by the conveyor demo) and `address`
+  (a Modbus-style register map binding each signal name to a
+  `(table, address)` slot; the TCP transport underneath is planned). Each
+  strategy owns `validate_config` for its block's idiom and projects the block
+  into strategy-neutral `CommSignal`s via `signals()` — the projection is the
+  only comm shape framework code reads. The registry lives in
   `relay/strategies/` (a leaf module) rather than `relay/runtime/` so
   `relay/spec/` can import it for validation without violating
   [pipeline_direction_imports.md](pipeline_direction_imports.md).

@@ -7,6 +7,7 @@ from typing import Any
 from relay.clock import DEFAULT_SCAN_PERIOD_MS
 from relay.generator.st import compile_st_blocks
 from relay.spec.schema import TaskSpec, load_spec
+from relay.strategies.comm import comm_signals
 
 DEFAULT_MAX_SCANS = 100
 
@@ -41,13 +42,13 @@ def resolved_spec_dict(
         "max_scans": max_scans,
         "comm": {
             "strategy": spec.comm_strategy,
-            "tags": [
+            "signals": [
                 {
-                    "name": tag["name"],
-                    "produced_by": tag["produced_by"],
-                    "consumed_by": list(tag.get("consumed_by") or []),
+                    "name": signal.name,
+                    "produced_by": signal.produced_by,
+                    "consumed_by": list(signal.consumed_by),
                 }
-                for tag in spec.comm_block.get("tags") or []
+                for signal in comm_signals(spec)
             ],
         },
         "plant": {

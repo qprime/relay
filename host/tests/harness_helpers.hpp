@@ -32,7 +32,7 @@ inline ResolvedTaskSpec conveyor_spec() {
     spec.scan_period_ms = 10.0;
     spec.max_scans = 100;
     spec.comm.strategy = "tag";
-    spec.comm.tags = {ResolvedTag{"handoff_signal", "plc_a", {"plc_b"}}};
+    spec.comm.signals = {ResolvedSignal{"handoff_signal", "plc_a", {"plc_b"}}};
     spec.plant.type = "conveyor";
     spec.plant.config = nlohmann::json{{"belt_speed_m_per_s", 0.5},
                                        {"sensor_trigger_threshold_m", 0.1},

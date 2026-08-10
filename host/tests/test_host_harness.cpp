@@ -1,8 +1,12 @@
 #include <gtest/gtest.h>
 
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <sstream>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include "harness_helpers.hpp"
 
@@ -119,6 +123,35 @@ TEST(TestHostHarness, test_plant_route_to_stopped_plc_does_not_hang) {
            "level-triggered route fires every plant scan; the run must still "
            "complete rather than park in bus_.send";
     EXPECT_EQ(harness->trace().size(), 800u);
+}
+
+TEST(HostHarnessTest, RejectsResolvedSpecWithLegacyTagsKey) {
+    const nlohmann::json spec_json{
+        {"system_name", "legacy"},
+        {"plc_ids", {"plc_a", "plc_b"}},
+        {"scan_period_ms", 10.0},
+        {"max_scans", 10},
+        {"comm",
+         {{"strategy", "tag"},
+          {"tags",
+           {{{"name", "handoff_signal"},
+             {"produced_by", "plc_a"},
+             {"consumed_by", {"plc_b"}}}}}}},
+        {"plant",
+         {{"type", "conveyor"},
+          {"config", nlohmann::json::object()},
+          {"routes", nlohmann::json::array()},
+          {"actuators", nlohmann::json::array()}}},
+        {"assertions", nlohmann::json::array()},
+    };
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "relay_host_legacy_tags_spec.json";
+    std::ofstream(path) << spec_json.dump();
+    const auto spec = try_load(path);
+    std::filesystem::remove(path);
+    ASSERT_FALSE(spec.has_value());
+    EXPECT_NE(spec.error().message.find("comm.signals"), std::string::npos)
+        << spec.error().message;
 }
 
 TEST(TestHostHarness, test_dead_plc_coroutine_surfaces_error_not_hang) {

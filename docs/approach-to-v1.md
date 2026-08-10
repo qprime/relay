@@ -380,7 +380,7 @@ Every remaining step is specced; what's left is implementation in order.
 |---|---|---|
 | 2 | [#24](https://github.com/qprime/relay/issues/24) | shipped |
 | 5 | [#25](https://github.com/qprime/relay/issues/25) | shipped |
-| 6a | [#26](https://github.com/qprime/relay/issues/26) | specced, not implemented |
+| 6a | [#26](https://github.com/qprime/relay/issues/26) | shipped |
 | 6b | [#27](https://github.com/qprime/relay/issues/27) | specced, not implemented |
 | 7 | none needed | close-out |
 

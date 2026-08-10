@@ -9,7 +9,7 @@ from relay.generator.errors import (
 )
 from relay.generator.behavior import EDGES, MODES
 from relay.spec.schema import TaskSpec
-from relay.strategies.comm import build_comm_strategy
+from relay.strategies.comm import build_comm_strategy, comm_signals
 from relay.strategies.st_syntax import SCRATCH_PREFIX, SEND_PREFIX
 from relay.strategies.plant import (
     UnknownPlantType as _PlantNotRegistered,
@@ -90,9 +90,7 @@ def validate_spec(spec: TaskSpec) -> None:
                     "PRECEDES(a, b, within: Nms), or CAUSES(cause, effect); "
                     "the budget is required on the first two and rejected on CAUSES)"
                 )
-        issues.extend(
-            causes_issues(assertions, comm_block if isinstance(comm_block, dict) else {})
-        )
+        issues.extend(causes_issues(assertions, comm_signals(spec)))
 
     _validate_assertion_coverage(spec, emit_targets, issues)
 
@@ -102,12 +100,7 @@ def validate_spec(spec: TaskSpec) -> None:
         except ValueError as e:
             raise UnknownCommStrategy(str(e)) from None
         else:
-            try:
-                strat_issues = strategy.validate_config(comm_block or {}, spec)
-            except NotImplementedError as e:
-                issues.append(f"Comm strategy {comm_strategy_name!r}: {e}")
-            else:
-                issues.extend(strat_issues)
+            issues.extend(strategy.validate_config(comm_block or {}, spec))
 
     if plant_type_name:
         try:
@@ -139,18 +132,10 @@ def _plant_route_keys(spec: TaskSpec) -> dict[str, set[str]]:
 def _tag_index(spec: TaskSpec) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
     produced: dict[str, set[str]] = {}
     consumed: dict[str, set[str]] = {}
-    for t in spec.comm_block.get("tags", []) or []:
-        if not isinstance(t, dict):
-            continue
-        name = t.get("name")
-        if not isinstance(name, str):
-            continue
-        producer = t.get("produced_by")
-        if isinstance(producer, str):
-            produced.setdefault(producer, set()).add(name)
-        for c in t.get("consumed_by") or []:
-            if isinstance(c, str):
-                consumed.setdefault(c, set()).add(name)
+    for signal in comm_signals(spec):
+        produced.setdefault(signal.produced_by, set()).add(signal.name)
+        for c in signal.consumed_by:
+            consumed.setdefault(c, set()).add(signal.name)
     return produced, consumed
 
 
@@ -163,11 +148,7 @@ def _all_plant_route_keys(spec: TaskSpec) -> set[str]:
 
 
 def _all_tag_names(spec: TaskSpec) -> set[str]:
-    return {
-        t["name"]
-        for t in spec.comm_block.get("tags", []) or []
-        if isinstance(t, dict) and isinstance(t.get("name"), str)
-    }
+    return {s.name for s in comm_signals(spec)}
 
 
 def _validate_behavior(
@@ -200,7 +181,7 @@ def _validate_behavior(
         if "owns" in entry:
             issues.append(
                 f"Behavior.{plc_id}.owns has been removed; signal ownership derives from "
-                "Plant.routes[].to_plc and Comm.tags[].produced_by/consumed_by"
+                "Plant.routes[].to_plc and the comm block's produced_by/consumed_by"
             )
 
         triggers = entry.get("triggers")

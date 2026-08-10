@@ -12,6 +12,7 @@ from tools.validate_spec import main, validate_spec_file
 
 _REPO_ROOT = Path(__file__).parent.parent
 _SPEC_PATH = _REPO_ROOT / "specs" / "conveyor_handoff.yaml"
+_ADDRESS_SPEC_PATH = _REPO_ROOT / "specs" / "conveyor_handoff_address.yaml"
 _RELAY_SOURCES = sorted((_REPO_ROOT / "relay").rglob("*.py"))
 
 
@@ -58,12 +59,23 @@ class TestValidateSpecCLI:
         issues = validate_spec_file(_write(tmp_path, raw))
         assert len([i for i in issues if "nonexistent" in i]) == 1, issues
 
-    def test_address_strategy_is_a_collected_issue_not_terminal(self, tmp_path):
+    def test_address_strategy_config_issue_is_collected_not_terminal(self, tmp_path):
         raw = _with_bad_edge(_valid_raw())
         raw["Comm"]["strategy"] = "address"
         issues = validate_spec_file(_write(tmp_path, raw))
-        assert any("not yet implemented" in i for i in issues), issues
+        assert any("Comm.registers must be a non-empty list" in i for i in issues), issues
         assert any("sideways" in i for i in issues), issues
+
+    def test_causes_accepted_for_address_strategy_signal(self):
+        assert validate_spec_file(_ADDRESS_SPEC_PATH) == []
+
+    def test_causes_rejected_for_undeclared_address_signal(self, tmp_path):
+        raw = copy.deepcopy(yaml.safe_load(_ADDRESS_SPEC_PATH.read_text()))
+        raw["Assertions"].append("CAUSES(part_at_b, belt_b_enable)")
+        issues = validate_spec_file(_write(tmp_path, raw))
+        assert any(
+            "part_at_b" in i and "not a declared comm signal" in i for i in issues
+        ), issues
 
     def test_malformed_yaml_reports_issue(self, tmp_path):
         path = tmp_path / "spec.yaml"

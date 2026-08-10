@@ -25,7 +25,7 @@ Each simulated PLC runs as an `asyncio` coroutine executing a conventional scan 
 promote comm buffer → snapshot I/O → execute function block → write outputs → publish
 ```
 
-Coordination between PLCs is modeled by a pluggable **comm strategy** — a registered implementation of how inter-PLC signals get routed and when they become visible at the receiver. The conveyor demo uses the `tag` strategy: each tag is declared in the task spec (producer + consumers), and the runtime promotes pending tag values into the consumer's I/O image at the top of the next scan, paying a one-scan latency cost that mirrors a real network. Precisely: a message becomes visible at the consumer's first scan top whose `SimClock` time is **strictly later** than the sending scan's, so delivery is paced by the consumer's sampling and costs up to one *consumer* scan period. Plant routes are exempt — a sensor wired to the input terminals is sampled at scan top, not delivered over a network. An `address` strategy (intended to model Modbus TCP register maps) is registered as a stub today and raises `NotImplementedError`; address-based comm is aspirational, not implemented. The framework's identity as a multi-protocol simulator is intentional, but only the tag strategy is live.
+Coordination between PLCs is modeled by a pluggable **comm strategy** — a registered implementation of how inter-PLC signals get routed and when they become visible at the receiver. The conveyor demo uses the `tag` strategy: each tag is declared in the task spec (producer + consumers), and the runtime promotes pending tag values into the consumer's I/O image at the top of the next scan, paying a one-scan latency cost that mirrors a real network. Precisely: a message becomes visible at the consumer's first scan top whose `SimClock` time is **strictly later** than the sending scan's, so delivery is paced by the consumer's sampling and costs up to one *consumer* scan period. Plant routes are exempt — a sensor wired to the input terminals is sampled at scan top, not delivered over a network. An `address` strategy is also live: it declares the same signals through a Modbus-style register map, binding each symbolic name to a `(table, address)` slot. The binding never becomes the signal identity — an address-idiom spec generates byte-identical ST and matching verdicts against its tag-idiom twin (`specs/conveyor_handoff_address.yaml` is the demonstration). The Modbus TCP transport underneath the register map is planned ([#27](https://github.com/qprime/relay/issues/27)); the idiom is live, the wire format is not.
 
 The C++ host does not charge this cost: its clock referent is the wall clock, and its in-process channel models a backplane with near-zero latency, so it pays between zero and roughly one period. The asymmetry is deliberate — the sim is the **conservative** oracle, so a budget derived from its measurement covers a host that is at worst as slow. Verdict equality is per-assertion pass/fail and is unaffected by the difference in measured gaps.
 
@@ -89,7 +89,7 @@ Assertions:
   - "CAUSES(handoff_signal, belt_b_enable)"
 ```
 
-The `Comm` block selects a comm strategy (currently `tag`; see below) and declares the inter-PLC signals it routes. The `Plant` block selects a plant model (`conveyor` is the only one the Python registry holds today) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching. The C++ host keeps its own plant registry, which adds `remote_socket` for a plant in another process; that is a host-side selection, not a `Plant.type` a task spec can declare (see [host/README.md](host/README.md)).
+The `Comm` block selects a comm strategy (`tag` or `address`; see below) and declares the inter-PLC signals it routes in that strategy's idiom. The `Plant` block selects a plant model (`conveyor` is the only one the Python registry holds today) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching. The C++ host keeps its own plant registry, which adds `remote_socket` for a plant in another process; that is a host-side selection, not a `Plant.type` a task spec can declare (see [host/README.md](host/README.md)).
 
 Full field-by-field syntax, including the rules the validator enforces and the ones it can't, is in [docs/task_spec_syntax.md](docs/task_spec_syntax.md); the tables below are the summary.
 
@@ -97,7 +97,7 @@ The `Behavior` block is the trigger IR the ST compiler reads. Each PLC declares 
 
 | Field | Values | Meaning |
 |-------|--------|---------|
-| `when.signal` | string | A `Plant.routes[].as_key` targeting this PLC, or a `Comm.tags[]` entry it consumes |
+| `when.signal` | string | A `Plant.routes[].as_key` targeting this PLC, or a comm signal it consumes |
 | `when.edge` | `rising` \| `falling` \| `level` | Transition to detect; `level` fires while the signal is true |
 | `when.debounce_ms` | int ≥ 0 | Source must hold stable this long before the trigger fires — which shifts the edge, not just the timing ([details](docs/task_spec_syntax.md#debounce_ms-shifts-the-edge-not-only-the-timing)) |
 | `emit.tag` \| `emit.output` | string (exactly one) | A tag this PLC produces, or a local output name |
@@ -140,7 +140,7 @@ The test also checks the negative case (PLC A never signals → part never arriv
 
 `PRECEDES` ordering is non-strict: same-scan is a pass, because within one scan there is no observable ordering. The budget is what survives independent clocks — two physical PLCs share no scan boundary, so "same scan" has no referent on hardware while a bounded gap does. The observed gap is reported on every evaluation, pass or fail, so budgets can be measured rather than guessed.
 
-`CAUSES` answers a question timing cannot: *did this actually happen because of that message?* Each delivered message records a **receipt** at the point of delivery — the sender, that sender's per-key sequence number, and the value delivered. Attribution reads all three from the receipt rather than re-deriving them from the trace's merged signal view, which can say neither who sent a message nor what it carried. Because it reads no clock on the pass/fail path, the form survives the move off lockstep simulation onto free-running hardware. Only declared `Comm.tags` can be a cause; plant-routed signals record no sender and are unattributable by construction.
+`CAUSES` answers a question timing cannot: *did this actually happen because of that message?* Each delivered message records a **receipt** at the point of delivery — the sender, that sender's per-key sequence number, and the value delivered. Attribution reads all three from the receipt rather than re-deriving them from the trace's merged signal view, which can say neither who sent a message nor what it carried. Because it reads no clock on the pass/fail path, the form survives the move off lockstep simulation onto free-running hardware. Only declared comm signals can be a cause; plant-routed signals record no sender and are unattributable by construction.
 
 ## Core representation and framework discipline
 
@@ -152,7 +152,7 @@ Four invariants make the simulation deterministic and the verification trustwort
 |-----------|-----------|
 | External clock | `SimClock` is injected into every scan. No PLC reads the wall clock. |
 | Immutable I/O image | The snapshot taken at scan-top is frozen for the duration of execution — inputs can't shift mid-scan. |
-| No shared PLC state | All coordination flows through `CommBus` via a pluggable comm strategy with per-scan message promotion. The current strategy (`tag`) routes named signals from producer to consumer; address-based routing (Modbus TCP-style) is planned. |
+| No shared PLC state | All coordination flows through `CommBus` via a pluggable comm strategy with per-scan message promotion. Both strategies (`tag`, `address`) project their comm block to the same producer/consumer signals; the Modbus TCP transport under the `address` register map is planned. |
 | Trace-based verification | Every scan's I/O snapshot, outputs, sends, and receipts are recorded. Assertions evaluate against the log, not a live system. |
 
 If a handoff works in the trace, it works because the messages actually moved through the comm bus at the right scan boundaries.

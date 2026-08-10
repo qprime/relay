@@ -98,23 +98,24 @@ simulation" guarantee silently false for an entire class of signals.
   — the only place inter-PLC data enters a coroutine is `await bus.drain(...)`
   followed by `comm.promote()` into the IOImage at the top of each scan.
 - **Simulation harness** ([relay/runtime/harness.py](../../relay/runtime/harness.py))
-  — the per-scan loop (`harness.py:94-115`) routes plant sensors to PLCs via
-  `bus.send(target, key, value)` after `plant.route_to_plcs(...)`, and routes
-  inter-PLC tags via `bus.send(...)` after the comm strategy's `route(...)`
-  call. No path writes another PLC's IOImage directly. The end-to-end
+  — the harness routes plant sensors to PLCs via `bus.send(target, key, value)`
+  after `plant.route_to_plcs(...)`, and each PLC's own scan routes inter-PLC
+  signals via `bus.send(...)` from the `_send_<consumer>_<signal>` assignments
+  its ST emits. No path writes another PLC's IOImage directly. The end-to-end
   conveyor test ([tests/test_conveyor.py](../../tests/test_conveyor.py))
   exercises this harness — it calls `simulate(spec, blocks, ...)` rather than
-  wiring PLCs itself, so all inter-PLC routing decisions flow through the
-  harness's `bus.send` calls.
+  wiring PLCs itself, so all inter-PLC routing decisions flow through
+  `bus.send` calls.
 - **Comm strategy registry** ([relay/strategies/comm.py](../../relay/strategies/comm.py))
   — `build_comm_strategy(name, comm_block)` resolves the strategy named in
   the spec's `Comm.strategy` field; the registry raises on unknown values.
   The registry lives in `relay/strategies/` rather than `relay/runtime/` so
   that `relay/spec/` can import it for spec-time validation without violating
-  [pipeline_direction_imports.md](pipeline_direction_imports.md). Today the
-  registry contains `tag` (live; used by the conveyor demo) and `address`
-  (a stub that raises `NotImplementedError`, reserved for a future
-  Modbus TCP-style implementation).
+  [pipeline_direction_imports.md](pipeline_direction_imports.md). Both
+  registered strategies are live: `tag` (named tags, used by the conveyor
+  demo) and `address` (a Modbus-style register map; the TCP transport
+  underneath is planned). Either way the strategy only declares and projects
+  signals — delivery always flows through `CommBus`.
 
 ## Related
 
@@ -122,5 +123,6 @@ simulation" guarantee silently false for an entire class of signals.
   form of this invariant)
 - [pluggable_subsystems.md](pluggable_subsystems.md) — comm strategies are
   pluggable; this invariant constrains *all* strategies, not just the default
-- Glossary: "Comm buffer — Pending inter-PLC messages promoted each scan;
-  simulates Modbus TCP latency"
+- Glossary: "Comm buffer — Pending inter-PLC messages promoted each scan. A
+  message becomes visible at the consumer's first scan top whose SimClock time
+  is strictly later than the sending scan's"

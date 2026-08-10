@@ -117,7 +117,9 @@ class TestCausesValidationIndependentOfLoadSpec:
             **{"Assertions": ["CAUSES(part_at_b, belt_b_enable)"]}
         )
         issues = _issues_for(spec)
-        assert any("part_at_b" in i and "Comm.tags" in i for i in issues), issues
+        assert any(
+            "part_at_b" in i and "not a declared comm signal" in i for i in issues
+        ), issues
 
     def test_rejects_self_causing_assertion(self):
         spec = _minimal_spec(**{"Assertions": ["CAUSES(t, t)"]})
@@ -159,7 +161,7 @@ class TestBehaviorSchema:
         spec.raw["Behavior"]["plc_a"]["owns"] = ["belt_a"]
         issues = _issues_for(spec)
         assert any("owns has been removed" in i for i in issues)
-        assert any("Plant.routes" in i and "Comm.tags" in i for i in issues)
+        assert any("Plant.routes" in i and "produced_by" in i for i in issues)
 
     def test_rejects_missing_triggers_list(self):
         spec = _minimal_spec()

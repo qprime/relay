@@ -255,8 +255,8 @@ std::optional<std::uint32_t> ValidatedSt::slot_of_signal(std::uint32_t signal_id
 SignalTable build_signal_table(const ResolvedTaskSpec& spec,
                                std::span<const StProgram> programs) {
     SignalTable table;
-    for (const ResolvedTag& tag : spec.comm.tags) {
-        table.add(tag.name);
+    for (const ResolvedSignal& signal : spec.comm.signals) {
+        table.add(signal.name);
     }
     for (const ResolvedRoute& route : spec.plant.routes) {
         table.add(route.as_key);

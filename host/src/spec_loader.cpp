@@ -112,26 +112,27 @@ std::expected<ResolvedTaskSpec, LoadError> try_load(const std::filesystem::path&
     auto strategy = require_string(comm, "strategy", path);
     if (!strategy) return std::unexpected(strategy.error());
     spec.comm.strategy = *strategy;
-    if (comm.contains("tags")) {
-        if (!comm["tags"].is_array()) {
-            return fail(path, "field 'comm.tags' must be an array");
+    if (!comm.contains("signals") || !comm["signals"].is_array()) {
+        return fail(path, "field 'comm.signals' must be an array, got " +
+                              (comm.contains("signals")
+                                   ? std::string(comm["signals"].type_name())
+                                   : std::string("nothing")));
+    }
+    for (const json& signal : comm["signals"]) {
+        if (!signal.is_object()) {
+            return fail(path, "field 'comm.signals' entries must be objects");
         }
-        for (const json& tag : comm["tags"]) {
-            if (!tag.is_object()) {
-                return fail(path, "field 'comm.tags' entries must be objects");
-            }
-            ResolvedTag resolved;
-            auto name = require_string(tag, "name", path);
-            if (!name) return std::unexpected(name.error());
-            resolved.name = *name;
-            auto produced_by = require_string(tag, "produced_by", path);
-            if (!produced_by) return std::unexpected(produced_by.error());
-            resolved.produced_by = *produced_by;
-            auto consumed_by = require_string_array(tag, "consumed_by", path);
-            if (!consumed_by) return std::unexpected(consumed_by.error());
-            resolved.consumed_by = *consumed_by;
-            spec.comm.tags.push_back(std::move(resolved));
-        }
+        ResolvedSignal resolved;
+        auto name = require_string(signal, "name", path);
+        if (!name) return std::unexpected(name.error());
+        resolved.name = *name;
+        auto produced_by = require_string(signal, "produced_by", path);
+        if (!produced_by) return std::unexpected(produced_by.error());
+        resolved.produced_by = *produced_by;
+        auto consumed_by = require_string_array(signal, "consumed_by", path);
+        if (!consumed_by) return std::unexpected(consumed_by.error());
+        resolved.consumed_by = *consumed_by;
+        spec.comm.signals.push_back(std::move(resolved));
     }
 
     if (!root.contains("plant") || !root["plant"].is_object()) {

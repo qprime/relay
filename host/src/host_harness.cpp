@@ -69,9 +69,8 @@ std::expected<std::unique_ptr<HostHarness>, InitError> HostHarness::try_create(
         blocks.push_back(std::move(*validated));
     }
 
-    auto strategy = build_comm_strategy(spec, table);
-    if (!strategy) {
-        return std::unexpected(InitError{strategy.error().message});
+    if (auto comm_ok = validate_comm_signals(spec, table); !comm_ok) {
+        return std::unexpected(InitError{comm_ok.error().message});
     }
 
     auto plant = build_plant(spec.plant, spec.plc_ids, table, ex);
@@ -88,18 +87,16 @@ std::expected<std::unique_ptr<HostHarness>, InitError> HostHarness::try_create(
 
     return std::unique_ptr<HostHarness>(
         new HostHarness(std::move(spec), cfg, std::move(table), std::move(blocks),
-                        std::move(*strategy), std::move(*plant), capacity,
-                        std::move(ex)));
+                        std::move(*plant), capacity, std::move(ex)));
 }
 
 HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
-                         std::vector<ValidatedSt> blocks, CommStrategy strategy,
-                         PlantVariant plant, std::size_t trace_capacity, Executor ex)
+                         std::vector<ValidatedSt> blocks, PlantVariant plant,
+                         std::size_t trace_capacity, Executor ex)
     : spec_(std::move(spec)),
       cfg_(cfg),
       table_(std::move(table)),
       blocks_(std::move(blocks)),
-      strategy_(std::move(strategy)),
       plant_(std::move(plant)),
       bus_(ex, static_cast<std::uint32_t>(spec_.plc_ids.size()), table_.size(),
            kCommChannelCapacity),

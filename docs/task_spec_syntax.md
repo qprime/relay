@@ -37,7 +37,7 @@ not, and the split governs what is documented here:
 `System`, `Behavior`, and `Assertions` are identical whichever comm strategy or
 plant type a spec declares, so they have a single authority and it is this file.
 
-`Comm.tags`, `Plant.config`, `Plant.routes`, and `Plant.actuators` are
+`Comm.tags` / `Comm.registers`, `Plant.config`, `Plant.routes`, and `Plant.actuators` are
 **strategy-owned**: their fields are whatever the selected strategy's
 `validate_config` accepts, and a spec carries one strategy's idiom rather than
 the union of every strategy's fields
@@ -45,6 +45,7 @@ the union of every strategy's fields
 clause 6). Transcribing those field lists here would put a second, drifting copy
 of them next to the validator that owns them. For those blocks, read
 `validate_config` on the strategy you declared — `TagStrategy.validate_config`
+or `AddressStrategy.validate_config`
 in [`relay/strategies/comm.py`](../relay/strategies/comm.py),
 `ConveyorPlant.validate_config` in
 [`relay/plant/conveyor.py`](../relay/plant/conveyor.py) — and iterate against
@@ -55,12 +56,14 @@ spec depends on, is the shape contract:
 
 - `Comm.strategy` and `Plant.type` are registry lookups. An unregistered name is
   terminal: validation stops, because no other check is meaningful until the
-  selector resolves. Registered comm strategies are `tag` (live) and `address`
-  (a stub that raises). The Python plant registry holds `conveyor` alone.
+  selector resolves. Registered comm strategies are `tag` and `address`, both
+  live. The Python plant registry holds `conveyor` alone.
 - Whatever the plant's route entries call `as_key`, those names are the signals
   a PLC can read from the plant.
-- Whatever the comm block declares as tags, those names are the signals PLCs can
-  send each other, and only those names can be a `CAUSES` cause.
+- Whatever comm signals the selected strategy projects from its block (`tags`
+  entries for `tag`, `registers` entries for `address`), those names are the
+  signals PLCs can send each other, and only those names can be a `CAUSES`
+  cause.
 - Whatever the plant's actuator entries name as `key` are the outputs a PLC
   writes that the plant reads back.
 

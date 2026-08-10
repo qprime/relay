@@ -14,8 +14,11 @@ from relay.verify.assertions import evaluate_assertion
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HOST_BINARY = REPO_ROOT / "host" / "build" / "relay_host_main"
-CONVEYOR_SPEC = REPO_ROOT / "specs" / "conveyor_handoff.yaml"
-CONVEYOR_GOLDEN = REPO_ROOT / "specs" / "expectations" / "conveyor_handoff.expected.json"
+SPECS = {
+    "conveyor_handoff": REPO_ROOT / "specs" / "conveyor_handoff.yaml",
+    "conveyor_handoff_address": REPO_ROOT / "specs" / "conveyor_handoff_address.yaml",
+}
+EXPECTATIONS_DIR = REPO_ROOT / "specs" / "expectations"
 
 SKIP_REASON = (
     f"C++ host binary absent at {HOST_BINARY}; build it with "
@@ -25,12 +28,17 @@ SKIP_REASON = (
 pytestmark = pytest.mark.skipif(not HOST_BINARY.exists(), reason=SKIP_REASON)
 
 
+@pytest.fixture(scope="module", params=sorted(SPECS))
+def spec_path(request):
+    return SPECS[request.param]
+
+
 @pytest.fixture(scope="module")
-def cpp_trace(tmp_path_factory):
+def cpp_trace(spec_path, tmp_path_factory):
     from tools.emit_host_inputs import emit_host_inputs
 
     out_dir = tmp_path_factory.mktemp("host_inputs")
-    resolved_path, blocks_path = emit_host_inputs(CONVEYOR_SPEC, out_dir)
+    resolved_path, blocks_path = emit_host_inputs(spec_path, out_dir)
     trace_path = out_dir / "cpp_trace.jsonl"
     subprocess.run(
         [
@@ -48,13 +56,13 @@ def cpp_trace(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def artifact():
-    return json.loads(CONVEYOR_GOLDEN.read_text())
+def artifact(spec_path):
+    return json.loads((EXPECTATIONS_DIR / f"{spec_path.stem}.expected.json").read_text())
 
 
-def _spawn_plant_server() -> tuple[subprocess.Popen, int]:
+def _spawn_plant_server(spec_path: Path) -> tuple[subprocess.Popen, int]:
     server = subprocess.Popen(
-        [sys.executable, "-m", "tools.plant_server", str(CONVEYOR_SPEC), "--port", "0"],
+        [sys.executable, "-m", "tools.plant_server", str(spec_path), "--port", "0"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -102,10 +110,12 @@ class TestHostSatisfiesExpectations:
             )
 
     @pytest.mark.parametrize("plant_mode", ["conveyor", "remote_socket"])
-    def test_gate_holds_across_ten_consecutive_runs(self, artifact, tmp_path, plant_mode):
+    def test_gate_holds_across_ten_consecutive_runs(
+        self, spec_path, artifact, tmp_path, plant_mode
+    ):
         from tools.emit_host_inputs import emit_host_inputs
 
-        resolved_path, blocks_path = emit_host_inputs(CONVEYOR_SPEC, tmp_path)
+        resolved_path, blocks_path = emit_host_inputs(spec_path, tmp_path)
         for attempt in range(10):
             trace_path = tmp_path / f"cpp_trace_{plant_mode}_{attempt}.jsonl"
             command = [
@@ -116,7 +126,7 @@ class TestHostSatisfiesExpectations:
             ]
             server = None
             if plant_mode == "remote_socket":
-                server, port = _spawn_plant_server()
+                server, port = _spawn_plant_server(spec_path)
                 command += ["--plant-endpoint", f"127.0.0.1:{port}"]
             try:
                 subprocess.run(

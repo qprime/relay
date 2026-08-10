@@ -67,7 +67,7 @@ TEST(TestPlantRegistry, test_loader_accepts_non_conveyor_config_shape) {
         {"plc_ids", {"plc_a"}},
         {"scan_period_ms", 10.0},
         {"max_scans", 10},
-        {"comm", {{"strategy", "tag"}}},
+        {"comm", {{"strategy", "tag"}, {"signals", nlohmann::json::array()}}},
         {"plant",
          {{"type", "remote_socket"},
           {"config", {{"endpoint", "127.0.0.1:9000"}}},

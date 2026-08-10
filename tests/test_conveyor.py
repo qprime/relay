@@ -227,7 +227,7 @@ class TestCausesSpecValidation:
         with pytest.raises(ValueError) as exc:
             load_spec(path)
         assert "part_at_b" in str(exc.value)
-        assert "Comm.tags" in str(exc.value)
+        assert "not a declared comm signal" in str(exc.value)
 
     def test_causes_self_reference_rejected_at_load(self, tmp_path):
         path = self._spec_text_with(

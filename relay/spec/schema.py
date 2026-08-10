@@ -97,7 +97,7 @@ def _validate_required(raw: dict[str, Any], path: Path | str) -> None:
     strategy = comm.get("strategy") if isinstance(comm, dict) else None
     if not strategy:
         raise ValueError(f"{path}: 'Comm.strategy' is required (e.g. tag)")
-    get_comm_strategy(strategy)
-    issues = causes_issues(raw.get("Assertions", []), comm if isinstance(comm, dict) else {})
+    resolved = get_comm_strategy(strategy)
+    issues = causes_issues(raw.get("Assertions", []), resolved.signals(comm))
     if issues:
         raise ValueError(f"{path}: " + "; ".join(issues))

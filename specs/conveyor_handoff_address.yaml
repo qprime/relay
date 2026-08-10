@@ -1,0 +1,73 @@
+System:
+  name: conveyor_handoff_address
+  plcs:
+    - id: plc_a
+      role: upstream
+    - id: plc_b
+      role: downstream
+
+# The address-idiom port of conveyor_handoff: same System, Plant, Behavior,
+# and Assertions, with the one comm signal bound to a Modbus coil instead of
+# declared as a tag. The register binding never becomes the signal identity —
+# generated ST, trace keys, and verdicts must match the tag spec exactly.
+Comm:
+  strategy: address
+  registers:
+    - name: handoff_signal
+      produced_by: plc_a
+      consumed_by: [plc_b]
+      table: coil
+      address: 0
+
+Plant:
+  type: conveyor
+  config:
+    belt_speed_m_per_s: 0.5
+    sensor_trigger_threshold_m: 0.1
+    actuator_latency_ms: 50.0
+  routes:
+    - sensor: sensor_a_exit_triggered
+      to_plc: plc_a
+      as_key: sensor_a_exit
+      trigger: edge
+    - sensor: part_at_b
+      to_plc: plc_b
+      as_key: part_at_b
+      trigger: level
+  actuators:
+    - from_plc: plc_b
+      key: belt_b_enable
+      as: belt_b_enable_signal
+
+Behavior:
+  plc_a:
+    triggers:
+      - id: handoff_on_exit
+        when:
+          signal: sensor_a_exit
+          edge: rising
+        emit:
+          tag: handoff_signal
+          mode: latched
+  plc_b:
+    triggers:
+      - id: belt_on_handoff
+        when:
+          signal: handoff_signal
+          edge: level
+        emit:
+          output: belt_b_enable
+          mode: latched
+
+Assertions:
+  # 300.0ms worst observed (C++ host, both plant modes; sim observes 290.0ms)
+  # + 100ms headroom, a stated choice of 10 scan periods for interleaving skew.
+  - "EVENTUALLY(part_at_b, within: 400ms)"
+  # 10.0ms observed (sim: one consumer scan period of charged delivery; host
+  # observes 0.0ms) + 40ms headroom, a stated choice of 4 scan periods.
+  - "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)"
+  # Attribution, not timing: belt_b_enable must be traceable to a received
+  # handoff_signal message, matched by sequence counter. Carries no budget —
+  # that is PRECEDES's job, and a budget would reintroduce the clock dependency
+  # this form exists to escape.
+  - "CAUSES(handoff_signal, belt_b_enable)"

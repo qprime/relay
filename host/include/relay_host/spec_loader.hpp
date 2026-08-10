@@ -14,7 +14,7 @@
 
 namespace relay_host {
 
-struct ResolvedTag {
+struct ResolvedSignal {
     std::string name;
     std::string produced_by;
     std::vector<std::string> consumed_by;
@@ -22,7 +22,7 @@ struct ResolvedTag {
 
 struct ResolvedComm {
     std::string strategy;
-    std::vector<ResolvedTag> tags;
+    std::vector<ResolvedSignal> signals;
 };
 
 struct ResolvedRoute {

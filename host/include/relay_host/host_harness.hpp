@@ -60,8 +60,8 @@ class HostHarness {
 
  private:
     HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
-                std::vector<ValidatedSt> blocks, CommStrategy strategy,
-                PlantVariant plant, std::size_t trace_capacity, Executor ex);
+                std::vector<ValidatedSt> blocks, PlantVariant plant,
+                std::size_t trace_capacity, Executor ex);
 
     [[nodiscard]] Task run_plant_loop();
 
@@ -69,7 +69,6 @@ class HostHarness {
     Config cfg_;
     SignalTable table_;
     std::vector<ValidatedSt> blocks_;
-    CommStrategy strategy_;
     PlantVariant plant_;
     CommBus bus_;
     TraceRing trace_;

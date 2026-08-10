@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from relay.spec.schema import TaskSpec
+from relay.strategies.comm import comm_signals
 from relay.strategies.st_syntax import SCRATCH_PREFIX, SEND_PREFIX
 
 
@@ -39,14 +40,7 @@ def compile_plc(triggers: list[Trigger], spec: TaskSpec) -> str:
 
 
 def _tag_consumers(spec: TaskSpec) -> dict[str, list[str]]:
-    consumers: dict[str, list[str]] = {}
-    for tag in spec.comm_block.get("tags", []) or []:
-        if not isinstance(tag, dict):
-            continue
-        name = tag.get("name")
-        if name:
-            consumers[name] = list(tag.get("consumed_by") or [])
-    return consumers
+    return {s.name: list(s.consumed_by) for s in comm_signals(spec)}
 
 
 def _compile_trigger(trigger: Trigger, consumers: dict[str, list[str]]) -> str:
