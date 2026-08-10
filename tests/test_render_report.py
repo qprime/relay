@@ -3,9 +3,11 @@ from pathlib import Path
 
 import pytest
 
+import tools.render_report as render_report
 from relay.generator.st import compile_st_blocks
 from relay.spec.schema import TaskSpec, load_spec
 from tools.render_report import (
+    Lane,
     build_lanes,
     event_records,
     render_detail,
@@ -138,6 +140,90 @@ class TestRenderReport:
             conveyor_spec, build_lanes(conveyor_spec, host_binary=None), st_blocks
         )
         assert first == second
+
+    def test_zero_trigger_plc_renders_no_triggers(self):
+        raw = {
+            "System": {
+                "name": "zero_trigger_probe",
+                "plcs": [{"id": "plc_a"}, {"id": "plc_b"}],
+            },
+            "Comm": {"strategy": "tag", "tags": []},
+            "Behavior": {
+                "plc_a": {
+                    "triggers": [
+                        {
+                            "id": "t1",
+                            "when": {"signal": "s", "edge": "rising"},
+                            "emit": {"output": "o", "mode": "steady"},
+                        }
+                    ]
+                }
+            },
+        }
+        spec = TaskSpec(raw=raw)
+        page = render_detail(spec, [], compile_st_blocks(spec))
+        assert "no triggers" in page
+        assert page.count("what this compiled to") == 1
+
+    def test_pulse_detail_page_has_no_gap_content(self, pulse_spec, pulse_lanes):
+        page = render_detail(pulse_spec, pulse_lanes, compile_st_blocks(pulse_spec))
+        assert "290.0ms" in page
+        assert "gap" not in page
+
+    def test_failed_lane_renders_failed_header_and_cells(
+        self, conveyor_spec, conveyor_lanes
+    ):
+        lanes = conveyor_lanes + [Lane("host", None, [])]
+        page = render_detail(conveyor_spec, lanes, compile_st_blocks(conveyor_spec))
+        assert "<th>host (failed)</th>" in page
+        assert page.count("lane failed to run") == 4
+        assert "sim only" not in page
+
+
+class TestRenderReportMain:
+    def test_duplicate_system_name_aborts_before_any_write(self, tmp_path, capsys):
+        first = tmp_path / "a.yaml"
+        second = tmp_path / "z_copy.yaml"
+        first.write_text(CONVEYOR_SPEC.read_text())
+        second.write_text(CONVEYOR_SPEC.read_text())
+        out = tmp_path / "report"
+        assert render_report.main([str(first), str(second), "--out", str(out)]) == 1
+        message = capsys.readouterr().out
+        assert "conveyor_handoff" in message
+        assert "a.yaml" in message and "z_copy.yaml" in message
+        assert not out.exists()
+
+    def test_failed_host_run_marks_lanes_failed_and_exits_nonzero(self, tmp_path):
+        out = tmp_path / "report"
+        code = render_report.main(
+            [str(CONVEYOR_SPEC), "--out", str(out), "--host-binary", "/bin/false"]
+        )
+        assert code == 1
+        page = (out / "conveyor_handoff.html").read_text()
+        assert "<th>host (failed)</th>" in page
+        assert "<th>host-socket (failed)</th>" in page
+        assert "lane failed to run" in page
+        assert (out / "index.html").exists()
+
+    def test_missing_default_binary_renders_sim_only_and_exits_zero(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(render_report, "_DEFAULT_HOST_BINARY", tmp_path / "absent")
+        out = tmp_path / "report"
+        assert render_report.main([str(CONVEYOR_SPEC), "--out", str(out)]) == 0
+        page = (out / "conveyor_handoff.html").read_text()
+        assert "sim only — host binary not built" in page
+        assert "<th>host</th>" not in page
+        assert (out / "index.html").exists()
+
+    def test_explicit_missing_host_binary_is_an_error(self, tmp_path):
+        with pytest.raises(SystemExit) as excinfo:
+            render_report.main(
+                [str(CONVEYOR_SPEC), "--out", str(tmp_path / "report"),
+                 "--host-binary", str(tmp_path / "typo")]
+            )
+        assert excinfo.value.code == 2
+        assert not (tmp_path / "report").exists()
 
 
 @pytest.mark.skipif(not HOST_BINARY.exists(), reason=SKIP_REASON)

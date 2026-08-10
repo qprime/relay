@@ -78,12 +78,13 @@ route delivered after `plc_b`'s final scan. That drop was always happening and
 was silently discarded by the old teardown. It is the live signal for whether a
 due-time scheduler sheds messages it should not.
 
-### Step 2 — Visualization tool
+### Step 2 — Visualization tool ✅ done (`bb37e07`)
 
 **Spec:** [#24](https://github.com/qprime/relay/issues/24).
-**Closes:** nothing — the collector half of [#8](https://github.com/qprime/relay/issues/8)
-landed with `cfcb95a` as `tools/observed_timings.py`; the renderer consumes traces
-the same way rather than rebuilding aggregation.
+**Closes:** [#24](https://github.com/qprime/relay/issues/24). The collector half
+of [#8](https://github.com/qprime/relay/issues/8) landed separately with
+`cfcb95a` as `tools/observed_timings.py`; the renderer consumes traces rather
+than rebuilding aggregation.
 
 A tool in `tools/` that renders one spec run as a single self-contained HTML page:
 intent, task spec, generated ST, trace, and verdict, cross-linked so that clicking
@@ -105,6 +106,11 @@ that clause, and the exact scan records the verdict cites.
      "...is caused by 'handoff_signal' seq 11 sent by 'plc_a'..."
 ```
 
+The landed renderer (`tools/render_report.py`) presents these panes without the
+click-to-highlight cross-linking sketched above — that interaction was scoped
+out of #24. The trigger provenance markers and the verifier's witness sentences
+carry the same threads statically.
+
 Two threads already exist and should be used rather than rebuilt:
 
 - **Spec → ST** is threaded by the provenance markers from
@@ -123,11 +129,14 @@ system; relay has had the topology and no rendering of it.
 
 **Constraints:**
 
-- Lives in `tools/`, reads committed artifacts. Not on the verification path, and
-  it must not widen `relay/verify/`'s closed import set
-  (`verification_path_purity`).
-- #8 explicitly warns against bolting a printer onto `evaluate_all`. The tool
-  reads the verdict JSON and trace JSONL as files.
+- Lives in `tools/`. Not on the verification path, and it must not widen
+  `relay/verify/`'s closed import set (`verification_path_purity`) — it imports
+  *from* `relay/verify/`, the allowed direction.
+- Verdicts are evaluated from traces: the sim lane runs `simulate()` in-process,
+  the host lanes load their trace JSONL through the guarded reader. The
+  committed `specs/expectations/*.expected.json` are never a verdict source — a
+  page built from always-green fixtures can never show a failure, which is the
+  wrong-implementation #24's catcher test exists to block.
 
 **Note on process:** this is the artifact a non-expert judges the project by, and
 much of what makes it good is visual judgment the spec cannot settle. Expect to

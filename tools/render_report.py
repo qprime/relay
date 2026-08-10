@@ -24,6 +24,7 @@ from relay.verify.assertions import AssertionResult, evaluate_all
 
 from tools.emit_host_inputs import emit_host_inputs
 from tools.expectations import DEFAULT_MAX_SCANS
+from tools.system_names import DuplicateSystemName, check_unique_system_names
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _DEFAULT_HOST_BINARY = _REPO_ROOT / "host" / "build" / "relay_host_main"
@@ -50,10 +51,6 @@ details { margin: 0.4rem 0; }
 summary { cursor: pointer; color: #555; }
 .trace td { font-family: ui-monospace, monospace; font-size: 0.85em; }
 """
-
-
-class DuplicateSystemName(Exception):
-    pass
 
 
 @dataclass(frozen=True)
@@ -141,10 +138,17 @@ def _host_lane(
         command += ["--plant-endpoint", f"127.0.0.1:{port}"]
     try:
         completed = subprocess.run(command, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        print(f"{name} lane failed: host run exceeded 120s", file=sys.stderr)
+        return Lane(name, None, [])
     finally:
         if server is not None:
             server.terminate()
-            server.wait(timeout=10)
+            try:
+                server.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait()
     if completed.returncode != 0:
         print(
             f"{name} lane failed (exit {completed.returncode}):\n{completed.stderr}",
@@ -193,7 +197,7 @@ def _is_event(record: ScanRecord, prior: ScanRecord) -> bool:
     return False
 
 
-def plain_words(parsed: ParsedAssertion) -> str:
+def plain_words(parsed: ParsedAssertion) -> str | None:
     if parsed.form == "EVENTUALLY":
         return (
             f"{parsed.signals[0]} becomes true within {parsed.within_ms:g}ms "
@@ -205,8 +209,10 @@ def plain_words(parsed: ParsedAssertion) -> str:
             f"{first} becomes true no later than {second}, "
             f"with a gap of at most {parsed.within_ms:g}ms"
         )
-    cause, effect = parsed.signals
-    return f"{effect} first activates because a received message carried {cause}"
+    if parsed.form == "CAUSES":
+        cause, effect = parsed.signals
+        return f"{effect} first activates because a received message carried {cause}"
+    return None
 
 
 def st_stanzas(st_block: str) -> dict[str, str]:
@@ -290,10 +296,10 @@ def _verdict_table(spec: TaskSpec, lanes: list[Lane]) -> str:
                 cells.append('<td class="fail">✗ lane failed to run</td>')
             else:
                 cells.append(_verdict_cell(lane.results[index], parsed))
+        head = f'<span class="plain">{_h(label)}</span>' if label else ""
         rows.append(
             "<tr><td>"
-            f'<span class="plain">{_h(label)}</span>'
-            f'<code class="formal">{_h(text)}</code>'
+            f'{head}<code class="formal">{_h(text)}</code>'
             "</td>" + "".join(cells) + "</tr>"
         )
     if not rows:
@@ -486,43 +492,33 @@ def render_index(entries: list[tuple[TaskSpec, list[Lane]]]) -> str:
     return _page("relay checkpoint report", body)
 
 
-def _check_unique_system_names(specs: list[tuple[Path, TaskSpec]]) -> None:
-    by_name: dict[str, list[Path]] = {}
-    for spec_path, spec in specs:
-        by_name.setdefault(spec.system_name, []).append(spec_path)
-    collisions = {name: paths for name, paths in by_name.items() if len(paths) > 1}
-    if not collisions:
-        return
-    raise DuplicateSystemName(
-        "; ".join(
-            f"System.name {name!r} is declared by "
-            + ", ".join(p.name for p in sorted(paths))
-            + f", which would file both under {name}.html"
-            for name, paths in sorted(collisions.items())
-        )
-        + "; rename one so each spec owns its own artifact"
-    )
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Render each task spec plus its execution traces as self-contained HTML"
     )
     parser.add_argument("specs", type=Path, nargs="*")
     parser.add_argument("--out", type=Path, default=Path("report"))
-    parser.add_argument("--host-binary", type=Path, default=_DEFAULT_HOST_BINARY)
+    parser.add_argument("--host-binary", type=Path, default=None)
     parser.add_argument("--max-scans", type=int, default=DEFAULT_MAX_SCANS)
     parser.add_argument("--scan-period-ms", type=float, default=DEFAULT_SCAN_PERIOD_MS)
     args = parser.parse_args(argv)
 
+    if args.host_binary is None:
+        host_binary = _DEFAULT_HOST_BINARY if _DEFAULT_HOST_BINARY.exists() else None
+    elif args.host_binary.exists():
+        host_binary = args.host_binary
+    else:
+        parser.error(f"--host-binary {args.host_binary} does not exist")
+
     spec_paths = list(args.specs) or sorted((_REPO_ROOT / "specs").glob("*.yaml"))
     loaded = [(path, load_spec(path)) for path in spec_paths]
     try:
-        _check_unique_system_names(loaded)
+        check_unique_system_names(
+            [(path, spec.system_name) for path, spec in loaded], ".html"
+        )
     except DuplicateSystemName as e:
         print(e)
         return 1
-    host_binary = args.host_binary if args.host_binary.exists() else None
 
     entries: list[tuple[TaskSpec, list[Lane]]] = []
     lane_failed = False
