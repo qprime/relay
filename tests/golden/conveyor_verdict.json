@@ -8,6 +8,7 @@
   "results": [
     {
       "assertion": "EVENTUALLY(part_at_b, within: 400ms)",
+      "attribution": null,
       "observed_gap_ms": null,
       "passed": true,
       "reason": "signal 'part_at_b' true at 290.0ms",
@@ -15,6 +16,7 @@
     },
     {
       "assertion": "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)",
+      "attribution": null,
       "observed_gap_ms": 10.0,
       "passed": true,
       "reason": "'handoff_signal' at 100.0ms precedes 'belt_b_enable' at 110.0ms (gap 10.0ms, budget 50.0ms)",
@@ -22,6 +24,14 @@
     },
     {
       "assertion": "CAUSES(handoff_signal, belt_b_enable)",
+      "attribution": {
+        "cause_received_tick": 11,
+        "cause_sender": "plc_a",
+        "cause_sent_tick": 10,
+        "cause_seq": 11,
+        "effect_plc": "plc_b",
+        "effect_tick": 11
+      },
       "observed_gap_ms": null,
       "passed": true,
       "reason": "'belt_b_enable' true on 'plc_b' at tick 11 is caused by 'handoff_signal' seq 11 sent by 'plc_a' at tick 10 and received at tick 11",

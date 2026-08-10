@@ -236,9 +236,24 @@ tightening a budget can newly fail it.
 system currently does, which is not a contract. Reporting informs a human
 decision; the human makes it.
 
-### Step 5 — C++ verifier
+### Step 5 — C++ verifier ✅ done
 
-**Spec:** `/spec` before implementation.
+**Spec:** [#25](https://github.com/qprime/relay/issues/25).
+**Closes:** [#25](https://github.com/qprime/relay/issues/25).
+
+`relay_host_verify` reads a trace JSONL, evaluates the spec's assertions, and
+writes `relay/verdict_io.py`'s document. Because it reads the wire format rather
+than in-memory state it verifies the *sim's* trace, so
+`tests/test_cross_verifier_agreement.py` holds the trace fixed and leaves the
+verifier as the only variable. Purity is a property of the link graph — see
+[host_verification_path_purity](invariants/host_verification_path_purity.md).
+
+Both sides gained structured `attribution` on a passing `CAUSES`, and both
+replaced first-in-list-order selection with minimum-by-`(elapsed_ms, plc_id)`:
+"first in the list" names a property of the container, and a second
+implementation cannot be independently correct about it.
+
+The original framing, kept because it is what the port had to get right:
 
 Port `relay/verify/` to the host so it evaluates its own trace and emits its own
 verdict artifact. The expectations test then becomes **two independent verifiers
@@ -269,11 +284,11 @@ agree on the same wrong number.
 `10.0ms`, because the host does not charge the delivery hop (Step 3.5). The
 contract is verdict equality per assertion, not gap equality.
 
-**Invariant implication:** `verification_path_purity` is a Python-side invariant
-with a closed import set and a test. A C++ verifier needs the same guarantee
-expressed in C++ terms, or the claim is weaker on that side. Either amend the
-existing invariant to cover both languages or add a host-side sibling — decide in
-the spec, not in the implementation.
+**Invariant implication:** resolved as a host-side sibling rather than an
+amendment. `verification_path_purity` is built on a Python import allowlist and
+the edge along which a model client would arrive; the C++ constraint is checked
+by what the linker accepts. One document stating both in two languages would
+state neither precisely.
 
 ### Step 6 — Modbus TCP comm strategy
 
@@ -326,10 +341,8 @@ as [#24](https://github.com/qprime/relay/issues/24).
 |---|---|---|
 | After Step 5 ships | Step 6 Modbus TCP | Largest scope, reaches into the schema, wants the host's shape settled. |
 
-Step 5's spec can be written any time before Step 5 starts. It must port Step 3's
-resolution rule — a tag resolves on its producer from `sends`, anchored to the
-first truthy send — not the pre-#21 rule, and it must account for Step 3.5's
-delivery charge being a sim-side semantic the host does not share.
+Step 5's spec landed as [#25](https://github.com/qprime/relay/issues/25) and has
+shipped. Step 6 is now the only item awaiting a spec.
 
 Steps 1, 3, 3.5, and 4 needed no separate spec: 1 and 3.5 had complete analyses in
 #22 and #16, Step 3's one open decision was settled in conversation and recorded

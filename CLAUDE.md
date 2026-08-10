@@ -93,6 +93,7 @@ See [docs/invariants/](docs/invariants/) for project invariants. Check the index
 - **pluggable_subsystems:** Pluggable subsystems use `Protocol` + registry, selected by explicit task-spec field
 - **comm_bus_only_inter_plc_channel:** All inter-PLC coordination flows through CommBus; no side channels
 - **verification_path_purity:** `verify/` has a closed import set — no LLM, no I/O
+- **host_verification_path_purity:** `relay_verify` links `relay_core` and nothing else; the C++ wire format sits outside the boundary
 - **scan_phase_isolation:** Per-scan phase order is fixed; ST execution is pure
 - **simclock_only_time_source:** All time derives from injected SimClock or `dt_ms`
 - **pipeline_direction_imports:** Imports follow pipeline data flow; backward edges across stages are forbidden
@@ -110,6 +111,8 @@ See [docs/invariants/](docs/invariants/) for project invariants. Check the index
 - Hand-edit generated ST — fix the generator or the task spec, not the artifact
 - Add a backward-edge import across pipeline stages — extract a leaf module under `relay/strategies/` instead
 - Read a field on a load path that the matching dump path guards — a wire format's load side is the one facing untrusted bytes; coercion (`bool(...)`, `int(...)`) is not validation
+- Link asio, nlohmann, or `relay_host` into `relay_verify` — the link graph is what makes the C++ verifier's purity mechanical
+- Compare `reason` strings between the two verifiers — the structured fields carry the contract; prose equality couples C++ to Python's phrasing
 
 ## When Stuck
 

@@ -38,6 +38,55 @@ def _check_ms(value: Any, field: str, assertion: Any) -> Any:
     return value
 
 
+def _check_count(value: Any, field: str, assertion: Any) -> Any:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"assertion {assertion!r} field {field!r} has unserializable type "
+            f"{type(value).__name__}; expected int"
+        )
+    return value
+
+
+_ATTRIBUTION_STR_FIELDS = ("cause_sender", "effect_plc")
+_ATTRIBUTION_COUNT_FIELDS = (
+    "cause_received_tick",
+    "cause_sent_tick",
+    "cause_seq",
+    "effect_tick",
+)
+
+
+def _attribution_fields(read, assertion: Any) -> dict[str, Any]:
+    fields = {
+        name: _check_str(read(name), f"attribution.{name}", assertion)
+        for name in _ATTRIBUTION_STR_FIELDS
+    }
+    fields.update(
+        {
+            name: _check_count(read(name), f"attribution.{name}", assertion)
+            for name in _ATTRIBUTION_COUNT_FIELDS
+        }
+    )
+    return fields
+
+
+def _attribution_to_dict(attribution: Any, assertion: Any) -> dict[str, Any] | None:
+    if attribution is None:
+        return None
+    return _attribution_fields(lambda name: getattr(attribution, name), assertion)
+
+
+def _attribution_from_dict(data: Any, assertion: Any) -> dict[str, Any] | None:
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise TypeError(
+            f"assertion {assertion!r} field 'attribution' has unserializable type "
+            f"{type(data).__name__}; expected an object or None"
+        )
+    return _attribution_fields(lambda name: data[name], assertion)
+
+
 def verdict_to_dict(result) -> dict[str, Any]:
     assertion = result.assertion
     return {
@@ -46,6 +95,7 @@ def verdict_to_dict(result) -> dict[str, Any]:
         "reason": _check_str(result.reason, "reason", assertion),
         "observed_gap_ms": _check_ms(result.observed_gap_ms, "observed_gap_ms", assertion),
         "witness_ms": _check_ms(result.witness_ms, "witness_ms", assertion),
+        "attribution": _attribution_to_dict(result.attribution, assertion),
     }
 
 
@@ -57,6 +107,7 @@ def verdict_from_dict(data: dict[str, Any]) -> dict[str, Any]:
         "reason": _check_str(data["reason"], "reason", assertion),
         "observed_gap_ms": _check_ms(data["observed_gap_ms"], "observed_gap_ms", assertion),
         "witness_ms": _check_ms(data["witness_ms"], "witness_ms", assertion),
+        "attribution": _attribution_from_dict(data["attribution"], assertion),
     }
 
 

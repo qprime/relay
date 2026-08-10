@@ -6,12 +6,30 @@ from relay.trace import TraceLog
 
 
 @dataclass(frozen=True)
+class Attribution:
+    """The causal chain a passing CAUSES found, as structured fields.
+
+    The witness sentence already names every one of these, but a second
+    verifier cannot be compared against prose without coupling it to this
+    module's phrasing. These fields are what two implementations can agree on.
+    """
+
+    effect_plc: str
+    effect_tick: int
+    cause_sender: str
+    cause_seq: int
+    cause_sent_tick: int
+    cause_received_tick: int
+
+
+@dataclass(frozen=True)
 class AssertionResult:
     assertion: str
     passed: bool
     reason: str
     observed_gap_ms: float | None = None
     witness_ms: float | None = None
+    attribution: Attribution | None = None
 
 
 def evaluate_assertion(assertion: str, trace: TraceLog) -> AssertionResult:
@@ -47,6 +65,19 @@ def _is_comm_tag(name: str, trace: TraceLog) -> bool:
     return any(name in r.sends for r in trace.records)
 
 
+def _earliest(records):
+    """The canonical winner among records that all satisfy a predicate.
+
+    Selection is minimum-by-`(elapsed_ms, plc_id)`, not first-in-list-order.
+    Record order is scan-completion order, which is genuinely nondeterministic
+    under free-running clocks, so a positional rule names a property of the
+    container rather than of the trace — and a second implementation cannot be
+    independently correct about it. `plc_id` breaks the tie when one signal
+    becomes true on two PLCs in the same instant.
+    """
+    return min(records, key=lambda r: (r.clock.elapsed_ms, r.plc_id), default=None)
+
+
 def _first_true_ms(name: str, trace: TraceLog) -> float | None:
     """When a signal first became true, read on the side that emitted it.
 
@@ -63,17 +94,13 @@ def _first_true_ms(name: str, trace: TraceLog) -> float | None:
     nothing happened.
     """
     if _is_comm_tag(name, trace):
-        return next(
-            (
-                r.clock.elapsed_ms
-                for r in trace.records
-                if name in r.sends and r.sends[name].value
-            ),
-            None,
+        matching = (
+            r for r in trace.records if name in r.sends and r.sends[name].value
         )
-    return next(
-        (r.clock.elapsed_ms for r in trace.records if _signal_value(r, name)), None
-    )
+    else:
+        matching = (r for r in trace.records if _signal_value(r, name))
+    earliest = _earliest(matching)
+    return None if earliest is None else earliest.clock.elapsed_ms
 
 
 def _check_eventually(
@@ -196,9 +223,7 @@ def _check_causes(
     scan, so a tag that arrives and is acted on in one scan is a causal chain,
     not a coincidence. This mirrors PRECEDES's non-strict same-scan rule.
     """
-    acting = next(
-        (r for r in trace.records if _signal_value(r, effect)), None
-    )
+    acting = _earliest(r for r in trace.records if _signal_value(r, effect))
     if acting is None:
         return AssertionResult(
             assertion=assertion,
@@ -208,7 +233,10 @@ def _check_causes(
 
     plc_id = acting.plc_id
     on_plc = trace.for_plc(plc_id)
-    receipts = [r for r in on_plc if cause in r.recvs and r.recvs[cause].value]
+    receipts = sorted(
+        (r for r in on_plc if cause in r.recvs and r.recvs[cause].value),
+        key=lambda r: r.clock.tick,
+    )
     activating = next(
         (r for r in receipts if r.clock.tick <= acting.clock.tick), None
     )
@@ -247,13 +275,14 @@ def _check_causes(
     # sender's scans emitted the seq. `sends` records the scan's high-water count,
     # so a multi-consumer tag emitting two messages of one key in a single scan
     # stores only the last — hence `>=` rather than exact match.
-    sender = next(
+    sender = min(
         (
             r
             for r in trace.for_plc(receipt.sender)
             if cause in r.sends and r.sends[cause].count >= receipt.seq
         ),
-        None,
+        key=lambda r: r.clock.tick,
+        default=None,
     )
     if sender is None:
         return AssertionResult(
@@ -272,6 +301,14 @@ def _check_causes(
             f"'{effect}' true on '{plc_id}' at tick {acting.clock.tick} is caused by "
             f"'{cause}' seq {receipt.seq} sent by '{receipt.sender}' at tick "
             f"{sender.clock.tick} and received at tick {activating.clock.tick}"
+        ),
+        attribution=Attribution(
+            effect_plc=plc_id,
+            effect_tick=acting.clock.tick,
+            cause_sender=receipt.sender,
+            cause_seq=receipt.seq,
+            cause_sent_tick=sender.clock.tick,
+            cause_received_tick=activating.clock.tick,
         ),
     )
 

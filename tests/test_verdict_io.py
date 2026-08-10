@@ -12,7 +12,7 @@ from relay.generator.st import compile_st_blocks
 from relay.runtime.harness import simulate
 from relay.spec.schema import load_spec
 from relay.verdict_io import dump_json, load_json, verdict_to_dict
-from relay.verify.assertions import AssertionResult, evaluate_all
+from relay.verify.assertions import Attribution, AssertionResult, evaluate_all
 
 
 _SPEC_PATH = Path(__file__).parent.parent / "specs" / "conveyor_handoff.yaml"
@@ -47,9 +47,23 @@ def _result(**overrides) -> AssertionResult:
         "reason": "signal 'part_at_b' true at 60.0ms",
         "observed_gap_ms": None,
         "witness_ms": None,
+        "attribution": None,
     }
     fields.update(overrides)
     return AssertionResult(**fields)
+
+
+def _attribution(**overrides) -> Attribution:
+    fields = {
+        "effect_plc": "plc_b",
+        "effect_tick": 11,
+        "cause_sender": "plc_a",
+        "cause_seq": 11,
+        "cause_sent_tick": 10,
+        "cause_received_tick": 11,
+    }
+    fields.update(overrides)
+    return Attribution(**fields)
 
 
 class TestVerdictIORoundTrip:
@@ -63,6 +77,18 @@ class TestVerdictIORoundTrip:
             assert restored["reason"] == original.reason
             assert restored["observed_gap_ms"] == original.observed_gap_ms
             assert restored["witness_ms"] == original.witness_ms
+            assert restored["attribution"] == (
+                None
+                if original.attribution is None
+                else {
+                    "effect_plc": original.attribution.effect_plc,
+                    "effect_tick": original.attribution.effect_tick,
+                    "cause_sender": original.attribution.cause_sender,
+                    "cause_seq": original.attribution.cause_seq,
+                    "cause_sent_tick": original.attribution.cause_sent_tick,
+                    "cause_received_tick": original.attribution.cause_received_tick,
+                }
+            )
 
     def test_empty_results_round_trips(self):
         assert _round_trip([]) == []
@@ -85,6 +111,35 @@ class TestVerdictIORoundTrip:
     def test_witness_ms_round_trips_with_value(self):
         restored = _round_trip([_result(witness_ms=290.0)])[0]
         assert restored["witness_ms"] == 290.0
+
+    def test_attribution_round_trips(self):
+        restored = _round_trip([_result(attribution=_attribution())])[0]
+        assert restored["attribution"] == {
+            "effect_plc": "plc_b",
+            "effect_tick": 11,
+            "cause_sender": "plc_a",
+            "cause_seq": 11,
+            "cause_sent_tick": 10,
+            "cause_received_tick": 11,
+        }
+
+    def test_attribution_absent_serializes_as_null(self):
+        document = json.loads(_dump_to_text([_result()]))
+        assert document["results"][0]["attribution"] is None
+
+    def test_conveyor_causes_carries_attribution(self):
+        results = _conveyor_results()
+        causes = [r for r in results if r.assertion.startswith("CAUSES")]
+        assert causes, "conveyor spec must declare a CAUSES assertion"
+        restored = _round_trip(results)
+        for original, entry in zip(results, restored):
+            if not original.assertion.startswith("CAUSES"):
+                continue
+            assert entry["attribution"] is not None, (
+                "a passing CAUSES must carry structured attribution; the witness "
+                "sentence alone couples a second verifier to this module's prose"
+            )
+            assert entry["attribution"]["cause_sender"] == "plc_a"
 
     def test_unparseable_assertion_result_round_trips(self):
         result = _result(
@@ -118,7 +173,7 @@ class TestVerdictFormat:
         )
         assert document["counts"] == {"total": 3, "passed": 2, "failed": 1}
 
-    def test_every_result_has_five_keys(self):
+    def test_every_result_has_six_keys(self):
         document = json.loads(_dump_to_text(_conveyor_results()))
         for entry in document["results"]:
             assert set(entry) == {
@@ -127,6 +182,7 @@ class TestVerdictFormat:
                 "reason",
                 "observed_gap_ms",
                 "witness_ms",
+                "attribution",
             }
 
     def test_key_order_does_not_affect_bytes(self):
@@ -158,6 +214,20 @@ def _entry(**overrides) -> dict:
         "reason": "signal 'part_at_b' true at 60.0ms",
         "observed_gap_ms": None,
         "witness_ms": None,
+        "attribution": None,
+    }
+    fields.update(overrides)
+    return fields
+
+
+def _attribution_dict(**overrides) -> dict:
+    fields = {
+        "effect_plc": "plc_b",
+        "effect_tick": 11,
+        "cause_sender": "plc_a",
+        "cause_seq": 11,
+        "cause_sent_tick": 10,
+        "cause_received_tick": 11,
     }
     fields.update(overrides)
     return fields
@@ -216,6 +286,37 @@ class TestVerdictLoadGuards:
             _load_from_text('{"passed": true, "results": [' + entry + "]}")
         assert "observed_gap_ms" in str(exc.value)
 
+    @pytest.mark.parametrize("value", [123, None, ["x"]])
+    def test_non_string_attribution_member_rejected_at_load(self, value):
+        with pytest.raises(ValueError) as exc:
+            _load_entry(_entry(attribution=_attribution_dict(cause_sender=value)))
+        assert "attribution.cause_sender" in str(exc.value)
+
+    @pytest.mark.parametrize("value", [True, 1.5, "11", None])
+    def test_non_int_attribution_tick_rejected_not_coerced(self, value):
+        """`int(...)` on a load path turns True into 1 and 1.5 into 1, so a
+        corrupt attribution would name a scan that never happened."""
+        with pytest.raises(ValueError) as exc:
+            _load_entry(_entry(attribution=_attribution_dict(cause_seq=value)))
+        assert "attribution.cause_seq" in str(exc.value)
+
+    @pytest.mark.parametrize("value", ["plc_a", 7, ["x"]])
+    def test_non_object_attribution_rejected_at_load(self, value):
+        with pytest.raises(ValueError) as exc:
+            _load_entry(_entry(attribution=value))
+        assert "attribution" in str(exc.value)
+
+    def test_missing_attribution_member_names_the_member(self):
+        broken = _attribution_dict()
+        del broken["cause_sent_tick"]
+        with pytest.raises(KeyError) as exc:
+            _load_entry(_entry(attribution=broken))
+        assert "cause_sent_tick" in str(exc.value)
+
+    def test_valid_attribution_still_loads(self):
+        loaded = _load_entry(_entry(attribution=_attribution_dict()))
+        assert loaded == [_entry(attribution=_attribution_dict())]
+
     def test_guard_failure_names_the_result_index(self):
         text = json.dumps(
             {"results": [_entry(), _entry(passed="yes")], "passed": True}
@@ -238,6 +339,15 @@ class TestVerdictDumpGuards:
         with pytest.raises(TypeError) as exc:
             _dump_to_text([_result(**{field: value})])
         assert field in str(exc.value)
+
+    @pytest.mark.parametrize(
+        "member,value",
+        [("effect_plc", 7), ("cause_seq", True), ("cause_sent_tick", 1.5)],
+    )
+    def test_bad_attribution_member_rejected_at_dump(self, member, value):
+        with pytest.raises(TypeError) as exc:
+            _dump_to_text([_result(attribution=_attribution(**{member: value}))])
+        assert f"attribution.{member}" in str(exc.value)
 
 
 class TestVerdictLoadIsUntyped:

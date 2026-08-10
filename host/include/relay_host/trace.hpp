@@ -27,9 +27,12 @@ struct CellSlot {
     Cell value;
 };
 
+// `count` is this sender's cumulative per-key send count, which a receipt
+// carries as its `seq`. CAUSES compares the two with `>=`, and spelling both
+// fields `seq` makes that read as a same-quantity comparison it is not.
 struct SeqSlot {
     std::uint32_t signal_id;
-    std::int64_t seq;
+    std::int64_t count;
     Cell value;
 };
 
@@ -71,8 +74,6 @@ struct ScanTraceEntry {
 struct DumpError {
     std::string message;
 };
-
-[[nodiscard]] std::string format_json_double(double value);
 
 class TraceRing {
  public:

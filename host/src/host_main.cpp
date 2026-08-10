@@ -138,8 +138,13 @@ int main(int argc, char** argv) {
         std::cerr << "host_main: " << dumped.error().message << "\n";
         return 1;
     }
-    if ((*harness)->trace().dropped() > 0) {
-        std::cerr << "host_main: warning: trace ring dropped "
+    // A dropped prefix moves every first-occurrence anchor later, so the
+    // verifier reports late witnesses and spurious "never received" against a
+    // trace that reads as complete. A warning was adequate when the output was
+    // for a human; it is not when the output feeds a verdict.
+    const bool trace_truncated = (*harness)->trace().dropped() > 0;
+    if (trace_truncated) {
+        std::cerr << "host_main: error: trace ring dropped "
                   << (*harness)->trace().dropped()
                   << " oldest entries; rerun with a larger --trace-capacity\n";
     }
@@ -167,5 +172,5 @@ int main(int argc, char** argv) {
         std::cerr << "; partial trace written to '" << args->out_path << "'\n";
         return 1;
     }
-    return 0;
+    return trace_truncated ? 1 : 0;
 }

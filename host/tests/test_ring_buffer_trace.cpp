@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include "harness_helpers.hpp"
+#include "relay_host/json_text.hpp"
 #include "relay_host/scan_executor.hpp"
 #include "relay_host/st_parser.hpp"
 #include "relay_host/trace.hpp"

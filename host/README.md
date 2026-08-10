@@ -39,9 +39,68 @@ host/build/relay_host_main \
 ```
 
 Flags: `--max-scans`, `--scan-period-ms` (default to the resolved-spec values),
-`--trace-capacity` (default 100000; the ring warns on stderr when entries drop),
-`--plant-endpoint <host:port>` (force the `remote_socket` plant against a
-running plant server, overriding the spec's plant block).
+`--trace-capacity` (default 100000), `--plant-endpoint <host:port>` (force the
+`remote_socket` plant against a running plant server, overriding the spec's
+plant block).
+
+`relay_host_main` **exits 1 when the trace ring drops entries.** A dropped
+prefix moves every first-occurrence anchor later, so `EVENTUALLY` and
+`PRECEDES` report late witnesses and `CAUSES` reports spurious "never
+received" — against a file that reads as complete. A warning was adequate when
+the output was a trace a human would read; it is not when the output feeds a
+verdict. The partial trace is still written, so the failure stays diagnosable.
+
+## Verify
+
+`relay_host_verify` is a second, independently written implementation of
+[relay/verify/](../relay/verify/). It reads the JSONL wire format rather than
+in-memory state, so it can verify **the Python simulator's own trace**:
+
+```
+host/build/relay_host_verify \
+    --spec /tmp/host_inputs/resolved_spec.json \
+    --trace tests/golden/conveyor_trace.jsonl \
+    --out /tmp/host_inputs/verdict.json
+```
+
+Exit 0 when every assertion passes, 1 when any fails, 2 on a usage or load
+error. A failing assertion is a normal outcome, so a caller can tell "the run
+did not hold" from "I could not read it".
+
+Pointed at the sim's trace, the trace is fixed and the verifier is the only
+variable — which is what makes the second implementation worth writing.
+`tests/test_host_satisfies_expectations.py` runs the *Python* verifier over the
+host's JSONL, so on its own it claims one verifier applied to two traces; a bug
+in `relay/verify/assertions.py` would be invisible to it.
+`tests/test_cross_verifier_agreement.py` owns the join and compares `passed`,
+`witness_ms`, `observed_gap_ms`, and `attribution` per assertion. It does not
+compare `reason` — the structured fields carry the contract, and prose equality
+would couple the C++ side to Python's phrasing.
+
+Python remains the oracle. The C++ verdict corroborates; a disagreement is a
+bug to investigate, not a signal to regenerate an artifact.
+
+### Target split
+
+Purity is a property of the build graph, not a review convention — see
+[docs/invariants/host_verification_path_purity.md](../docs/invariants/host_verification_path_purity.md).
+
+| Target | Links | Contents |
+|---|---|---|
+| `relay_core` | nothing | `io_image.cpp`, `json_text.cpp` |
+| `relay_verify` | `relay_core` | `assertion_parser.cpp`, `verifier.cpp` |
+| `relay_verify_io` | `relay_core`, nlohmann | `trace_reader.cpp`, `verdict_writer.cpp` |
+| `relay_host` | `relay_core`, nlohmann, asio | the runtime |
+| `relay_host_verify` | `relay_verify`, `relay_verify_io` | `verify_main.cpp` |
+
+`relay_verify` links no asio, no nlohmann, and no `relay_host`, so an
+`#include` reaching for one fails to compile. Both wire-format directions sit
+**outside** that boundary, exactly as `relay/trace_io.py` and
+`relay/verdict_io.py` sit outside the Python invariant's.
+`format_json_double` and `escape_json_string` moved into `relay_core` rather
+than being reimplemented: the trace and the verdict describe one run, and two
+formatters that disagreed would spell one value two ways with no round-trip
+test able to see it.
 
 The JSONL format is normatively defined by [relay/trace_io.py](../relay/trace_io.py):
 sorted keys, integral doubles keep their trailing `.0`, non-finite floats are
@@ -82,11 +141,18 @@ host/build/relay_host_main --spec ... --st-blocks ... --out ... --plant-endpoint
 python -m tools.regenerate_expectations        # sim → specs/expectations/*.expected.json
 pytest tests/test_expectations.py              # committed artifact vs fresh run
 pytest tests/test_host_satisfies_expectations.py   # verdict equality vs the C++ trace
+pytest tests/test_cross_verifier_agreement.py      # two verifiers, one trace
 ```
 
 The artifact is generated, never hand-authored. The contract is verdict
 **equality** per assertion — a host that passes an assertion Python failed is as
 wrong as the reverse. `witness` and `observed_gap_ms` are informational only.
+
+Two comparisons with two different rules. That one holds *two traces* against
+one verifier, and the traces legitimately differ, so the numbers are
+informational. The cross-verifier test holds *one trace* against two verifiers,
+where those same numbers must be identical. Neither contract changes the
+other's.
 
 ## Time discipline
 
