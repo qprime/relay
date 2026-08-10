@@ -6,3 +6,4 @@ dist/
 .pytest_cache/
 .claude/settings.json
 host/build/
+report/

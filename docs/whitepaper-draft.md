@@ -195,8 +195,8 @@ None of these layers ask the user for confirmation. The user confirmed once, at 
 | 1 | Intent | Requirements document, mental model | What control behavior I want |
 | 2 | Task spec review | YAML document | The structured interpretation of intent: PLC topology, plant configuration, comm strategy, structured trigger semantics that define mechanism, and the assertions that define success |
 | 3 | Python simulation trace review | Scan-by-scan trace + assertion verdicts | Behavior in the deterministic oracle environment |
-| 4 | C++ host trace review (planned) | Same trace shape, wall-clock paced | Behavior survives wall-clock pacing |
-| 5 | Socket-plant integration trace review (aspirational) | Same trace shape, inter-process | Behavior survives the process boundary |
+| 4 | C++ host trace review | Same trace shape, wall-clock paced | Behavior survives wall-clock pacing |
+| 5 | Socket-plant integration trace review | Same trace shape, inter-process | Behavior survives the process boundary |
 | 6 | Real hardware (aspirational) | Live system observation | The control strategy works against physical I/O |
 
 Checkpoint 2 is load-bearing. The user is confirming not only what behavior is desired (the assertions) but also the structured triggers that define *how* the system should respond — what events cause what signals to fire. The structured-trigger semantics are part of what the user confirms; nothing south of checkpoint 2 should require re-interpretation.
