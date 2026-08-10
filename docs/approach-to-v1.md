@@ -27,10 +27,13 @@ and the C++ host re-earns the verdict in-process and over a socket. `CAUSES` is
 timing-free by construction and survived the move off lockstep in
 [#14](https://github.com/qprime/relay/issues/14).
 
-The C++ host is currently *only a runtime* — parser, evaluator, scan executor,
-comm bus, plant adapter. The front half of the pipeline and the judge are
-Python-only. That asymmetry is what v1 corrects, and it is corrected by moving
-pipeline stages into C++ rather than by adding features to the runtime.
+The host is no longer only a runtime. Step 5 gave it a verifier, so the judge
+now has two independent implementations and
+`tests/test_cross_verifier_agreement.py` runs both over the sim's own trace.
+What remains Python-only is the front half of the pipeline — spec, generator,
+ST emission — and the fieldbus the host talks over. That asymmetry is what
+Step 6 closes, by moving pipeline stages into C++ rather than by adding
+features to the runtime.
 
 ---
 
@@ -42,7 +45,8 @@ pipeline stages into C++ rather than by adding features to the runtime.
 | [#22](https://github.com/qprime/relay/issues/22) — `CommBus::send` parks forever on a send to an exited PLC | **Closed** in `0e787b5`. Each PLC closes its own receive channel on exit; sends to a closed receiver are dropped and counted. |
 | [#16](https://github.com/qprime/relay/issues/16) — Comm bus delivery latency, per-PLC periods, dead route pass | **Closed** in `c938056` + `eaa1a93`. Items 1 and 3 landed in v1 — see the note below on why the original "out of scope" ruling was wrong. Item 2 split to #23. |
 | [#8](https://github.com/qprime/relay/issues/8) — Replace unmeasured timing budgets with measured ones | **Closes in v1.** Three unmeasured budgets in `specs/`. Both blockers are now clear, and the `PRECEDES` gap is a real 10.0ms. |
-| [#23](https://github.com/qprime/relay/issues/23) — Per-PLC scan periods | **Out of scope.** No v1 consumer; payoff is the real-hardware story. Split out of #16. |
+| [#26](https://github.com/qprime/relay/issues/26) — `address` strategy and routing on the `CommStrategy` protocol | **Closes in v1.** Step 6a. Makes `pluggable_subsystems` true for comm rather than cited, and is the prerequisite that keeps 6b to one new variable. |
+| [#23](https://github.com/qprime/relay/issues/23) — Per-PLC scan periods | **Out of scope**, with one caveat. No v1 consumer; payoff is the real-hardware story. Split out of #16. 6b's poll-interval decision is the one thing that could pull it in — see Step 6b. |
 | [#17](https://github.com/qprime/relay/issues/17) — Real-hardware deployment target | **Out of scope.** Sequences behind Modbus. |
 
 **Correction to the original #16 ruling.** This plan first marked #16 out of scope
@@ -290,29 +294,60 @@ the edge along which a model client would arrive; the C++ constraint is checked
 by what the linker accepts. One document stating both in two languages would
 state neither precisely.
 
-### Step 6 — Modbus TCP comm strategy
+### Step 6 — Modbus TCP, split in two
 
-**Spec:** `/spec` before implementation. The largest spec in this plan; write it
-after Step 5 lands so the host's shape is settled.
+The largest item in v1, and the one place the plan changed shape after Step 5
+shipped. Writing the spec revealed that "Modbus TCP comm strategy" was two
+changes wearing one name: making the framework capable of a second comm idiom
+at all, and putting a real wire protocol underneath one. Landing them together
+would put the register binding and the wire format on the same rung of the
+validation chain, which is the failure [README.md](../README.md) says the chain
+exists to prevent.
+
+The split is what keeps 6b to one new variable.
+
+#### Step 6a — The `address` strategy and routing on the protocol
+
+**Spec:** [#26](https://github.com/qprime/relay/issues/26).
 **Closes:** the `address` strategy stub.
 
-The `address` strategy is registered today and raises `NotImplementedError`.
-Modbus TCP is the natural first real transport and the one that makes relay's
-multi-protocol identity real rather than aspirational.
+`CommStrategy` grows from validate-only to also projecting the comm block into
+`(name, produced_by, consumed_by)` signals, and the five framework sites that
+read `comm_block["tags"]` directly — codegen, Behavior validation, the comm
+signal-name set, the `CAUSES` pre-check, and the language boundary — reroute
+through that projection. `address` is then implementable over a register map.
 
-Register maps, coil and holding-register addressing, framing, a protocol with a
-published specification to conform to. The spec should decide which subset of
-Modbus is in scope — conformance to a defined subset, not coverage for its own
-sake.
+This is what makes `pluggable_subsystems` true for comm rather than cited. The
+invariant appears in four documents and has zero second implementations today,
+and [host/src/comm_strategy.cpp:57](../host/src/comm_strategy.cpp#L57) is a
+literal `if (spec.comm.strategy == "tag")`. The proof obligation is an
+address-idiom port of the conveyor handoff whose generated ST is byte-identical
+to the tag version's.
 
-**Scope reaches back into the schema** — register maps have to be declarable in
-the task spec, which means `relay/spec/`, the validator,
-[tools/emit_host_inputs.py](../tools/emit_host_inputs.py), and the host spec
-loader. It also probably wants a Python Modbus server for the loopback test,
+No sockets, no framing, no transport. `table` and `address` are declared and
+validated here and consumed by nothing until 6b.
+
+#### Step 6b — Modbus TCP transport
+
+**Spec:** `/spec` before implementation; 6a first, so the register map is
+already declared and validated.
+
+A protocol with a published specification to conform to. The spec should decide
+which subset is in scope — conformance to a defined subset, not coverage for its
+own sake — and probably wants a Python Modbus server for the loopback test,
 mirroring what [tools/plant_server.py](../tools/plant_server.py) does for the
 plant socket.
 
-This is the largest item in v1.
+**The open modeling question is the poll interval.** #26 deliberately refused to
+settle whether it is a third independent rate or is pinned to the consumer's
+scan period, and that is the decision 6b exists to make. It is also the one
+place 6b touches [#23](https://github.com/qprime/relay/issues/23): if the
+interval is pinned to the consumer's period, per-PLC periods change what
+"pinned" means, and #23 stops being cleanly post-v1.
+
+Transport selection is a host concern, chosen by a flag the way
+`--plant-endpoint` selects `remote_socket` — not a resurrection of the C++
+strategy switch 6a deletes.
 
 ### Step 7 — Close-out
 
@@ -325,7 +360,8 @@ This is the largest item in v1.
   restated in Step 3.5 — it now records the sim's 10.0ms against the host's
   0.0ms and why that asymmetry is deliberate.
 - Re-run `tools/regenerate_expectations` and confirm the ten-consecutive-run gate.
-- #21, #22, and #16 are closed. #23 (per-PLC periods) stays open as post-v1.
+- #21, #22, #16, #25, and #26 are closed. #23 (per-PLC periods) and #17
+  (real-hardware target) stay open as post-v1.
 - `docs/task_spec_syntax.md` already states which side of a comm tag is visible
   to assertion resolution (#21) and that a cross-PLC budget must exceed one
   consumer scan period (#16).
@@ -334,15 +370,15 @@ This is the largest item in v1.
 
 ## Spec schedule
 
-One item still needs a `/spec` issue before implementation. Step 2's spec landed
-as [#24](https://github.com/qprime/relay/issues/24).
+One item still needs a `/spec` issue before implementation: **Step 6b**.
 
-| When to spec | Item | Why then |
+| Step | Spec | State |
 |---|---|---|
-| After Step 5 ships | Step 6 Modbus TCP | Largest scope, reaches into the schema, wants the host's shape settled. |
-
-Step 5's spec landed as [#25](https://github.com/qprime/relay/issues/25) and has
-shipped. Step 6 is now the only item awaiting a spec.
+| 2 | [#24](https://github.com/qprime/relay/issues/24) | shipped |
+| 5 | [#25](https://github.com/qprime/relay/issues/25) | shipped |
+| 6a | [#26](https://github.com/qprime/relay/issues/26) | specced, not implemented |
+| 6b | — | **needs a spec** |
+| 7 | none needed | close-out |
 
 Steps 1, 3, 3.5, and 4 needed no separate spec: 1 and 3.5 had complete analyses in
 #22 and #16, Step 3's one open decision was settled in conversation and recorded
