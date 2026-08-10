@@ -190,7 +190,9 @@ class TestBehaviorSchema:
 
     def test_rejects_emit_tag_not_produced_by_this_plc(self):
         spec = _spec_with_trigger({"emit": {"tag": "t", "mode": "latched"}}, plc_id="plc_b")
-        assert any("not a Comm tag produced by this PLC" in i for i in _issues_for(spec))
+        assert any(
+            "not a comm signal produced by this PLC" in i for i in _issues_for(spec)
+        )
 
     def test_rejects_both_tag_and_output_in_emit(self):
         spec = _spec_with_trigger({"emit.output": "belt_a"})
@@ -228,7 +230,9 @@ class TestBehaviorSchema:
                 "emit": {"output": "t", "mode": "latched"},
             }
         )
-        assert any("collides with a declared Comm tag" in i for i in _issues_for(spec))
+        assert any(
+            "collides with a declared comm signal" in i for i in _issues_for(spec)
+        )
 
     def test_rejects_plant_route_collision_from_a_plc_that_never_reads_it(self):
         spec = _minimal_spec()

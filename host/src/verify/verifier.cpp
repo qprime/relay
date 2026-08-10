@@ -40,7 +40,8 @@ bool signal_true(const TraceRecord& record, std::string_view name) {
 }
 
 // Derived from the trace, never from the spec: the trace is the verifier's sole
-// input, and a rule that consults Comm.tags diverges wherever the two disagree.
+// input, and a rule that consults the spec's comm declarations diverges
+// wherever the two disagree.
 bool is_comm_tag(std::string_view name, const Trace& trace) {
     for (const TraceRecord& record : trace.records) {
         if (record.sends.contains(name)) {

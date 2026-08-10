@@ -49,9 +49,6 @@ def _project_entries(entries: object) -> tuple[CommSignal, ...]:
 class TagStrategy:
     name = "tag"
 
-    def __init__(self, comm_block: dict | None = None) -> None:
-        self._comm_block = comm_block or {}
-
     def validate_config(self, comm_block: dict, spec: "TaskSpec") -> list[str]:
         issues: list[str] = []
         tags = comm_block.get("tags", [])
@@ -119,9 +116,6 @@ def _emitted_tags(spec: "TaskSpec") -> set[str]:
 
 class AddressStrategy:
     name = "address"
-
-    def __init__(self, comm_block: dict | None = None) -> None:
-        self._comm_block = comm_block or {}
 
     def validate_config(self, comm_block: dict, spec: "TaskSpec") -> list[str]:
         registers = comm_block.get("registers")
@@ -213,14 +207,10 @@ _REGISTRY: dict[str, type] = {
 
 
 def get_comm_strategy(name: str) -> CommStrategy:
-    return build_comm_strategy(name, {})
-
-
-def build_comm_strategy(name: str, comm_block: dict) -> CommStrategy:
     if name not in _REGISTRY:
         known = ", ".join(sorted(_REGISTRY)) or "(none)"
         raise ValueError(f"unknown comm strategy {name!r}; known: {known}")
-    return _REGISTRY[name](comm_block)
+    return _REGISTRY[name]()
 
 
 def comm_signals(spec: "TaskSpec") -> tuple[CommSignal, ...]:
@@ -230,5 +220,5 @@ def comm_signals(spec: "TaskSpec") -> tuple[CommSignal, ...]:
     name = block.get("strategy")
     if not isinstance(name, str) or name not in _REGISTRY:
         return ()
-    strategy: CommStrategy = _REGISTRY[name](block)
+    strategy: CommStrategy = _REGISTRY[name]()
     return strategy.signals(block)

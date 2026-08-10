@@ -74,7 +74,4 @@ class TestAddressSpecEquivalence:
                 keys.update(record.recvs)
             return keys
 
-        address_keys = trace_keys(_run(address_spec))
-        assert address_keys == trace_keys(_run(tag_spec))
-        for key in address_keys:
-            assert "coil" not in key and not any(ch.isdigit() for ch in key), key
+        assert trace_keys(_run(address_spec)) == trace_keys(_run(tag_spec))

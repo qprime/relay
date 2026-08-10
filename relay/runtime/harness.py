@@ -10,7 +10,7 @@ from relay.runtime.comm import CommBus
 from relay.runtime.fb import FunctionBlock
 from relay.runtime.plc import PLCCoroutine
 from relay.spec.schema import TaskSpec
-from relay.strategies.comm import build_comm_strategy
+from relay.strategies.comm import get_comm_strategy
 from relay.strategies.plant import get_plant
 from relay.trace import TraceLog
 
@@ -58,7 +58,7 @@ async def simulate(
 
     plant_factory = get_plant(spec.plant_type)
     plant = plant_factory(spec.plant_block)
-    build_comm_strategy(spec.comm_strategy, spec.comm_block)
+    get_comm_strategy(spec.comm_strategy)
 
     bus = CommBus()
     trace = TraceLog()

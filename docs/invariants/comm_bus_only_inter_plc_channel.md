@@ -107,8 +107,10 @@ simulation" guarantee silently false for an entire class of signals.
   wiring PLCs itself, so all inter-PLC routing decisions flow through
   `bus.send` calls.
 - **Comm strategy registry** ([relay/strategies/comm.py](../../relay/strategies/comm.py))
-  — `build_comm_strategy(name, comm_block)` resolves the strategy named in
-  the spec's `Comm.strategy` field; the registry raises on unknown values.
+  — `get_comm_strategy(name)` resolves the strategy named in the spec's
+  `Comm.strategy` field; the registry raises on unknown values. Strategies are
+  stateless — both `validate_config` and `signals` take the comm block as a
+  parameter.
   The registry lives in `relay/strategies/` rather than `relay/runtime/` so
   that `relay/spec/` can import it for spec-time validation without violating
   [pipeline_direction_imports.md](pipeline_direction_imports.md). Both

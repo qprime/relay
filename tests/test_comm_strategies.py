@@ -9,7 +9,6 @@ from relay.strategies.comm import (
     AddressStrategy,
     CommSignal,
     TagStrategy,
-    build_comm_strategy,
     get_comm_strategy,
 )
 
@@ -51,7 +50,7 @@ class TestTagStrategy:
             "strategy": "tag",
             "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_z"]}],
         }
-        strat = TagStrategy(block)
+        strat = TagStrategy()
         issues = strat.validate_config(block, spec)
         assert any("plc_z" in i for i in issues), issues
 
@@ -61,7 +60,7 @@ class TestTagStrategy:
             "strategy": "tag",
             "tags": [{"name": "x", "produced_by": "plc_z", "consumed_by": ["plc_b"]}],
         }
-        strat = TagStrategy(block)
+        strat = TagStrategy()
         issues = strat.validate_config(block, spec)
         assert any("plc_z" in i for i in issues), issues
 
@@ -74,7 +73,7 @@ class TestTagStrategy:
                 {"name": "x", "produced_by": "plc_b", "consumed_by": ["plc_a"]},
             ],
         }
-        strat = TagStrategy(block)
+        strat = TagStrategy()
         issues = strat.validate_config(block, spec)
         assert any("duplicated" in i for i in issues), issues
 
@@ -86,7 +85,7 @@ class TestTagStrategy:
                 {"name": "y", "produced_by": "plc_b", "consumed_by": ["plc_a"]},
             ],
         }
-        assert TagStrategy(block).signals(block) == (
+        assert TagStrategy().signals(block) == (
             CommSignal(name="x", produced_by="plc_a", consumed_by=("plc_b",)),
             CommSignal(name="y", produced_by="plc_b", consumed_by=("plc_a",)),
         )
@@ -101,7 +100,7 @@ class TestTagStrategy:
                 {"name": "ok", "produced_by": "plc_a", "consumed_by": ["plc_b"]},
             ],
         }
-        assert TagStrategy(block).signals(block) == (
+        assert TagStrategy().signals(block) == (
             CommSignal(name="ok", produced_by="plc_a", consumed_by=("plc_b",)),
         )
 
@@ -109,7 +108,7 @@ class TestTagStrategy:
         block = {
             "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]
         }
-        strat = TagStrategy({})
+        strat = TagStrategy()
         assert strat.signals(block) == (
             CommSignal(name="x", produced_by="plc_a", consumed_by=("plc_b",)),
         )
@@ -118,11 +117,11 @@ class TestTagStrategy:
 class TestAddressStrategy:
     def test_valid_register_map_has_no_issues(self):
         block = _address_block()
-        assert AddressStrategy(block).validate_config(block, _spec()) == []
+        assert AddressStrategy().validate_config(block, _spec()) == []
 
     def test_signals_projects_registers(self):
         block = _address_block()
-        assert AddressStrategy(block).signals(block) == (
+        assert AddressStrategy().signals(block) == (
             CommSignal(
                 name="handoff_signal", produced_by="plc_a", consumed_by=("plc_b",)
             ),
@@ -130,59 +129,59 @@ class TestAddressStrategy:
 
     def test_rejects_missing_registers_block(self):
         block = {"strategy": "address"}
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert issues == ["Comm.registers must be a non-empty list"]
 
     def test_rejects_unknown_producer(self):
         block = _address_block(_register(produced_by="plc_z"))
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert any("plc_z" in i and "produced_by" in i for i in issues), issues
 
     def test_rejects_unknown_consumer(self):
         block = _address_block(_register(consumed_by=["plc_z"]))
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert any("plc_z" in i and "consumed_by" in i for i in issues), issues
 
     def test_rejects_empty_consumed_by(self):
         block = _address_block(_register(consumed_by=[]))
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert any("consumed_by must be a non-empty list" in i for i in issues), issues
 
     def test_rejects_duplicate_signal_names(self):
         block = _address_block(
             _register(), _register(table="discrete_input", address=1)
         )
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert any("duplicated" in i for i in issues), issues
 
     def test_rejects_unknown_table_kind(self):
         block = _address_block(_register(table="flux_capacitor"))
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert any("flux_capacitor" in i and "table" in i for i in issues), issues
 
     def test_rejects_address_out_of_range(self):
         for bad in (-1, 65536):
             block = _address_block(_register(address=bad))
-            issues = AddressStrategy(block).validate_config(block, _spec())
+            issues = AddressStrategy().validate_config(block, _spec())
             assert any("address" in i and str(bad) in i for i in issues), (bad, issues)
 
     def test_rejects_bool_address(self):
         block = _address_block(_register(address=True))
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert any("address must be an integer" in i for i in issues), issues
 
     def test_rejects_duplicate_table_address_pair(self):
         block = _address_block(
             _register(), _register(name="other_signal")
         )
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert any("another entry already binds" in i for i in issues), issues
 
     def test_same_address_in_different_tables_is_legal(self):
         block = _address_block(
             _register(), _register(name="other_signal", table="discrete_input")
         )
-        issues = AddressStrategy(block).validate_config(block, _spec())
+        issues = AddressStrategy().validate_config(block, _spec())
         assert issues == []
 
     def test_rejects_word_table_for_emitted_signal(self):
@@ -198,14 +197,14 @@ class TestAddressStrategy:
             }
         }
         block = _address_block(_register(table="holding_register"))
-        issues = AddressStrategy(block).validate_config(
+        issues = AddressStrategy().validate_config(
             block, _spec(behavior=behavior)
         )
         assert any("word table" in i for i in issues), issues
 
     def test_address_never_appears_in_projection(self):
         block = _address_block()
-        (signal,) = AddressStrategy(block).signals(block)
+        (signal,) = AddressStrategy().signals(block)
         assert not hasattr(signal, "address")
         assert not hasattr(signal, "table")
 
@@ -221,16 +220,16 @@ class TestStrategyRegistry:
         with pytest.raises(ValueError, match="unknown comm strategy"):
             get_comm_strategy("nonsense")
 
-    def test_build_comm_strategy_passes_block_to_tag(self):
+    def test_resolved_strategy_validates_the_passed_block(self):
         block = {
             "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_z"]}]
         }
-        strat = build_comm_strategy("tag", block)
+        strat = get_comm_strategy("tag")
         issues = strat.validate_config(block, _spec())
         assert any("plc_z" in i for i in issues), issues
 
     def test_validate_config_does_not_mutate_the_block(self):
         block = _address_block()
         snapshot = copy.deepcopy(block)
-        AddressStrategy(block).validate_config(block, _spec())
+        AddressStrategy().validate_config(block, _spec())
         assert block == snapshot

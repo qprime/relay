@@ -65,8 +65,9 @@ verifier reusing them would have inherited the whole runtime's dependency set.
    document alone could see it.
 3. **Comm-tag-ness is derived from the trace, never from the spec.** Python
    uses `any(name in r.sends for r in trace.records)`; the host does the same.
-   A C++ verifier reading `Comm.tags` implements a different rule, and the two
-   diverge wherever the spec and the trace disagree.
+   A C++ verifier reading the spec's comm declarations — `Comm.tags`,
+   `Comm.registers`, or the resolved `comm.signals` — implements a different
+   rule, and the two diverge wherever the spec and the trace disagree.
 4. **Selection rules name properties of the trace, not of the container.**
    First-in-list-order is not something a second implementation can be
    independently correct about. Both sides select minimum-by-`(elapsed_ms,
@@ -86,7 +87,7 @@ verifier reusing them would have inherited the whole runtime's dependency set.
 - A `relay_verify` source reading a file, opening a socket, or taking a
   `std::filesystem::path`.
 - Passing the resolved spec into `evaluate_assertion` so `CAUSES` can check
-  `Comm.tags`. The trace is the sole input.
+  the declared comm signals. The trace is the sole input.
 - Making the C++ verdict authoritative. Python is the oracle; a disagreement
   is a bug to investigate, not a reason to regenerate an artifact.
 - Comparing `reason` strings across the two verifiers in a test. That couples

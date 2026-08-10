@@ -6,6 +6,7 @@
 #include <asio/experimental/promise.hpp>
 #include <asio/experimental/use_promise.hpp>
 
+#include "relay_host/comm_strategy.hpp"
 #include "relay_host/st_parser.hpp"
 
 namespace relay_host {

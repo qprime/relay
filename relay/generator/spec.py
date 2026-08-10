@@ -9,7 +9,7 @@ from relay.generator.errors import (
 )
 from relay.generator.behavior import EDGES, MODES
 from relay.spec.schema import TaskSpec
-from relay.strategies.comm import build_comm_strategy, comm_signals
+from relay.strategies.comm import comm_signals, get_comm_strategy
 from relay.strategies.st_syntax import SCRATCH_PREFIX, SEND_PREFIX
 from relay.strategies.plant import (
     UnknownPlantType as _PlantNotRegistered,
@@ -96,7 +96,7 @@ def validate_spec(spec: TaskSpec) -> None:
 
     if comm_strategy_name:
         try:
-            strategy = build_comm_strategy(comm_strategy_name, comm_block or {})
+            strategy = get_comm_strategy(comm_strategy_name)
         except ValueError as e:
             raise UnknownCommStrategy(str(e)) from None
         else:
@@ -240,7 +240,7 @@ def _validate_trigger(
             known = ", ".join(sorted(readable)) or "(none)"
             issues.append(
                 f"{where}.when.signal {signal!r} does not resolve to a Plant route "
-                f"as_key for this PLC or a Comm tag it consumes; readable signals: {known}"
+                f"as_key for this PLC or a comm signal it consumes; readable signals: {known}"
             )
         edge = when.get("edge")
         if edge not in EDGES:
@@ -264,8 +264,8 @@ def _validate_trigger(
         if tag not in producible:
             known = ", ".join(sorted(producible)) or "(none)"
             issues.append(
-                f"{where}.emit.tag {tag!r} is not a Comm tag produced by this PLC; "
-                f"produced tags: {known}"
+                f"{where}.emit.tag {tag!r} is not a comm signal produced by this PLC; "
+                f"produced signals: {known}"
             )
         _note_target(tag, where, seen_targets, emit_targets, issues)
     else:
@@ -288,7 +288,7 @@ def _validate_trigger(
             )
         elif output in tag_names:
             issues.append(
-                f"{where}.emit.output {output!r} collides with a declared Comm tag; "
+                f"{where}.emit.output {output!r} collides with a declared comm signal; "
                 f"use 'tag: {output}' if this PLC produces it, or rename the output"
             )
         else:
@@ -335,11 +335,11 @@ def _validate_assertion_coverage(
         if signal not in emit_targets and signal not in plant_keys and signal not in tag_names:
             issues.append(
                 f"assertion signal {signal!r} is not covered by any trigger emit target, "
-                "plant route, or tag declaration"
+                "plant route, or comm signal declaration"
             )
         elif signal in tag_names and signal not in emit_targets:
             issues.append(
-                f"assertion signal {signal!r} is a declared tag that no trigger emits; "
-                "a tag resolves from the producer's sends, so an unemitted tag resolves "
-                "to nothing and the assertion would silently report never-true"
+                f"assertion signal {signal!r} is a declared comm signal that no trigger "
+                "emits; a comm signal resolves from the producer's sends, so an unemitted "
+                "signal resolves to nothing and the assertion would silently report never-true"
             )

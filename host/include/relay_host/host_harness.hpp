@@ -12,7 +12,6 @@
 #include "relay_host/async.hpp"
 #include "relay_host/clock.hpp"
 #include "relay_host/comm_bus.hpp"
-#include "relay_host/comm_strategy.hpp"
 #include "relay_host/plant_registry.hpp"
 #include "relay_host/scan_executor.hpp"
 #include "relay_host/spec_loader.hpp"

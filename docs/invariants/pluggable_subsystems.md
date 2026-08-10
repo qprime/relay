@@ -95,8 +95,9 @@ badly instead of two protocols correctly.
 ## Examples in this codebase
 
 - **Comm strategies**: registry in [relay/strategies/comm.py](../../relay/strategies/comm.py)
-  (`build_comm_strategy` / `get_comm_strategy`), selected by `Comm.strategy` in
-  the task spec; raises on unknown. Both registered strategies are live:
+  (`get_comm_strategy`), selected by `Comm.strategy` in
+  the task spec; raises on unknown. Strategies are stateless — every method
+  takes the comm block as a parameter. Both registered strategies are live:
   `tag` (Logix-style named tags, used by the conveyor demo) and `address`
   (a Modbus-style register map binding each signal name to a
   `(table, address)` slot; the TCP transport underneath is planned). Each

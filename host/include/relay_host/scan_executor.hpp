@@ -9,7 +9,6 @@
 #include "relay_host/async.hpp"
 #include "relay_host/clock.hpp"
 #include "relay_host/comm_bus.hpp"
-#include "relay_host/comm_strategy.hpp"
 #include "relay_host/io_image.hpp"
 #include "relay_host/signal_table.hpp"
 #include "relay_host/st_eval.hpp"
