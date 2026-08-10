@@ -46,7 +46,8 @@ features to the runtime.
 | [#16](https://github.com/qprime/relay/issues/16) — Comm bus delivery latency, per-PLC periods, dead route pass | **Closed** in `c938056` + `eaa1a93`. Items 1 and 3 landed in v1 — see the note below on why the original "out of scope" ruling was wrong. Item 2 split to #23. |
 | [#8](https://github.com/qprime/relay/issues/8) — Replace unmeasured timing budgets with measured ones | **Closes in v1.** Three unmeasured budgets in `specs/`. Both blockers are now clear, and the `PRECEDES` gap is a real 10.0ms. |
 | [#26](https://github.com/qprime/relay/issues/26) — `address` strategy and routing on the `CommStrategy` protocol | **Closes in v1.** Step 6a. Makes `pluggable_subsystems` true for comm rather than cited, and is the prerequisite that keeps 6b to one new variable. |
-| [#23](https://github.com/qprime/relay/issues/23) — Per-PLC scan periods | **Out of scope**, with one caveat. No v1 consumer; payoff is the real-hardware story. Split out of #16. 6b's poll-interval decision is the one thing that could pull it in — see Step 6b. |
+| [#23](https://github.com/qprime/relay/issues/23) — Per-PLC scan periods | **Out of scope.** No v1 consumer; payoff is the real-hardware story. Split out of #16. The one thing that could have pulled it in — 6b's poll interval — was settled at the consumer's scan top in [#27](https://github.com/qprime/relay/issues/27), which keeps it out. |
+| [#27](https://github.com/qprime/relay/issues/27) — Modbus TCP transport | **Closes in v1.** Step 6b. Settles the poll interval at the consumer's scan top and puts a real wire protocol under the register map #26 declares. |
 | [#17](https://github.com/qprime/relay/issues/17) — Real-hardware deployment target | **Out of scope.** Sequences behind Modbus. |
 
 **Correction to the original #16 ruling.** This plan first marked #16 out of scope
@@ -329,8 +330,8 @@ validated here and consumed by nothing until 6b.
 
 #### Step 6b — Modbus TCP transport
 
-**Spec:** `/spec` before implementation; 6a first, so the register map is
-already declared and validated.
+**Spec:** [#27](https://github.com/qprime/relay/issues/27); 6a first, so the
+register map is already declared and validated.
 
 A protocol with a published specification to conform to. The spec should decide
 which subset is in scope — conformance to a defined subset, not coverage for its
@@ -338,12 +339,15 @@ own sake — and probably wants a Python Modbus server for the loopback test,
 mirroring what [tools/plant_server.py](../tools/plant_server.py) does for the
 plant socket.
 
-**The open modeling question is the poll interval.** #26 deliberately refused to
-settle whether it is a third independent rate or is pinned to the consumer's
-scan period, and that is the decision 6b exists to make. It is also the one
-place 6b touches [#23](https://github.com/qprime/relay/issues/23): if the
-interval is pinned to the consumer's period, per-PLC periods change what
-"pinned" means, and #23 stops being cleanly post-v1.
+**The poll interval is settled in #27: the poll is the consumer's scan top, not
+a third rate.** #26 deliberately deferred the question; #27 answers it by
+showing three invariants converge — `scan_phase_isolation` makes phase 2 the
+only entry point for inter-PLC data, `simclock_only_time_source` forbids a
+fourth pacing source, and #16's delivery phrasing is satisfied by construction
+when the poll *is* the scan top. That answer is what keeps
+[#23](https://github.com/qprime/relay/issues/23) post-v1: per-PLC periods
+change when each consumer polls and nothing else, so the delivery rule needs no
+amendment.
 
 Transport selection is a host concern, chosen by a flag the way
 `--plant-endpoint` selects `remote_socket` — not a resurrection of the C++
@@ -370,14 +374,14 @@ strategy switch 6a deletes.
 
 ## Spec schedule
 
-One item still needs a `/spec` issue before implementation: **Step 6b**.
+Every remaining step is specced; what's left is implementation in order.
 
 | Step | Spec | State |
 |---|---|---|
 | 2 | [#24](https://github.com/qprime/relay/issues/24) | shipped |
 | 5 | [#25](https://github.com/qprime/relay/issues/25) | shipped |
 | 6a | [#26](https://github.com/qprime/relay/issues/26) | specced, not implemented |
-| 6b | — | **needs a spec** |
+| 6b | [#27](https://github.com/qprime/relay/issues/27) | specced, not implemented |
 | 7 | none needed | close-out |
 
 Steps 1, 3, 3.5, and 4 needed no separate spec: 1 and 3.5 had complete analyses in
