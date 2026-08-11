@@ -9,6 +9,7 @@
 #include "relay_host/async.hpp"
 #include "relay_host/clock.hpp"
 #include "relay_host/comm_bus.hpp"
+#include "relay_host/comm_transport_registry.hpp"
 #include "relay_host/io_image.hpp"
 #include "relay_host/signal_table.hpp"
 #include "relay_host/st_eval.hpp"
@@ -16,11 +17,6 @@
 #include "relay_host/trace.hpp"
 
 namespace relay_host {
-
-struct OutgoingMessage {
-    std::uint32_t target_plc;
-    Message msg;
-};
 
 struct OutgoingBuffer {
     std::array<OutgoingMessage, kMaxCellsPerScan> items;
@@ -49,6 +45,7 @@ struct PlcScanState {
 enum class RunErrorKind {
     ScanFailed,
     PlantFailed,
+    CommFailed,
 };
 
 struct RunError {
@@ -69,6 +66,7 @@ struct PlcExecutionContext {
     std::int64_t max_scans;
     double scan_period_ms;
     CommBus* bus;
+    CommTransportVariant* transport;
     PlcScanState* state;
     TraceRing* trace;
     const SignalTable* table;

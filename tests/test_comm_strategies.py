@@ -8,12 +8,13 @@ from relay.spec.schema import TaskSpec
 from relay.strategies.comm import (
     AddressStrategy,
     CommSignal,
+    RegisterBinding,
     TagStrategy,
     get_comm_strategy,
 )
 
 
-def _spec(plc_ids=("plc_a", "plc_b"), behavior=None) -> TaskSpec:
+def _spec(plc_ids=("plc_a", "plc_b")) -> TaskSpec:
     raw = {
         "System": {
             "name": "test",
@@ -21,7 +22,7 @@ def _spec(plc_ids=("plc_a", "plc_b"), behavior=None) -> TaskSpec:
         },
         "Comm": {"strategy": "tag"},
         "Plant": {"type": "conveyor", "config": {}},
-        "Behavior": behavior or {},
+        "Behavior": {},
         "Assertions": [],
     }
     return TaskSpec(raw=raw)
@@ -148,9 +149,7 @@ class TestAddressStrategy:
         assert any("consumed_by must be a non-empty list" in i for i in issues), issues
 
     def test_rejects_duplicate_signal_names(self):
-        block = _address_block(
-            _register(), _register(table="discrete_input", address=1)
-        )
+        block = _address_block(_register(), _register(address=1))
         issues = AddressStrategy().validate_config(block, _spec())
         assert any("duplicated" in i for i in issues), issues
 
@@ -177,36 +176,82 @@ class TestAddressStrategy:
         issues = AddressStrategy().validate_config(block, _spec())
         assert any("another entry already binds" in i for i in issues), issues
 
-    def test_same_address_in_different_tables_is_legal(self):
-        block = _address_block(
-            _register(), _register(name="other_signal", table="discrete_input")
-        )
-        issues = AddressStrategy().validate_config(block, _spec())
-        assert issues == []
-
-    def test_rejects_word_table_for_emitted_signal(self):
-        behavior = {
-            "plc_a": {
-                "triggers": [
-                    {
-                        "id": "t",
-                        "when": {"signal": "s", "edge": "rising"},
-                        "emit": {"tag": "handoff_signal", "mode": "latched"},
-                    }
-                ]
-            }
-        }
-        block = _address_block(_register(table="holding_register"))
-        issues = AddressStrategy().validate_config(
-            block, _spec(behavior=behavior)
-        )
-        assert any("word table" in i for i in issues), issues
-
     def test_address_never_appears_in_projection(self):
         block = _address_block()
         (signal,) = AddressStrategy().signals(block)
         assert not hasattr(signal, "address")
         assert not hasattr(signal, "table")
+
+
+class TestAddressTableRules:
+    def _table_issues(self, table: str) -> list[str]:
+        block = _address_block(_register(table=table))
+        return [
+            issue
+            for issue in AddressStrategy().validate_config(block, _spec())
+            if "table" in issue
+        ]
+
+    def test_discrete_input_rejected_as_read_only(self):
+        issues = self._table_issues("discrete_input")
+        assert any("read-only" in i for i in issues), issues
+
+    def test_input_register_rejected_as_read_only(self):
+        issues = self._table_issues("input_register")
+        assert any("read-only" in i for i in issues), issues
+
+    def test_holding_register_rejected_because_no_trigger_emits_a_word(self):
+        issues = self._table_issues("holding_register")
+        assert any("word" in i for i in issues), issues
+        assert not any("read-only" in i for i in issues), issues
+
+    def test_the_two_rejections_give_different_messages(self):
+        read_only = self._table_issues("discrete_input")
+        word = self._table_issues("holding_register")
+        assert read_only and word
+        assert read_only != word, (
+            "a writable-but-wrong-width table and a read-only one fail for "
+            "different reasons and each deserves its own message"
+        )
+
+    def test_coil_is_accepted(self):
+        assert self._table_issues("coil") == []
+
+    def test_the_grammar_still_names_every_table_in_the_diagnostic(self):
+        issues = self._table_issues("flux_capacitor")
+        assert any("holding_register" in i for i in issues), issues
+
+
+class TestRegisterBindings:
+    def test_address_strategy_projects_the_register_map(self):
+        assert AddressStrategy().bindings(_address_block()) == {
+            "handoff_signal": RegisterBinding(table="coil", address=0)
+        }
+
+    def test_tag_strategy_has_no_bindings(self):
+        block = {
+            "strategy": "tag",
+            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}],
+        }
+        assert TagStrategy().bindings(block) == {}
+
+    def test_bindings_skip_malformed_entries_without_raising(self):
+        block = _address_block(
+            "not-a-mapping",
+            _register(name=None),
+            _register(name="no_table", table=None),
+            _register(name="bool_address", address=True),
+            _register(name="ok", address=3),
+        )
+        assert AddressStrategy().bindings(block) == {
+            "ok": RegisterBinding(table="coil", address=3)
+        }
+
+    def test_bindings_read_the_passed_block_not_self(self):
+        block = {"registers": [_register()]}
+        assert AddressStrategy().bindings(block) == {
+            "handoff_signal": RegisterBinding(table="coil", address=0)
+        }
 
 
 class TestStrategyRegistry:

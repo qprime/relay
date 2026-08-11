@@ -19,7 +19,7 @@ using testing::minimal_two_plc_spec;
 using testing::run_harness;
 
 HostHarness::Config fast_config(std::int64_t max_scans) {
-    return HostHarness::Config{1.0, max_scans, 100000};
+    return HostHarness::Config{1.0, max_scans, 100000, std::nullopt};
 }
 
 std::optional<Cell> io_value(const ScanTraceEntry& entry, const SignalTable& table,
@@ -80,7 +80,7 @@ TEST(TestHostHarness, test_each_plc_produces_own_monotonic_clock) {
 
 TEST(TestHostHarness, test_trace_dump_order_is_sorted_by_tick_then_plc) {
     const auto harness = run_harness(conveyor_spec(), conveyor_blocks(),
-                                     HostHarness::Config{1.0, 100, 100000});
+                                     HostHarness::Config{1.0, 100, 100000, std::nullopt});
     ASSERT_FALSE(harness->run_error().has_value());
     std::ostringstream out;
     const auto dumped = harness->trace().dump_to_jsonl(out, harness->signal_table(),
@@ -117,7 +117,7 @@ TEST(TestHostHarness, test_plant_route_to_stopped_plc_does_not_hang) {
     spec.plant.actuators = {};
 
     const auto harness = run_harness(spec, conveyor_blocks(),
-                                     HostHarness::Config{1.0, 400, 100000});
+                                     HostHarness::Config{1.0, 400, 100000, std::nullopt});
     ASSERT_FALSE(harness->run_error().has_value())
         << "with belt B never enabled the part parks at A's exit and the "
            "level-triggered route fires every plant scan; the run must still "

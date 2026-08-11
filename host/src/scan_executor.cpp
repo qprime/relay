@@ -144,16 +144,18 @@ Task run_plc_scan_loop(PlcExecutionContext ctx) {
         }
 
         ctx.bus->begin_drain(ctx.plc_index);
-        while (true) {
-            Message msg{};
-            const bool received = ctx.bus->channel_of(ctx.plc_index)
-                                      .try_receive([&](asio::error_code, Message m) {
-                                          msg = m;
-                                      });
-            if (!received) {
-                break;
-            }
-            ctx.bus->fold(ctx.plc_index, msg);
+        auto polled = co_await std::visit(
+            [&](auto& transport) { return transport.poll(ctx.plc_index); },
+            *ctx.transport);
+        if (!polled) {
+            ctx.run->error = RunError{RunErrorKind::CommFailed, ctx.plc_index,
+                                      std::nullopt, polled.error().message};
+            ctx.run->stop = true;
+            break;
+        }
+        for (const PolledValue& value : *polled) {
+            ctx.bus->fold(ctx.plc_index, Message{value.signal_id, value.value,
+                                                 value.sender_plc, value.seq});
         }
 
         ScanTraceEntry& entry = ctx.trace->next_entry();
@@ -166,9 +168,21 @@ Task run_plc_scan_loop(PlcExecutionContext ctx) {
             ctx.run->stop = true;
             break;
         }
+        std::optional<TransportError> emit_error;
         for (std::uint32_t index = 0; index < outgoing.count; ++index) {
             const OutgoingMessage& message = outgoing.items[index];
-            co_await ctx.bus->send(message.target_plc, message.msg);
+            auto emitted = co_await std::visit(
+                [&](auto& transport) { return transport.emit(message); }, *ctx.transport);
+            if (!emitted) {
+                emit_error = emitted.error();
+                break;
+            }
+        }
+        if (emit_error.has_value()) {
+            ctx.run->error = RunError{RunErrorKind::CommFailed, ctx.plc_index,
+                                      std::nullopt, emit_error->message};
+            ctx.run->stop = true;
+            break;
         }
 
         IOImage outputs = IOImage::empty();

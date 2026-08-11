@@ -86,9 +86,16 @@ std::expected<std::unique_ptr<HostHarness>, InitError> HostHarness::try_create(
         return std::unexpected(InitError{"host_harness: Config.trace_capacity must be > 0"});
     }
 
-    return std::unique_ptr<HostHarness>(
+    std::unique_ptr<HostHarness> harness(
         new HostHarness(std::move(spec), cfg, std::move(table), std::move(blocks),
-                        std::move(*plant), capacity, std::move(ex)));
+                        std::move(*plant), capacity, ex));
+    auto transport = build_comm_transport(cfg.comm_endpoint, harness->spec_,
+                                          harness->table_, harness->bus_, std::move(ex));
+    if (!transport) {
+        return std::unexpected(InitError{transport.error().message});
+    }
+    harness->transport_ = std::move(*transport);
+    return harness;
 }
 
 HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
@@ -101,6 +108,7 @@ HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
       plant_(std::move(plant)),
       bus_(ex, static_cast<std::uint32_t>(spec_.plc_ids.size()), table_.size(),
            kCommChannelCapacity),
+      transport_(InProcessTransport{&bus_}),
       trace_(trace_capacity),
       plant_send_counts_(table_.size(), 0) {
     const std::uint32_t plc_count = static_cast<std::uint32_t>(spec_.plc_ids.size());
@@ -176,8 +184,9 @@ Task HostHarness::run() {
         joins.push_back(asio::co_spawn(
             ex,
             run_plc_scan_loop(PlcExecutionContext{
-                index, cfg_.max_scans, cfg_.scan_period_ms, &bus_, &states_[index],
-                &trace_, &table_, &latest_outputs_[index], &run_state_}),
+                index, cfg_.max_scans, cfg_.scan_period_ms, &bus_, &transport_,
+                &states_[index], &trace_, &table_, &latest_outputs_[index],
+                &run_state_}),
             asio::experimental::use_promise));
     }
     joins.push_back(asio::co_spawn(ex, run_plant_loop(), asio::experimental::use_promise));

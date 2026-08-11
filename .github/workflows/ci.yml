@@ -47,5 +47,6 @@ jobs:
           uv run pytest -q --no-header -rs \
             tests/test_host_satisfies_expectations.py \
             tests/test_cross_verifier_agreement.py \
+            tests/test_modbus_loopback.py \
             | tee /tmp/host_pytest.log
           ! grep -q skipped /tmp/host_pytest.log

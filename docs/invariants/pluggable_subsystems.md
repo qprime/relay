@@ -99,8 +99,9 @@ badly instead of two protocols correctly.
   the task spec; raises on unknown. Strategies are stateless — every method
   takes the comm block as a parameter. Both registered strategies are live:
   `tag` (Logix-style named tags, used by the conveyor demo) and `address`
-  (a Modbus-style register map binding each signal name to a
-  `(table, address)` slot; the TCP transport underneath is planned). Each
+  (a Modbus register map binding each signal name to a coil address, with a
+  real TCP transport under it on the C++ host — see
+  [`docs/protocol/modbus_tcp.md`](../protocol/modbus_tcp.md)). Each
   strategy owns `validate_config` for its block's idiom and projects the block
   into strategy-neutral `CommSignal`s via `signals()` — the projection is the
   only comm shape framework code reads. The registry lives in

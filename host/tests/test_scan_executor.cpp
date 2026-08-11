@@ -60,7 +60,7 @@ using testing::run_harness;
 
 TEST(TestScanExecutor, test_conveyor_runs_to_completion) {
     const auto harness = run_harness(conveyor_spec(), conveyor_blocks(),
-                                     HostHarness::Config{10.0, 100, 100000});
+                                     HostHarness::Config{10.0, 100, 100000, std::nullopt});
     ASSERT_FALSE(harness->run_error().has_value());
     const TraceRing& trace = harness->trace();
     ASSERT_EQ(trace.size(), 200u);
@@ -94,13 +94,15 @@ struct FreeRunRig {
             states.emplace_back(index, &blocks[index], table.size());
         }
         bus.emplace(io.get_executor(), 2, table.size(), 64);
+        transport.emplace(InProcessTransport{&*bus});
     }
 
     PlcExecutionContext context(std::uint32_t index, std::int64_t max_scans,
                                 double period_ms) {
-        return PlcExecutionContext{index, max_scans,      period_ms,
-                                   &*bus, &states[index], &trace,
-                                   &table, &latest[index], &run};
+        return PlcExecutionContext{index,       max_scans,      period_ms,
+                                   &*bus,       &*transport,    &states[index],
+                                   &trace,      &table,         &latest[index],
+                                   &run};
     }
 
     ResolvedTaskSpec spec;
@@ -109,6 +111,7 @@ struct FreeRunRig {
     std::vector<PlcScanState> states;
     asio::io_context io;
     std::optional<CommBus> bus;
+    std::optional<CommTransportVariant> transport;
     TraceRing trace{1000};
     std::array<IOImage, 2> latest{IOImage::empty(), IOImage::empty()};
     RunState run;

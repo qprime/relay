@@ -22,6 +22,11 @@ struct Receipt {
     std::int64_t seq;
 };
 
+struct OutgoingMessage {
+    std::uint32_t target_plc;
+    Message msg;
+};
+
 class CommBuffer {
  public:
     explicit CommBuffer(std::uint32_t signal_count);

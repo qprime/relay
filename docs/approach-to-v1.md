@@ -45,9 +45,9 @@ features to the runtime.
 | [#22](https://github.com/qprime/relay/issues/22) — `CommBus::send` parks forever on a send to an exited PLC | **Closed** in `0e787b5`. Each PLC closes its own receive channel on exit; sends to a closed receiver are dropped and counted. |
 | [#16](https://github.com/qprime/relay/issues/16) — Comm bus delivery latency, per-PLC periods, dead route pass | **Closed** in `c938056` + `eaa1a93`. Items 1 and 3 landed in v1 — see the note below on why the original "out of scope" ruling was wrong. Item 2 split to #23. |
 | [#8](https://github.com/qprime/relay/issues/8) — Replace unmeasured timing budgets with measured ones | **Closes in v1.** Three unmeasured budgets in `specs/`. Both blockers are now clear, and the `PRECEDES` gap is a real 10.0ms. |
-| [#26](https://github.com/qprime/relay/issues/26) — `address` strategy and routing on the `CommStrategy` protocol | **Closes in v1.** Step 6a. Makes `pluggable_subsystems` true for comm rather than cited, and is the prerequisite that keeps 6b to one new variable. |
+| [#26](https://github.com/qprime/relay/issues/26) — `address` strategy and routing on the `CommStrategy` protocol | **Closed.** Step 6a. Made `pluggable_subsystems` true for comm rather than cited, and was the prerequisite that kept 6b to one new variable. |
 | [#23](https://github.com/qprime/relay/issues/23) — Per-PLC scan periods | **Out of scope.** No v1 consumer; payoff is the real-hardware story. Split out of #16. The one thing that could have pulled it in — 6b's poll interval — was settled at the consumer's scan top in [#27](https://github.com/qprime/relay/issues/27), which keeps it out. |
-| [#27](https://github.com/qprime/relay/issues/27) — Modbus TCP transport | **Closes in v1.** Step 6b. Settles the poll interval at the consumer's scan top and puts a real wire protocol under the register map #26 declares. |
+| [#27](https://github.com/qprime/relay/issues/27) — Modbus TCP transport | **Closed.** Step 6b. Settled the poll interval at the consumer's scan top and put a real wire protocol — 0x01 and 0x05 over MBAP — under the register map #26 declares. |
 | [#17](https://github.com/qprime/relay/issues/17) — Real-hardware deployment target | **Out of scope.** Sequences behind Modbus. |
 
 **Correction to the original #16 ruling.** This plan first marked #16 out of scope
@@ -328,43 +328,50 @@ to the tag version's.
 No sockets, no framing, no transport. `table` and `address` are declared and
 validated here and consumed by nothing until 6b.
 
-#### Step 6b — Modbus TCP transport
+#### Step 6b — Modbus TCP transport — **done**
 
-**Spec:** [#27](https://github.com/qprime/relay/issues/27); 6a first, so the
-register map is already declared and validated.
+**Spec:** [#27](https://github.com/qprime/relay/issues/27).
 
-A protocol with a published specification to conform to. The spec should decide
-which subset is in scope — conformance to a defined subset, not coverage for its
-own sake — and probably wants a Python Modbus server for the loopback test,
-mirroring what [tools/plant_server.py](../tools/plant_server.py) does for the
-plant socket.
+Shipped: 0x01 and 0x05 over MBAP framing, a `ModbusTcpTransport` under
+`CommBus`, [tools/modbus_server.py](../tools/modbus_server.py) as the register
+file, and a loopback test proving `conveyor_handoff_address` earns the same
+verdicts over TCP that it earns in-process. The subset is decided by what the
+generator can emit — every emit mode assigns a boolean, so word access is
+protocol surface no spec can drive, and `address` now accepts `coil` alone.
+[docs/protocol/modbus_tcp.md](protocol/modbus_tcp.md) is normative.
 
-**The poll interval is settled in #27: the poll is the consumer's scan top, not
-a third rate.** #26 deliberately deferred the question; #27 answers it by
-showing three invariants converge — `scan_phase_isolation` makes phase 2 the
-only entry point for inter-PLC data, `simclock_only_time_source` forbids a
-fourth pacing source, and #16's delivery phrasing is satisfied by construction
-when the poll *is* the scan top. That answer is what keeps
-[#23](https://github.com/qprime/relay/issues/23) post-v1: per-PLC periods
-change when each consumer polls and nothing else, so the delivery rule needs no
-amendment.
+**The poll interval settled at the consumer's scan top, not a third rate.** #26
+deferred the question; three invariants converge on the answer —
+`scan_phase_isolation` makes phase 2 the only entry point for inter-PLC data,
+`simclock_only_time_source` forbids a fourth pacing source, and #16's delivery
+phrasing is satisfied by construction when the poll *is* the scan top. That is
+what keeps [#23](https://github.com/qprime/relay/issues/23) post-v1: per-PLC
+periods change when each consumer polls and nothing else, so the delivery rule
+needs no amendment.
+
+The design problem was attribution. Modbus has no field for a sender and none
+for a sequence number, so a receipt is reassembled from three sources: the
+sender from the declared `produced_by`, the seq from the transport's own record
+of the last acknowledged write, the value from the register. The pairing cannot
+be atomic over a wire that carries only the value, so the poll reads the map
+before the register and the stamp runs behind rather than ahead — the safe
+direction, since the verifier matches on `count >= seq`.
 
 Transport selection is a host concern, chosen by a flag the way
 `--plant-endpoint` selects `remote_socket` — not a resurrection of the C++
-strategy switch 6a deletes.
+strategy switch 6a deleted.
 
 ### Step 7 — Close-out
 
 **Spec:** none.
 
-- README: update the validation-chain table and the scope-boundaries table
-  (Modbus moves from "out of scope" to in).
-- `host/README.md`: re-measure the headroom table under Modbus transport latency
-  and update the interim assumption register. The `PRECEDES` row was already
-  restated in Step 3.5 — it now records the sim's 10.0ms against the host's
-  0.0ms and why that asymmetry is deliberate.
+- README: update the validation-chain table. The scope-boundaries table and the
+  `host/README.md` headroom table were both settled in 6b — Modbus moved in,
+  and the Modbus column measured identical to the in-process one across ten
+  runs (300.0ms / 0.0ms).
+- `host/README.md`: update the interim assumption register.
 - Re-run `tools/regenerate_expectations` and confirm the ten-consecutive-run gate.
-- #21, #22, #16, #25, and #26 are closed. #23 (per-PLC periods) and #17
+- #21, #22, #16, #25, #26, and #27 are closed. #23 (per-PLC periods) and #17
   (real-hardware target) stay open as post-v1.
 - `docs/task_spec_syntax.md` already states which side of a comm tag is visible
   to assertion resolution (#21) and that a cross-PLC budget must exceed one
@@ -381,7 +388,7 @@ Every remaining step is specced; what's left is implementation in order.
 | 2 | [#24](https://github.com/qprime/relay/issues/24) | shipped |
 | 5 | [#25](https://github.com/qprime/relay/issues/25) | shipped |
 | 6a | [#26](https://github.com/qprime/relay/issues/26) | shipped |
-| 6b | [#27](https://github.com/qprime/relay/issues/27) | specced, not implemented |
+| 6b | [#27](https://github.com/qprime/relay/issues/27) | shipped |
 | 7 | none needed | close-out |
 
 Steps 1, 3, 3.5, and 4 needed no separate spec: 1 and 3.5 had complete analyses in

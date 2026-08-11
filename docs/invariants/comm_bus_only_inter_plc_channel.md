@@ -115,9 +115,20 @@ simulation" guarantee silently false for an entire class of signals.
   that `relay/spec/` can import it for spec-time validation without violating
   [pipeline_direction_imports.md](pipeline_direction_imports.md). Both
   registered strategies are live: `tag` (named tags, used by the conveyor
-  demo) and `address` (a Modbus-style register map; the TCP transport
-  underneath is planned). Either way the strategy only declares and projects
-  signals — delivery always flows through `CommBus`.
+  demo) and `address` (a Modbus register map). Either way the strategy only
+  declares and projects signals — delivery always flows through `CommBus`.
+- **Comm transports** ([host/src/comm_transport.cpp](../../host/src/comm_transport.cpp))
+  — the C++ host can put real Modbus TCP under the `address` register map, and
+  the transport sits *under* `CommBus` rather than beside it. Every inter-PLC
+  value still enters through drain-at-scan-top and promote; only the bytes
+  underneath move. Two consequences the invariant forces: the poll is issued
+  *as* the drain phase rather than on its own timer, and `poll` drains the bus
+  channel before reading any register, because plant routes ride the in-process
+  channel under both transports. Receipt sequence numbers come from the
+  transport's own record of what it acknowledged writing — the channel
+  recording what traversed it — not from reaching into another PLC's live
+  `send_counts`, which is exactly the cross-coroutine path this invariant
+  closes.
 
 ## Related
 

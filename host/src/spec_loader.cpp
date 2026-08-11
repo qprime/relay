@@ -132,6 +132,28 @@ std::expected<ResolvedTaskSpec, LoadError> try_load(const std::filesystem::path&
         auto consumed_by = require_string_array(signal, "consumed_by", path);
         if (!consumed_by) return std::unexpected(consumed_by.error());
         resolved.consumed_by = *consumed_by;
+        const bool has_table = signal.contains("table");
+        const bool has_address = signal.contains("address");
+        if (has_table != has_address) {
+            return fail(path, "comm signal '" + resolved.name +
+                                  "' must carry both 'table' and 'address' or neither");
+        }
+        if (has_table) {
+            auto table = require_string(signal, "table", path);
+            if (!table) return std::unexpected(table.error());
+            if (table->empty()) {
+                return fail(path, "comm signal '" + resolved.name +
+                                      "' field 'table' must be a non-empty string");
+            }
+            if (!signal["address"].is_number_unsigned() ||
+                signal["address"].get<std::uint64_t>() > 65535) {
+                return fail(path, "comm signal '" + resolved.name +
+                                      "' field 'address' must be an integer in "
+                                      "[0, 65535]");
+            }
+            resolved.table = *table;
+            resolved.address = signal["address"].get<std::uint32_t>();
+        }
         spec.comm.signals.push_back(std::move(resolved));
     }
 

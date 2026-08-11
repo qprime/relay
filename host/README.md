@@ -139,6 +139,37 @@ python -m tools.plant_server specs/conveyor_handoff.yaml --port 0   # prints REA
 host/build/relay_host_main --spec ... --st-blocks ... --out ... --plant-endpoint 127.0.0.1:<port>
 ```
 
+## Comm transport selection
+
+Inter-PLC delivery still flows through `CommBus`; what moves underneath is
+selectable. The transport is a **deployment** choice made by flag, not a spec
+field — exactly as `--plant-endpoint` overrides `Plant.type` — and it resolves
+through [comm_transport.cpp](src/comm_transport.cpp)'s `build_comm_transport`,
+mirroring `build_plant`.
+
+- **In-process** (default) — today's bounded channel. Producers `send`, the
+  consumer drains at scan top.
+- **Modbus TCP** (`--comm-endpoint <host:port>`, `--comm-unit-id <n>`) — the
+  host is the Modbus client for both directions and one external server holds
+  the coils. Producers write 0x05 at phase 6, consumers read 0x01 at phase 2.
+  Requires a spec whose comm strategy binds every signal to a coil; the
+  `address` strategy does, `tag` does not, and a `tag` spec is rejected at
+  startup for carrying no bindings.
+
+Plant routes ride the in-process channel under **both** transports: a sensor
+wired to the input terminals is sampled at scan top, not delivered over a
+network. `ModbusTcpTransport::poll` drains the bus channel and then reads the
+consumed coils, returning both.
+
+```
+python -m tools.modbus_server specs/conveyor_handoff_address.yaml --port 0   # prints READY <port>
+host/build/relay_host_main --spec ... --st-blocks ... --out ... --comm-endpoint 127.0.0.1:<port>
+```
+
+The wire protocol, the subset, and how `(sender, seq, value)` receipts are
+reconstructed over a medium that carries none of them are specified in
+[docs/protocol/modbus_tcp.md](../docs/protocol/modbus_tcp.md).
+
 ## Expectations workflow
 
 ```
@@ -178,10 +209,10 @@ host guarantees instead is **verdict determinism with quantified headroom**
 in `tests/test_host_satisfies_expectations.py`. The budgets are measured
 (#8), and the headroom of each against the worst observed side:
 
-| Assertion | Sim | Host (in-process) | Host (socket) | Budget | Headroom |
-|---|---|---|---|---|---|
-| `EVENTUALLY(part_at_b)` | 290.0ms | 300.0ms | 300.0ms | 400ms | 100ms = 10 scan periods |
-| `PRECEDES(handoff_signal, belt_b_enable)` | 10.0ms | 0.0ms | 0.0ms | 50ms | 40ms = 4 scan periods |
+| Assertion | Sim | Host (in-process) | Host (plant socket) | Host (Modbus comm) | Budget | Headroom |
+|---|---|---|---|---|---|---|
+| `EVENTUALLY(part_at_b)` | 290.0ms | 300.0ms | 300.0ms | 300.0ms | 400ms | 100ms = 10 scan periods |
+| `PRECEDES(handoff_signal, belt_b_enable)` | 10.0ms | 0.0ms | 0.0ms | 0.0ms | 50ms | 40ms = 4 scan periods |
 
 `CAUSES` is timing-free by construction and carries no budget. The margins
 are additive scan periods, not multipliers: the variability mechanism is
@@ -196,6 +227,13 @@ does not extend to plant transit: the host observes `part_at_b` one scan
 period later than the sim (300.0ms against 290.0ms), so the `EVENTUALLY`
 budget derives from the host's observation, the worst side. Verdict equality
 is per-assertion pass/fail, so the differing gaps do not affect it.
+
+The Modbus column costs nothing measurable at a 10ms period: a loopback round
+trip inside phase 2 or phase 6 resolves well inside a scan, and the poll is the
+scan top rather than a rate of its own, so it adds no beat frequency. The one
+place transport shows up is the first delivery of a signal, which waits for the
+producer's first acknowledged write — at most one consumer scan, and invisible
+against a 40ms margin.
 
 ## Asio coupling
 
@@ -220,7 +258,10 @@ before this the 65th send to a departed PLC never woke. Closing a channel
 still yields messages already queued on it, so a PLC's final drain is
 unaffected. `host_main` reports any drops on stderr, per consumer; a
 tail-of-run drop is expected whenever the plant routes a level-triggered
-signal to a PLC that has finished its scan budget.
+signal to a PLC that has finished its scan budget. Under the Modbus transport
+that report covers plant routes alone, because a register write cannot drop:
+there is no queue and no closed receiver, and a real data table accepts writes
+addressed to nobody.
 
 ## Interim assumption register
 

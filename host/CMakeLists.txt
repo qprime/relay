@@ -61,6 +61,9 @@ add_library(relay_host STATIC
     src/signal_table.cpp
     src/comm_bus.cpp
     src/comm_strategy.cpp
+    src/comm_transport.cpp
+    src/modbus_codec.cpp
+    src/modbus_tcp_transport.cpp
     src/plant_adapter.cpp
     src/plant_registry.cpp
     src/remote_socket_plant.cpp
@@ -94,6 +97,8 @@ add_executable(relay_host_tests
     tests/test_st_eval.cpp
     tests/test_comm_bus.cpp
     tests/test_comm_strategy.cpp
+    tests/test_modbus_codec.cpp
+    tests/test_modbus_transport.cpp
     tests/test_host_harness.cpp
     tests/test_plant_registry.cpp
     tests/test_remote_socket_plant.cpp

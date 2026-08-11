@@ -13,12 +13,20 @@ class CommSignal:
     consumed_by: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RegisterBinding:
+    table: str
+    address: int
+
+
 class CommStrategy(Protocol):
     name: str
 
     def validate_config(self, comm_block: dict, spec: "TaskSpec") -> list[str]: ...
 
     def signals(self, comm_block: dict) -> tuple[CommSignal, ...]: ...
+
+    def bindings(self, comm_block: dict) -> dict[str, RegisterBinding]: ...
 
 
 def _project_entries(entries: object) -> tuple[CommSignal, ...]:
@@ -88,30 +96,14 @@ class TagStrategy:
     def signals(self, comm_block: dict) -> tuple[CommSignal, ...]:
         return _project_entries(comm_block.get("tags"))
 
+    def bindings(self, comm_block: dict) -> dict[str, RegisterBinding]:
+        return {}
+
 
 _TABLES = ("coil", "discrete_input", "input_register", "holding_register")
-_BIT_TABLES = ("coil", "discrete_input")
+_READ_ONLY_TABLES = ("discrete_input", "input_register")
+_WRITABLE_BIT_TABLE = "coil"
 _ADDRESS_MAX = 65535
-
-
-def _emitted_tags(spec: "TaskSpec") -> set[str]:
-    emitted: set[str] = set()
-    behavior = spec.behavior
-    if not isinstance(behavior, dict):
-        return emitted
-    for entry in behavior.values():
-        if not isinstance(entry, dict):
-            continue
-        triggers = entry.get("triggers")
-        if not isinstance(triggers, list):
-            continue
-        for trigger in triggers:
-            if not isinstance(trigger, dict):
-                continue
-            emit = trigger.get("emit")
-            if isinstance(emit, dict) and isinstance(emit.get("tag"), str):
-                emitted.add(emit["tag"])
-    return emitted
 
 
 class AddressStrategy:
@@ -123,7 +115,6 @@ class AddressStrategy:
             return ["Comm.registers must be a non-empty list"]
         issues: list[str] = []
         plc_ids = set(spec.plc_ids)
-        emitted = _emitted_tags(spec)
         seen_names: set[str] = set()
         seen_bindings: set[tuple[str, int]] = set()
         for i, register in enumerate(registers):
@@ -164,6 +155,22 @@ class AddressStrategy:
                     f"Comm.registers[{i}].table must be one of {list(_TABLES)}, got {table!r}"
                 )
                 table = None
+            elif table in _READ_ONLY_TABLES:
+                issues.append(
+                    f"Comm.registers[{i}].table {table!r} is read-only from the "
+                    "master's perspective, but every comm signal declares a "
+                    "produced_by; field I/O that is genuinely read-only reaches a "
+                    f"PLC through Plant.routes, not Comm. Use {_WRITABLE_BIT_TABLE!r}"
+                )
+                table = None
+            elif table != _WRITABLE_BIT_TABLE:
+                issues.append(
+                    f"Comm.registers[{i}].table {table!r} carries a word, but no "
+                    "trigger can emit one: every emit mode assigns a boolean, so "
+                    "there is no spec by which a PLC writes a 16-bit value. Use "
+                    f"{_WRITABLE_BIT_TABLE!r}"
+                )
+                table = None
             address = register.get("address")
             if (
                 not isinstance(address, int)
@@ -183,21 +190,30 @@ class AddressStrategy:
                         "which another entry already binds"
                     )
                 seen_bindings.add(binding)
-            if (
-                name is not None
-                and table is not None
-                and name in emitted
-                and table not in _BIT_TABLES
-            ):
-                issues.append(
-                    f"Comm.registers[{i}].table {table!r} is a word table, but "
-                    f"{name!r} is a trigger emit target; emitted signals are "
-                    "boolean and must bind to 'coil' or 'discrete_input'"
-                )
         return issues
 
     def signals(self, comm_block: dict) -> tuple[CommSignal, ...]:
         return _project_entries(comm_block.get("registers"))
+
+    def bindings(self, comm_block: dict) -> dict[str, RegisterBinding]:
+        entries = comm_block.get("registers")
+        if not isinstance(entries, list):
+            return {}
+        projected: dict[str, RegisterBinding] = {}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            table = entry.get("table")
+            address = entry.get("address")
+            if not name or not isinstance(name, str):
+                continue
+            if not table or not isinstance(table, str):
+                continue
+            if not isinstance(address, int) or isinstance(address, bool):
+                continue
+            projected[name] = RegisterBinding(table=table, address=address)
+        return projected
 
 
 _REGISTRY: dict[str, type] = {
@@ -213,12 +229,22 @@ def get_comm_strategy(name: str) -> CommStrategy:
     return _REGISTRY[name]()
 
 
-def comm_signals(spec: "TaskSpec") -> tuple[CommSignal, ...]:
+def _resolved(spec: "TaskSpec") -> tuple[CommStrategy, dict] | None:
     block = spec.comm_block
     if not isinstance(block, dict):
-        return ()
+        return None
     name = block.get("strategy")
     if not isinstance(name, str) or name not in _REGISTRY:
-        return ()
+        return None
     strategy: CommStrategy = _REGISTRY[name]()
-    return strategy.signals(block)
+    return strategy, block
+
+
+def comm_signals(spec: "TaskSpec") -> tuple[CommSignal, ...]:
+    resolved = _resolved(spec)
+    return () if resolved is None else resolved[0].signals(resolved[1])
+
+
+def comm_bindings(spec: "TaskSpec") -> dict[str, RegisterBinding]:
+    resolved = _resolved(spec)
+    return {} if resolved is None else resolved[0].bindings(resolved[1])

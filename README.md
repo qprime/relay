@@ -25,7 +25,7 @@ Each simulated PLC runs as an `asyncio` coroutine executing a conventional scan 
 promote comm buffer → snapshot I/O → execute function block → write outputs → publish
 ```
 
-Coordination between PLCs is modeled by a pluggable **comm strategy** — a registered implementation of how inter-PLC signals get routed and when they become visible at the receiver. The conveyor demo uses the `tag` strategy: each tag is declared in the task spec (producer + consumers), and the runtime promotes pending tag values into the consumer's I/O image at the top of the next scan, paying a one-scan latency cost that mirrors a real network. Precisely: a message becomes visible at the consumer's first scan top whose `SimClock` time is **strictly later** than the sending scan's, so delivery is paced by the consumer's sampling and costs up to one *consumer* scan period. Plant routes are exempt — a sensor wired to the input terminals is sampled at scan top, not delivered over a network. An `address` strategy is also live: it declares the same signals through a Modbus-style register map, binding each symbolic name to a `(table, address)` slot. The binding never becomes the signal identity — an address-idiom spec generates byte-identical ST and matching verdicts against its tag-idiom twin (`specs/conveyor_handoff_address.yaml` is the demonstration). The Modbus TCP transport underneath the register map is planned ([#27](https://github.com/qprime/relay/issues/27)); the idiom is live, the wire format is not.
+Coordination between PLCs is modeled by a pluggable **comm strategy** — a registered implementation of how inter-PLC signals get routed and when they become visible at the receiver. The conveyor demo uses the `tag` strategy: each tag is declared in the task spec (producer + consumers), and the runtime promotes pending tag values into the consumer's I/O image at the top of the next scan, paying a one-scan latency cost that mirrors a real network. Precisely: a message becomes visible at the consumer's first scan top whose `SimClock` time is **strictly later** than the sending scan's, so delivery is paced by the consumer's sampling and costs up to one *consumer* scan period. Plant routes are exempt — a sensor wired to the input terminals is sampled at scan top, not delivered over a network. An `address` strategy is also live: it declares the same signals through a Modbus register map, binding each symbolic name to a coil address. The binding never becomes the signal identity — an address-idiom spec generates byte-identical ST and matching verdicts against its tag-idiom twin (`specs/conveyor_handoff_address.yaml` is the demonstration). Under that idiom the C++ host can run inter-PLC comm over **real Modbus TCP**: producers write their coils at scan phase 6, consumers poll theirs at phase 2, and the same three verdicts come back over the wire that come back in-process. The poll is the consumer's scan top rather than a rate of its own, which is what keeps the delivery rule above unchanged. See [docs/protocol/modbus_tcp.md](docs/protocol/modbus_tcp.md).
 
 The C++ host does not charge this cost: its clock referent is the wall clock, and its in-process channel models a backplane with near-zero latency, so it pays between zero and roughly one period. The asymmetry is deliberate — the sim is the **conservative** oracle, so a budget derived from its measurement covers a host that is at worst as slow. Verdict equality is per-assertion pass/fail and is unaffected by the difference in measured gaps.
 
@@ -152,7 +152,7 @@ Four invariants make the simulation deterministic and the verification trustwort
 |-----------|-----------|
 | External clock | `SimClock` is injected into every scan. No PLC reads the wall clock. |
 | Immutable I/O image | The snapshot taken at scan-top is frozen for the duration of execution — inputs can't shift mid-scan. |
-| No shared PLC state | All coordination flows through `CommBus` via a pluggable comm strategy with per-scan message promotion. Both strategies (`tag`, `address`) project their comm block to the same producer/consumer signals; the Modbus TCP transport under the `address` register map is planned. |
+| No shared PLC state | All coordination flows through `CommBus` via a pluggable comm strategy with per-scan message promotion. Both strategies (`tag`, `address`) project their comm block to the same producer/consumer signals; under `address`, the host can put real Modbus TCP beneath the register map without either strategy changing. |
 | Trace-based verification | Every scan's I/O snapshot, outputs, sends, and receipts are recorded. Assertions evaluate against the log, not a live system. |
 
 If a handoff works in the trace, it works because the messages actually moved through the comm bus at the right scan boundaries.
@@ -253,7 +253,14 @@ python -m tools.plant_server specs/conveyor_handoff.yaml --port 0   # prints REA
 host/build/relay_host_main --spec ... --st-blocks ... --out ... --plant-endpoint 127.0.0.1:<port>
 ```
 
-See [host/README.md](host/README.md) for build details, plant selection, and the time-discipline rules the host holds itself to.
+To run inter-PLC comm over real Modbus TCP instead of the in-process channel (needs an `address`-strategy spec, since every signal has to bind to a coil):
+
+```bash
+python -m tools.modbus_server specs/conveyor_handoff_address.yaml --port 0   # prints READY <port>
+host/build/relay_host_main --spec ... --st-blocks ... --out ... --comm-endpoint 127.0.0.1:<port>
+```
+
+See [host/README.md](host/README.md) for build details, plant and transport selection, and the time-discipline rules the host holds itself to.
 
 ### 6. Regenerate expectations
 
@@ -298,14 +305,15 @@ relay/
 └── verdict_io.py  Verification verdicts as inspectable JSON
 host/               C++23 deployment host (see host/README.md)
 tools/              Language-boundary utilities: host input emission,
-                    plant socket server, expectations regeneration,
+                    plant socket server, Modbus register server,
+                    expectations regeneration,
                     checkpoint report rendering (HTML + PDF)
 specs/              Task spec YAML examples
 └── expectations/   Sim-certified verdict artifacts
 tests/              End-to-end scenario tests and cross-language conformance
 docs/
 ├── invariants/     Subsystem invariants
-└── protocol/       Plant socket wire protocol
+└── protocol/       Plant socket and Modbus TCP wire protocols
 ```
 
 The pipeline flows left-to-right through the subsystem list: `spec/` → `generator/` → `st/` → `runtime/` + `plant/` → `verify/`. The `runtime/`, `plant/`, and `verify/` subsystems form a coupled surface — a change to scan-cycle structure or I/O image layout in one must be checked against the other two.
@@ -319,7 +327,7 @@ The pipeline flows left-to-right through the subsystem list: `spec/` → `genera
 | Subset of Structured Text the generator emits | Full IEC 61131-3 language coverage |
 | Plant physics at minimum fidelity for exercising control logic | High-fidelity physics simulation or digital twin |
 | Deterministic trace-based post-verification | LLM-in-the-loop verification or static analysis of generated ST |
-| Multi-PLC coordination via simulated comm bus | Real Modbus TCP, fieldbus protocols, or hardware-in-the-loop |
+| Multi-PLC coordination via a comm bus, in-process in the sim and over Modbus TCP coils on the host | Modbus word access, RTU/ASCII framing, other fieldbus protocols, or hardware-in-the-loop |
 | Prototyping and testing control strategies | Production PLC deployment or runtime |
 | YAML task specs as the compiler's input language | General-purpose NL-to-PLC without a structured IR |
 | ST interpreter grows alongside the generator | Ahead-of-generator language coverage |

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -18,6 +19,8 @@ struct ResolvedSignal {
     std::string name;
     std::string produced_by;
     std::vector<std::string> consumed_by;
+    std::optional<std::string> table;
+    std::optional<std::uint32_t> address;
 };
 
 struct ResolvedComm {

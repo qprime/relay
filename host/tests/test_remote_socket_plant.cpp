@@ -117,7 +117,7 @@ TEST(TestRemoteSocketPlant, test_server_death_midrun_surfaces_run_error) {
     ResolvedTaskSpec spec = conveyor_spec();
     spec.plant = remote_plant_block(acceptor.local_endpoint().port(), 500.0);
     auto harness = HostHarness::try_create(std::move(spec), conveyor_blocks(),
-                                           HostHarness::Config{1.0, 100, 100000},
+                                           HostHarness::Config{1.0, 100, 100000, std::nullopt},
                                            io.get_executor());
     ASSERT_TRUE(harness.has_value()) << harness.error().message;
 

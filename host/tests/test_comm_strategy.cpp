@@ -8,7 +8,8 @@ namespace {
 
 ResolvedTaskSpec spec_with_signal() {
     ResolvedTaskSpec spec = testing::minimal_two_plc_spec();
-    spec.comm.signals = {ResolvedSignal{"handoff_signal", "plc_a", {"plc_b"}}};
+    spec.comm.signals = {
+        ResolvedSignal{"handoff_signal", "plc_a", {"plc_b"}, std::nullopt, std::nullopt}};
     return spec;
 }
 

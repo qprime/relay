@@ -12,6 +12,7 @@
 #include "relay_host/async.hpp"
 #include "relay_host/clock.hpp"
 #include "relay_host/comm_bus.hpp"
+#include "relay_host/comm_transport_registry.hpp"
 #include "relay_host/plant_registry.hpp"
 #include "relay_host/scan_executor.hpp"
 #include "relay_host/spec_loader.hpp"
@@ -30,6 +31,7 @@ class HostHarness {
         double scan_period_ms;
         std::int64_t max_scans;
         std::size_t trace_capacity;
+        std::optional<ModbusEndpoint> comm_endpoint;
     };
 
     [[nodiscard]] static std::expected<std::unique_ptr<HostHarness>, InitError> try_create(
@@ -70,6 +72,7 @@ class HostHarness {
     std::vector<ValidatedSt> blocks_;
     PlantVariant plant_;
     CommBus bus_;
+    CommTransportVariant transport_;
     TraceRing trace_;
     std::vector<PlcScanState> states_;
     std::vector<IOImage> latest_outputs_;

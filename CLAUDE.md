@@ -18,6 +18,7 @@ Render the checkpoint report — every spec, every lane, verdicts and trace evid
 | Task spec syntax | [docs/task_spec_syntax.md](docs/task_spec_syntax.md) |
 | Task spec examples | [specs/](specs/) |
 | C++ deployment host | [host/README.md](host/README.md) |
+| Wire protocols (plant socket, Modbus TCP) | [docs/protocol/](docs/protocol/) |
 | Expectations artifacts (sim-certified verdicts) | [specs/expectations/](specs/expectations/) |
 | Checkpoint report renderer | [tools/render_report.py](tools/render_report.py) |
 
@@ -59,7 +60,7 @@ Render the checkpoint report — every spec, every lane, verdicts and trace evid
 | function block | ST program unit that executes each scan; holds internal timer state |
 | scan | One execution cycle: promote comm → snapshot I/O → execute FB → write outputs → publish |
 | I/O image | Immutable snapshot of PLC inputs taken at scan top; stable during execution |
-| comm buffer | Pending inter-PLC messages promoted each scan. A message becomes visible at the consumer's first scan top whose SimClock time is strictly later than the sending scan's, so delivery costs up to one *consumer* scan period — the phrasing survives independent per-PLC periods, since it names no global iteration. Plant routes are exempt: a sensor wired to the input terminals is sampled at scan top, not delivered over a network. The C++ host does not charge this cost, which makes the sim the conservative oracle (`tag` and `address` idioms are both live; Modbus TCP transport is planned) |
+| comm buffer | Pending inter-PLC messages promoted each scan. A message becomes visible at the consumer's first scan top whose SimClock time is strictly later than the sending scan's, so delivery costs up to one *consumer* scan period — the phrasing survives independent per-PLC periods, since it names no global iteration. Plant routes are exempt: a sensor wired to the input terminals is sampled at scan top, not delivered over a network. The C++ host does not charge this cost, which makes the sim the conservative oracle. Both idioms are live (`tag`, `address`), and under the `address` idiom the host can run comm over real Modbus TCP — producers write coils at phase 6, consumers poll theirs at phase 2 ([docs/protocol/modbus_tcp.md](docs/protocol/modbus_tcp.md)) |
 | SimClock | External tick counter and elapsed_ms; injected, never read from wall clock |
 | plant model | Minimal physics: belt speed, sensor thresholds, actuator latency |
 | trace log | Scan-by-scan record of I/O snapshots and outputs for all PLCs |

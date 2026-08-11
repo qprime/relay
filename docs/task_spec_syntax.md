@@ -64,6 +64,13 @@ spec depends on, is the shape contract:
   entries for `tag`, `registers` entries for `address`), those names are the
   signals PLCs can send each other, and only those names can be a `CAUSES`
   cause.
+- **Every comm signal is boolean and every comm signal is written.** All three
+  emit modes assign a boolean, and each signal declares a `produced_by`, so a
+  strategy that binds signals to a fieldbus can only bind them to a writable
+  bit — `address` accepts `table: coil` and rejects the other three, each with
+  its own reason. This is a framework-level consequence of the emit vocabulary,
+  not a register-map field rule; the rejection messages live in
+  `AddressStrategy.validate_config`.
 - Whatever the plant's actuator entries name as `key` are the outputs a PLC
   writes that the plant reads back.
 

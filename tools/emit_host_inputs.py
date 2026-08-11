@@ -7,9 +7,24 @@ from typing import Any
 from relay.clock import DEFAULT_SCAN_PERIOD_MS
 from relay.generator.st import compile_st_blocks
 from relay.spec.schema import TaskSpec, load_spec
-from relay.strategies.comm import comm_signals
+from relay.strategies.comm import CommSignal, RegisterBinding, comm_bindings, comm_signals
 
 DEFAULT_MAX_SCANS = 100
+
+
+def _signal_entry(
+    signal: CommSignal, bindings: dict[str, RegisterBinding]
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "name": signal.name,
+        "produced_by": signal.produced_by,
+        "consumed_by": list(signal.consumed_by),
+    }
+    binding = bindings.get(signal.name)
+    if binding is not None:
+        entry["table"] = binding.table
+        entry["address"] = binding.address
+    return entry
 
 
 def resolved_spec_dict(
@@ -35,6 +50,7 @@ def resolved_spec_dict(
         }
         for actuator in spec.plant_block.get("actuators") or []
     ]
+    bindings = comm_bindings(spec)
     return {
         "system_name": spec.system_name,
         "plc_ids": list(spec.plc_ids),
@@ -43,12 +59,7 @@ def resolved_spec_dict(
         "comm": {
             "strategy": spec.comm_strategy,
             "signals": [
-                {
-                    "name": signal.name,
-                    "produced_by": signal.produced_by,
-                    "consumed_by": list(signal.consumed_by),
-                }
-                for signal in comm_signals(spec)
+                _signal_entry(signal, bindings) for signal in comm_signals(spec)
             ],
         },
         "plant": {

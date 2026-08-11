@@ -21,13 +21,16 @@ struct CliArgs {
     std::optional<std::int64_t> max_scans;
     std::optional<double> scan_period_ms;
     std::optional<std::string> plant_endpoint;
+    std::optional<std::string> comm_endpoint;
+    std::optional<std::uint8_t> comm_unit_id;
     std::size_t trace_capacity = 100000;
 };
 
 constexpr std::string_view kUsage =
     "usage: relay_host_main --spec <resolved_spec.json> --st-blocks <st_blocks.json> "
     "--out <trace.jsonl> [--max-scans <n>] [--scan-period-ms <x>] "
-    "[--trace-capacity <n>] [--plant-endpoint <host:port>]\n";
+    "[--trace-capacity <n>] [--plant-endpoint <host:port>] "
+    "[--comm-endpoint <host:port>] [--comm-unit-id <n>]\n";
 
 std::optional<CliArgs> parse_args(int argc, char** argv) {
     CliArgs args;
@@ -64,6 +67,19 @@ std::optional<CliArgs> parse_args(int argc, char** argv) {
             args.scan_period_ms = parsed;
         } else if (flag == "--plant-endpoint") {
             args.plant_endpoint = std::string(value);
+        } else if (flag == "--comm-endpoint") {
+            args.comm_endpoint = std::string(value);
+        } else if (flag == "--comm-unit-id") {
+            unsigned parsed = 0;
+            if (std::from_chars(value.data(), value.data() + value.size(), parsed).ec !=
+                    std::errc{} ||
+                parsed > 255) {
+                std::cerr << "host_main: --comm-unit-id must be an integer in [0, 255], "
+                             "got '"
+                          << value << "'\n";
+                return std::nullopt;
+            }
+            args.comm_unit_id = static_cast<std::uint8_t>(parsed);
         } else if (flag == "--trace-capacity") {
             std::size_t parsed = 0;
             if (std::from_chars(value.data(), value.data() + value.size(), parsed).ec !=
@@ -80,6 +96,11 @@ std::optional<CliArgs> parse_args(int argc, char** argv) {
     }
     if (args.spec_path.empty() || args.st_blocks_path.empty() || args.out_path.empty()) {
         std::cerr << kUsage;
+        return std::nullopt;
+    }
+    if (args.comm_unit_id.has_value() && !args.comm_endpoint.has_value()) {
+        std::cerr << "host_main: --comm-unit-id addresses a Modbus server; it requires "
+                     "--comm-endpoint\n";
         return std::nullopt;
     }
     return args;
@@ -108,10 +129,19 @@ int main(int argc, char** argv) {
         spec->plant.config = nlohmann::json{{"endpoint", *args->plant_endpoint}};
     }
 
+    std::optional<relay_host::ModbusEndpoint> comm_endpoint;
+    if (args->comm_endpoint.has_value()) {
+        comm_endpoint = relay_host::ModbusEndpoint{*args->comm_endpoint};
+        if (args->comm_unit_id.has_value()) {
+            comm_endpoint->unit_id = *args->comm_unit_id;
+        }
+    }
+
     const relay_host::HostHarness::Config cfg{
         args->scan_period_ms.value_or(spec->scan_period_ms),
         args->max_scans.value_or(spec->max_scans),
         args->trace_capacity,
+        comm_endpoint,
     };
 
     asio::io_context io;
@@ -167,7 +197,7 @@ int main(int argc, char** argv) {
     }
 
     if (const auto& error = (*harness)->run_error(); error.has_value()) {
-        if (error->kind == relay_host::RunErrorKind::PlantFailed) {
+        if (!error->scan_error.has_value()) {
             std::cerr << "host_main: run halted: " << error->message;
         } else {
             std::cerr << "host_main: run halted on plc index " << error->plc_index

@@ -32,7 +32,8 @@ inline ResolvedTaskSpec conveyor_spec() {
     spec.scan_period_ms = 10.0;
     spec.max_scans = 100;
     spec.comm.strategy = "tag";
-    spec.comm.signals = {ResolvedSignal{"handoff_signal", "plc_a", {"plc_b"}}};
+    spec.comm.signals = {
+        ResolvedSignal{"handoff_signal", "plc_a", {"plc_b"}, std::nullopt, std::nullopt}};
     spec.plant.type = "conveyor";
     spec.plant.config = nlohmann::json{{"belt_speed_m_per_s", 0.5},
                                        {"sensor_trigger_threshold_m", 0.1},
@@ -45,6 +46,14 @@ inline ResolvedTaskSpec conveyor_spec() {
         ResolvedActuator{"plc_b", "belt_b_enable", "belt_b_enable_signal"}};
     spec.assertions = {"EVENTUALLY(part_at_b, within: 500ms)",
                        "PRECEDES(handoff_signal, belt_b_enable, within: 500ms)"};
+    return spec;
+}
+
+inline ResolvedTaskSpec address_conveyor_spec() {
+    ResolvedTaskSpec spec = conveyor_spec();
+    spec.system_name = "conveyor_handoff_address";
+    spec.comm.strategy = "address";
+    spec.comm.signals = {ResolvedSignal{"handoff_signal", "plc_a", {"plc_b"}, "coil", 0}};
     return spec;
 }
 
