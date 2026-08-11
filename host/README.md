@@ -267,9 +267,11 @@ addressed to nobody.
 
 Per the project's standing rule on interim steps: every scaffold in `host/` is
 registered here and guarded. New scaffolds add rows; they do not get to be
-undocumented. Both original rows were lifted by #14:
+undocumented. Both original rows were lifted by #14; row 3 arrived with the
+Modbus transport and is still open:
 
 | # | Assumption | Lifted by | How |
 |---|-----------|-----------|-----|
 | 1 | **All PLCs share a harness-driven scan barrier** | #14 | Free-running per-PLC pacing and clock production. The named guard tests were retired deliberately (see #14); `test_plcs_reach_different_ticks` now pins the inverse — it fails if a barrier is reintroduced. |
 | 2 | **`pluggable_subsystems` deferred for `plant_adapter`** | #14 | Plant registry keyed by `Plant.type` plus per-strategy config parsing (`LocalStubPlant` owns the conveyor fields, `RemoteSocketPlant` owns `endpoint`); the loader no longer knows any plant's config shape. |
+| 3 | **One host process owns every PLC endpoint**, which is what lets a Modbus receipt's `seq` be synthesized from the emit side's acknowledged-write map | #17 — open | Modbus carries no sender field and no sequence number, so the reconstruction in [docs/protocol/modbus_tcp.md](../docs/protocol/modbus_tcp.md) does not survive PLCs on separate devices; #17 must carry attribution in-band or give it up. Guarded meanwhile by `validate_comm_signals`, which rejects a send slot that does not sit on the PLC its signal declares as producer — so `sender` cannot come out transport-dependent, which is the failure that would otherwise hide here. |

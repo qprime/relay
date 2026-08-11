@@ -166,14 +166,14 @@ The principle: each stage is the contract for the next. The Python sim plays the
 This is what makes failures cheap to localize. When stage N satisfies the expectations and stage N+1 does not, the bug lives in whatever N+1 newly introduced — wall-clock pacing, an inter-process boundary, physical I/O. You never debug two new variables at once.
 
 ```
-spec ──> Python sim ──> C++ host             ──> C++ host         ──> C++ host
-         (oracle)       (in-process,             (Python plant         (real
-                         stub plant)              over socket)          fieldbus)
+spec ──> Python sim ──> C++ host      ──> C++ host      ──> C++ host      ──> C++ host
+         (oracle)       (in-process,      (Python plant     (inter-PLC       (real
+                         stub plant)       over socket)      comm over        hardware)
+                                                             Modbus TCP)
 
-           ↓                ↓                       ↓                     ↓
-       expectations    same assertions         same assertions       same assertions
-       artifact        re-evaluated            re-evaluated          re-evaluated
-                       against host trace      against host trace    against host trace
+           ↓                ↓                 ↓                 ↓                ↓
+      expectations      same assertions re-evaluated against each host's own trace
+      artifact
 ```
 
 | Stage | New complexity it adds | What it certifies | Status |
@@ -181,9 +181,10 @@ spec ──> Python sim ──> C++ host             ──> C++ host         �
 | Python sim (oracle) | Deterministic in-process execution under `SimClock` | The spec is realizable: generated ST plus plant model produce a trace where the assertions hold | ✅ |
 | C++ host, in-process stub plant | Free-running wall-clock-paced scan cycles; C++ ST interpreter and scan executor | The generated ST and scan semantics survive a real runtime without violating the assertions | ✅ [#4](https://github.com/qprime/relay/issues/4), [#14](https://github.com/qprime/relay/issues/14) |
 | C++ host, Python plant over socket | Inter-process boundary; network framing and latency | The runtime composes correctly with an out-of-process plant | ✅ [#14](https://github.com/qprime/relay/issues/14) |
-| C++ host, real fieldbus | Physical I/O and real hardware timing | The control strategy works against the actual physical system | 🚧 [#17](https://github.com/qprime/relay/issues/17) |
+| C++ host, inter-PLC comm over Modbus TCP | A real fieldbus wire protocol between PLCs: MBAP framing, coil reads and writes, and receipts reassembled over a medium that carries neither sender nor sequence number | The comm bus's delivery and attribution contracts survive a transport that carries only values | ✅ [#27](https://github.com/qprime/relay/issues/27) |
+| C++ host, real hardware | Physical I/O and real hardware timing | The control strategy works against the actual physical system | 🚧 [#17](https://github.com/qprime/relay/issues/17) |
 
-Three of the four stages are live. The verdict earned in the Python oracle is re-earned by the C++ host, both against its in-process stub plant and against a Python plant reached over TCP.
+Four of the five stages are live. The verdict earned in the Python oracle is re-earned by the C++ host against its in-process stub plant, against a Python plant reached over TCP, and with inter-PLC comm running over Modbus TCP to an external register file. What the last stage adds is hardware, not protocol — the wire format is already real; the coils just live in a Python process rather than a device.
 
 ### What survived the move off lockstep
 

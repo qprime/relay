@@ -1,6 +1,6 @@
 # Approach to v1
 
-**Status:** Plan | **As-of:** 2026-08-07
+**Status:** Complete — every step shipped | **As-of:** 2026-08-10
 **Purpose:** Define what v1 is, what gets built to reach it, and what is left for later.
 
 ---
@@ -22,18 +22,18 @@ Everything else is out of scope. See [What's next](#whats-next) for reference.
 
 ## Where things stand
 
-Three of four rungs on the validation chain are live. The Python sim certifies,
-and the C++ host re-earns the verdict in-process and over a socket. `CAUSES` is
-timing-free by construction and survived the move off lockstep in
+Four of five rungs on the validation chain are live. The Python sim certifies,
+and the C++ host re-earns the verdict in-process, over a plant socket, and with
+inter-PLC comm running over Modbus TCP. `CAUSES` is timing-free by construction
+and survived the move off lockstep in
 [#14](https://github.com/qprime/relay/issues/14).
 
 The host is no longer only a runtime. Step 5 gave it a verifier, so the judge
 now has two independent implementations and
 `tests/test_cross_verifier_agreement.py` runs both over the sim's own trace.
-What remains Python-only is the front half of the pipeline — spec, generator,
-ST emission — and the fieldbus the host talks over. That asymmetry is what
-Step 6 closes, by moving pipeline stages into C++ rather than by adding
-features to the runtime.
+Step 6 then gave it a fieldbus client. What remains Python-only is the front
+half of the pipeline — spec, generator, ST emission — and the only rung left on
+the chain is hardware rather than protocol.
 
 ---
 
@@ -49,6 +49,7 @@ features to the runtime.
 | [#23](https://github.com/qprime/relay/issues/23) — Per-PLC scan periods | **Out of scope.** No v1 consumer; payoff is the real-hardware story. Split out of #16. The one thing that could have pulled it in — 6b's poll interval — was settled at the consumer's scan top in [#27](https://github.com/qprime/relay/issues/27), which keeps it out. |
 | [#27](https://github.com/qprime/relay/issues/27) — Modbus TCP transport | **Closed.** Step 6b. Settled the poll interval at the consumer's scan top and put a real wire protocol — 0x01 and 0x05 over MBAP — under the register map #26 declares. |
 | [#17](https://github.com/qprime/relay/issues/17) — Real-hardware deployment target | **Out of scope.** Sequences behind Modbus. |
+| [#28](https://github.com/qprime/relay/issues/28) — CAN as a third comm strategy | **Out of scope.** Opened during Step 6, after this plan was written. It is the natural second consumer of 6a's projection and the test of whether that abstraction was real — broadcast routing has no `produced_by` to lean on, and arbitration latency is not one consumer scan. Post-v1. |
 
 **Correction to the original #16 ruling.** This plan first marked #16 out of scope
 on the reasoning that "the zero-latency bus and the schema work both sequence
@@ -361,27 +362,45 @@ Transport selection is a host concern, chosen by a flag the way
 `--plant-endpoint` selects `remote_socket` — not a resurrection of the C++
 strategy switch 6a deleted.
 
-### Step 7 — Close-out
+### Step 7 — Close-out ✅ done
 
 **Spec:** none.
 
-- README: update the validation-chain table. The scope-boundaries table and the
-  `host/README.md` headroom table were both settled in 6b — Modbus moved in,
-  and the Modbus column measured identical to the in-process one across ten
-  runs (300.0ms / 0.0ms).
-- `host/README.md`: update the interim assumption register.
-- Re-run `tools/regenerate_expectations` and confirm the ten-consecutive-run gate.
-- #21, #22, #16, #25, #26, and #27 are closed. #23 (per-PLC periods) and #17
-  (real-hardware target) stay open as post-v1.
+- **README validation chain.** Modbus TCP is now a fifth rung between the plant
+  socket and hardware, and the last rung was renamed from "real fieldbus" to
+  "real hardware" — a real fieldbus is what 6b shipped. What #17 adds is
+  physical I/O and a device's timing, not a protocol. The scope-boundaries table
+  and the `host/README.md` headroom table were both settled in 6b, the latter
+  measuring the Modbus column identical to the in-process one across ten runs
+  (300.0ms / 0.0ms).
+- **`host/README.md` interim assumption register.** One new row, still open:
+  *one host process owns every PLC endpoint*, which is what lets a Modbus
+  receipt's `seq` be synthesized from the emit side's acknowledged-write map.
+  The protocol doc already says the technique does not generalize; the register
+  is where that stops being a footnote. Guarded by `validate_comm_signals`,
+  which keeps `sender` from coming out transport-dependent.
+- **Gate re-run.** `tools/regenerate_expectations` reproduced all three
+  artifacts byte-identical, and the suite passes including the
+  ten-consecutive-run gate.
+- **Issues.** #21, #22, #16, #25, #26, and #27 are closed. #23 (per-PLC
+  periods), #17 (real-hardware target), and #28 (CAN strategy) stay open as
+  post-v1.
 - `docs/task_spec_syntax.md` already states which side of a comm tag is visible
   to assertion resolution (#21) and that a cross-PLC budget must exceed one
   consumer scan period (#16).
+
+**One thing this step surfaced and did not close.** The checkpoint report
+renderer builds three lanes — `sim`, `host`, `host-socket` — and has no Modbus
+lane, so v1's fieldbus rung is invisible in the one artifact built to make the
+project legible to a non-expert. Adding a fourth lane gated on the spec's comm
+strategy being `address` is a small change to `tools/render_report.py`; it is
+code rather than close-out and did not get folded in here.
 
 ---
 
 ## Spec schedule
 
-Every remaining step is specced; what's left is implementation in order.
+Every step that needed a spec got one, and all of them shipped.
 
 | Step | Spec | State |
 |---|---|---|
@@ -389,7 +408,7 @@ Every remaining step is specced; what's left is implementation in order.
 | 5 | [#25](https://github.com/qprime/relay/issues/25) | shipped |
 | 6a | [#26](https://github.com/qprime/relay/issues/26) | shipped |
 | 6b | [#27](https://github.com/qprime/relay/issues/27) | shipped |
-| 7 | none needed | close-out |
+| 7 | none needed | shipped |
 
 Steps 1, 3, 3.5, and 4 needed no separate spec: 1 and 3.5 had complete analyses in
 #22 and #16, Step 3's one open decision was settled in conversation and recorded
@@ -410,7 +429,8 @@ closing keywords only after code review.
 | Visualization surfaces | 0 | 1 |
 | Independent verifier implementations | 1 | 2 |
 | Sim comm bus | zero latency, ordering-dependent | one consumer scan period, order-invariant |
-| Open issues | 5 | 2 (#23, #17) |
+| Validation chain rungs live | 3 of 4 | 4 of 5 |
+| Open issues | 5 | 3 (#23, #17, and #28, opened during v1) |
 
 ---
 
@@ -430,13 +450,22 @@ Reference only. None of this is v1.
   charge landed in Step 3.5 is phrased as one *consumer* period precisely so it
   survives this unchanged. #22's drop counter is the live signal for whether the
   new scheduler sheds messages it should not.
-- **A second plant.** `pluggable_subsystems` is claimed in four places and
-  demonstrated in zero — the registry holds one entry and both specs in `specs/`
-  are conveyor variants. A plant with a different sensor vocabulary would prove
-  the registry is a registry.
+- **[#28](https://github.com/qprime/relay/issues/28) — CAN as a third comm
+  strategy.** The real test of 6a's projection, because CAN breaks both things
+  `address` could still lean on: a broadcast frame has no `produced_by` to name
+  a sender, and arbitration latency is not one consumer scan. If
+  `(name, produced_by, consumed_by)` survives that, the abstraction was real.
+- **A second plant.** `pluggable_subsystems` now has a second comm strategy
+  behind it, but the plant registry still holds one entry and all three specs in
+  `specs/` are conveyor variants. A plant with a different sensor vocabulary
+  would prove the plant registry is a registry too.
 - **`NEVER` / `ALWAYS` assertion forms.** The grammar cannot express safety
   properties — you cannot say "the gate never opens while the press is down."
   That is the more important half of the property space for a control-systems
   verifier.
+- **A Modbus lane in the checkpoint report.** `tools/render_report.py` builds
+  `sim`, `host`, and `host-socket`; the fieldbus rung v1 added has no column.
+  The smallest item on this list and the one that most changes what a reader
+  sees, since the report is the artifact a non-expert judges the project by.
 - **Export adapters** — OpenPLC, CODESYS, PLCopen XML, Factory I/O, PLCverif.
   Named in the README as obvious directions, all absent.
