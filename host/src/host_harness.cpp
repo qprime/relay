@@ -70,7 +70,7 @@ std::expected<std::unique_ptr<HostHarness>, InitError> HostHarness::try_create(
         blocks.push_back(std::move(*validated));
     }
 
-    if (auto comm_ok = validate_comm_signals(spec, table); !comm_ok) {
+    if (auto comm_ok = validate_comm_signals(spec, table, blocks); !comm_ok) {
         return std::unexpected(InitError{comm_ok.error().message});
     }
 

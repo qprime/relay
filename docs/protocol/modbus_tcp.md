@@ -87,12 +87,22 @@ bit. Receipts are reconstructed so `CAUSES` stays answerable:
 
 | Receipt field | Source |
 |---|---|
-| `sender` | `CommSignal.produced_by` — static and spec-validated. A register's producer is declared, not guessed, which is stronger than a wire field that could lie. |
+| `sender` | `CommSignal.produced_by` — static and validated on both sides. A register's producer is declared, not guessed, which is stronger than a wire field that could lie. |
 | `seq` | the transport's own record of the last **acknowledged** write of that signal, kept on the emit side. Data that traversed the channel, recorded by the channel — not read out of the producer's live scan state. |
 | `value` | the register read. The only thing Modbus actually carries. |
 
 Nothing in the trace format, the verifier, or `CAUSES` changes. `ReceiptSlot`
 keeps its shape.
+
+**What "validated on both sides" means.** The host loads the resolved spec and
+the ST blocks as two independent documents, so `produced_by` naming one PLC
+while the send slot lives on another is a pair the generator cannot emit but a
+loader can be handed. In-process that pair is harmless — the sender is stamped
+from the PLC that ran the slot — and over Modbus it silently misattributes,
+which is a transport-dependent verdict from input nothing rejected.
+`validate_comm_signals` therefore requires every `SlotKind::Send` binding to sit
+on the PLC its signal declares as producer, and rejects a send of a signal the
+spec does not declare at all. The check runs at startup for both transports.
 
 **The pairing has a stated bias.** In-process receipts are exact because
 `CommBuffer.set` stores seq and value from one message; over a wire carrying
@@ -149,7 +159,8 @@ per-key fold order is unobservable.
   does not match what was written: all fatal transport errors. The client fails
   the in-flight call and makes every subsequent call fail fast without touching
   the socket.
-- Each request has a client-side timeout (default 1000 ms). A timeout is
+- Each request has a client-side timeout, fixed at 1000 ms — there is no flag
+  and no spec field for it, because nothing in v1 needs one. A timeout is
   **fatal, not retried**: a retry would either double-write a register or
   reorder the scan pipeline, and a fieldbus that cannot answer inside a scan
   period has already broken the pacing contract. Same rule as the plant socket.

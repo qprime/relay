@@ -132,5 +132,19 @@ TEST(ModbusCodecTest, ExpectedFrameLengthDrivesTheReadPump) {
     EXPECT_FALSE(expected_frame_length(zero_length).has_value());
 }
 
+// The length field counts the unit id plus a 253-byte maximal PDU, so 254 is
+// legal and 255 is not. Unreachable in this subset — the largest response here
+// is 4 bytes — but the bound states the protocol, not this client's usage.
+TEST(ModbusCodecTest, LengthFieldBoundIsTheProtocolMaximum) {
+    const auto header = [](std::uint16_t length) {
+        return std::vector<std::uint8_t>{0x00, 0x01, 0x00, 0x00,
+                                         static_cast<std::uint8_t>(length >> 8),
+                                         static_cast<std::uint8_t>(length & 0xFF)};
+    };
+    EXPECT_EQ(expected_frame_length(header(kMaxLengthField)).value(),
+              kLengthPrefixBytes + kMaxLengthField);
+    EXPECT_FALSE(expected_frame_length(header(kMaxLengthField + 1)).has_value());
+}
+
 }  // namespace
 }  // namespace relay_host::modbus

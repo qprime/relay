@@ -26,6 +26,9 @@ struct StubServer {
     std::optional<std::uint8_t> exception_code;
     bool die_on_first_request = false;
     bool never_answer = false;
+    std::optional<std::uint8_t> answer_with_unit_id;
+    std::optional<std::uint16_t> echo_address_instead;
+    std::optional<std::uint16_t> answer_with_transaction_id;
 };
 
 std::vector<std::uint8_t> stub_frame(std::uint16_t transaction_id, std::uint8_t unit_id,
@@ -83,9 +86,13 @@ asio::awaitable<void> run_stub(asio::ip::tcp::acceptor& acceptor, StubServer& st
             pdu = {modbus::kReadCoils, 0x01, static_cast<std::uint8_t>(stub.coil ? 1 : 0)};
         } else {
             stub.coil = value == modbus::kCoilOn;
-            pdu = {modbus::kWriteSingleCoil, body[2], body[3], body[4], body[5]};
+            const std::uint16_t echoed = stub.echo_address_instead.value_or(address);
+            pdu = {modbus::kWriteSingleCoil, static_cast<std::uint8_t>(echoed >> 8),
+                   static_cast<std::uint8_t>(echoed & 0xFF), body[4], body[5]};
         }
-        const auto response = stub_frame(transaction_id, unit_id, pdu);
+        const auto response =
+            stub_frame(stub.answer_with_transaction_id.value_or(transaction_id),
+                       stub.answer_with_unit_id.value_or(unit_id), pdu);
         co_await asio::async_write(socket, asio::buffer(response), asio::use_awaitable);
     }
 }
@@ -291,6 +298,63 @@ TEST(ModbusTransportTest, ExceptionResponseFailsTheScan) {
     EXPECT_NE(outcome->error().message.find("exception code 2"), std::string::npos)
         << outcome->error().message;
 }
+
+// The three fatal paths that turn a subtly-wrong server into a run halt rather
+// than a silently-wrong trace. Each must also latch: a transport that reported
+// the frame and kept going would fold the next answer it could not trust.
+struct MisbehavingServerCase {
+    const char* name;
+    void (*misbehave)(StubServer&);
+    const char* expected_fragment;
+};
+
+class ModbusMisbehavingServerTest
+    : public ::testing::TestWithParam<MisbehavingServerCase> {};
+
+TEST_P(ModbusMisbehavingServerTest, IsFatalAndLatches) {
+    TransportRig rig;
+    auto transport = rig.connect();
+    ASSERT_TRUE(transport.has_value()) << transport.error().message;
+    GetParam().misbehave(rig.stub);
+
+    std::vector<std::string> failures;
+    asio::co_spawn(rig.io, run_stub(rig.acceptor, rig.stub, 2), asio::detached);
+    asio::co_spawn(
+        rig.io,
+        [&]() -> asio::awaitable<void> {
+            auto first = co_await transport->emit(rig.handoff_send(true, 1));
+            if (!first) failures.push_back(first.error().message);
+            auto second = co_await transport->emit(rig.handoff_send(true, 2));
+            if (!second) failures.push_back(second.error().message);
+        },
+        asio::detached);
+    rig.io.run();
+
+    ASSERT_EQ(failures.size(), 2u);
+    EXPECT_NE(failures[0].find(GetParam().expected_fragment), std::string::npos)
+        << failures[0];
+    EXPECT_EQ(failures[1], failures[0]) << "the failure must latch, not recur";
+    EXPECT_EQ(rig.stub.requests.size(), 1u)
+        << "a failed transport must not touch the socket again";
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ProtocolViolations, ModbusMisbehavingServerTest,
+    ::testing::Values(
+        MisbehavingServerCase{"WriteEchoMismatch",
+                              [](StubServer& stub) { stub.echo_address_instead = 9; },
+                              "acknowledged for coil 9"},
+        MisbehavingServerCase{"UnitIdMismatch",
+                              [](StubServer& stub) { stub.answer_with_unit_id = 7; },
+                              "unit id 7"},
+        MisbehavingServerCase{"UnknownTransactionId",
+                              [](StubServer& stub) {
+                                  stub.answer_with_transaction_id = 4242;
+                              },
+                              "transaction id 4242"}),
+    [](const ::testing::TestParamInfo<MisbehavingServerCase>& info) {
+        return info.param.name;
+    });
 
 TEST(ModbusTransportTest, ServerDeathFailsSubsequentCallsFast) {
     TransportRig rig;

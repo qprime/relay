@@ -326,9 +326,6 @@ ModbusTcpTransport::poll(std::uint32_t plc_index) {
         polled.push_back(PolledValue{msg.signal_id, msg.value, msg.sender_plc, msg.seq});
     }
 
-    if (plc_index >= state->consumed.size()) {
-        co_return polled;
-    }
     for (const std::uint32_t signal_id : state->consumed[plc_index]) {
         const auto acked = state->acked_seq.find(signal_id);
         if (acked == state->acked_seq.end()) {

@@ -23,7 +23,7 @@ inline constexpr std::uint8_t kIllegalDataValue = 0x03;
 
 inline constexpr std::size_t kLengthPrefixBytes = 6;
 inline constexpr std::size_t kMinLengthField = 2;
-inline constexpr std::size_t kMaxLengthField = 253;
+inline constexpr std::size_t kMaxLengthField = 254;
 
 struct Request {
     std::uint16_t transaction_id;

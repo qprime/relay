@@ -48,9 +48,12 @@ bool ever_delivered(const TraceRing& trace, const SignalTable& table,
 }
 
 TEST(TestHostHarness, test_fb_outgoing_send_is_delivered) {
+    ResolvedTaskSpec spec = minimal_two_plc_spec();
+    spec.comm.signals = {
+        ResolvedSignal{"flag", "plc_a", {"plc_b"}, std::nullopt, std::nullopt}};
     const auto harness = run_harness(
-        minimal_two_plc_spec(),
-        {{"plc_a", "_send_plc_b_flag := TRUE;"}, {"plc_b", ""}}, fast_config(4));
+        std::move(spec), {{"plc_a", "_send_plc_b_flag := TRUE;"}, {"plc_b", ""}},
+        fast_config(4));
     ASSERT_FALSE(harness->run_error().has_value());
     EXPECT_TRUE(ever_delivered(harness->trace(), harness->signal_table(), 1, "flag"));
 }

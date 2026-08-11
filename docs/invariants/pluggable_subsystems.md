@@ -103,8 +103,17 @@ badly instead of two protocols correctly.
   real TCP transport under it on the C++ host — see
   [`docs/protocol/modbus_tcp.md`](../protocol/modbus_tcp.md)). Each
   strategy owns `validate_config` for its block's idiom and projects the block
-  into strategy-neutral `CommSignal`s via `signals()` — the projection is the
-  only comm shape framework code reads. The registry lives in
+  through the Protocol's two projections: `signals()` yields strategy-neutral
+  `CommSignal`s, and `bindings()` yields the `RegisterBinding`s a deployment
+  needs to address them. Those projections are the only comm shapes framework
+  code reads — no caller touches `comm_block["tags"]` or
+  `comm_block["registers"]`. Both are unconditional, never capability-probed:
+  `TagStrategy.bindings` returns `{}` because a tag map has no addresses, not
+  because the caller checked which strategy it was holding, and a `hasattr`
+  probe would be the same name-branch this invariant forbids wearing duck
+  typing. A second projection is how a strategy exposes an idiom-specific shape
+  without the framework learning the idiom; a third would be too, on the same
+  terms. The registry lives in
   `relay/strategies/` (a leaf module) rather than `relay/runtime/` so
   `relay/spec/` can import it for validation without violating
   [pipeline_direction_imports.md](pipeline_direction_imports.md).
