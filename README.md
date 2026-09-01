@@ -1,23 +1,28 @@
 # relay
 
-**Compile natural-language control intent into deterministic, verified PLC simulations — then carry the verdict onto a real deployment target.**
+Relay started with a question: how much of a PLC control design can be expressed conversationally without asking an LLM to generate or verify the final behavior?
 
-Relay takes a description of what a factory cell should do and runs it through a four-stage pipeline: intent → task spec → IEC 61131-3 Structured Text → scan-cycle simulation → trace-based verification. The task spec is a hand-authorable semantic IR; verification is plain Python against a deterministic trace log — so when a test passes, it passes for reasons you can inspect. Spec authoring is conversational and happens outside the repo; the entry point here is a validated YAML file, and everything downstream of it is a deterministic compiler.
+A natural-language description is used to author a YAML task specification. From that point forward, the pipeline is deterministic: Relay validates the specification, compiles its behavior into IEC 61131-3 Structured Text, executes it in a scan-cycle simulation, and evaluates temporal assertions against the resulting trace.
 
-The same verdict is then re-earned on a C++23 deployment host running wall-clock-paced, free-running scan cycles — the same spec, the same assertions, a harder environment.
+The same specification and assertions can then be run on a C++23 deployment host with wall-clock-paced scan cycles. This provides a second execution environment for checking whether the behavior established in deterministic simulation survives under less controlled timing.
 
-It is a spec-first framework for prototyping and verifying distributed control behavior in deterministic simulation — not a production PLC toolchain and not a safety-certification system.
+Relay is a framework for exploring and verifying distributed control behavior. It is not a production PLC toolchain or a safety-certification system.
 
 ## What this is
 
-Relay is a compiler-shaped framework for prototyping PLC control strategies without physical hardware — and without trusting an LLM to tell you whether the result is correct. The pipeline has four stages:
+The repository begins at the validated task specification, not at the natural-language conversation used to create it. The LLM may help author that specification, but no Relay module calls a model, and no model participates in verification.
 
-1. **Intent** — a natural-language description of a control task ("when a part reaches the end of belt A, hand it off to belt B"). This stage is a conversation with an agent, not a step the repo runs; the repo's job starts at the artifact it produces.
-2. **Task spec** — a YAML intermediate representation that captures the semantic meaning of the intent. Everything downstream reads from this. `python -m tools.validate_spec <spec>` is the gate: it runs the full validator and prints every issue at once, so a spec is checked before anything is generated from it.
-3. **Structured Text generation** — the task spec's `Behavior` block is a structured trigger IR (edge/level detection, debounce, latch/pulse/steady emission), which a deterministic Python compiler translates into IEC 61131-3 Structured Text function blocks, the same language real PLCs run. Every timing and edge semantic is written in the spec and inspectable there, not chosen downstream.
-4. **Simulation and verification** — the generated code executes against a plant physics model, and the resulting scan-by-scan trace is checked against temporal assertions (`EVENTUALLY`, `PRECEDES`, `CAUSES`) written in Python.
+The pipeline has four stages:
 
-The LLM is external to the pipeline and strictly upstream of the IR: it helps author the task spec, and once that spec exists, every downstream artifact — ST, simulation trace, verdict — is deterministically derived from it. No relay module calls a model. The LLM is deliberately excluded from the verification path — assertions are evaluated against a deterministic trace log, not by asking an LLM whether the output looks right.
+1. **Task specification** — A hand-authorable YAML representation of the control task, including PLCs, signals, plant connections, behavior, and assertions. The validator checks the complete specification before generation begins.
+
+2. **Structured Text generation** — A deterministic compiler translates the specification’s behavior into IEC 61131-3 Structured Text function blocks. Timing, edge detection, debounce, latching, and output behavior remain explicit in the specification.
+
+3. **Simulation** — The generated control logic runs against a plant model using conventional PLC scan cycles and configurable inter-PLC communication strategies.
+
+4. **Verification** — Plain-Python temporal assertions such as `EVENTUALLY`, `PRECEDES`, and `CAUSES` are evaluated against the scan-by-scan trace.
+
+This separation is the central design constraint: an LLM may help describe the intended system, but deterministic software produces the executable artifacts and determines whether the resulting behavior satisfies the specification.
 
 Each simulated PLC runs as an `asyncio` coroutine executing a conventional scan loop:
 
