@@ -1,6 +1,6 @@
 # relay
 
-Relay started with a question: how much of a PLC control design can be expressed conversationally without asking an LLM to generate or verify the final behavior?
+Relay draws a hard boundary between conversational control design and deterministic execution and verification.
 
 A natural-language description is used to author a YAML task specification. From that point forward, the pipeline is deterministic: Relay validates the specification, compiles its behavior into IEC 61131-3 Structured Text, executes it in a scan-cycle simulation, and evaluates temporal assertions against the resulting trace.
 
