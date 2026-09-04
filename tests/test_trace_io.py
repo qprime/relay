@@ -288,6 +288,27 @@ class TestTraceIOTypes:
         assert isinstance(record.sends["handoff_signal"].count, int)
         assert isinstance(record.recvs["sensor_a_exit"].seq, int)
 
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            {"can_id": 0x80},
+            {
+                "can_id": 0x80,
+                "frame_bits": 58,
+                "arbitration_start_ms": 10.0,
+                "completion_ms": 9.0,
+            },
+        ],
+    )
+    def test_malformed_can_send_metadata_is_rejected(self, metadata):
+        with pytest.raises(ValueError, match="CAN metadata|completes before"):
+            record_from_dict(
+                {
+                    **_MINIMAL_RECORD,
+                    "sends": {"signal": {"count": 1, "value": True, **metadata}},
+                }
+            )
+
     @pytest.mark.parametrize("value", [11.0, 0.9, True, "11", None])
     def test_non_int_send_counter_is_rejected_not_truncated(self, value):
         """int() as a load guard always succeeds, so it converts a corrupt

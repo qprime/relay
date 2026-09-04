@@ -68,10 +68,15 @@ std::expected<CommTransportVariant, TransportError> build_comm_transport(
         if (!transport) return std::unexpected(transport.error());
         return CommTransportVariant{std::move(*transport)};
     });
-    const auto factory = factories.find(spec.comm.transport.kind);
+    const std::string selected_kind = endpoint ? "modbus" : spec.comm.transport.kind;
+    if (endpoint && spec.comm.transport.kind == "can") {
+        return std::unexpected(TransportError{
+            "comm_transport: --comm-endpoint is valid only for Modbus, not CAN"});
+    }
+    const auto factory = factories.find(selected_kind);
     if (factory == factories.end()) {
         return std::unexpected(TransportError{"comm_transport: unknown transport kind '" +
-                                               spec.comm.transport.kind + "'"});
+                                               selected_kind + "'"});
     }
     return factory->second();
 }

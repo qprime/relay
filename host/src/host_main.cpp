@@ -131,11 +131,6 @@ int main(int argc, char** argv) {
 
     std::optional<relay_host::ModbusEndpoint> comm_endpoint;
     if (args->comm_endpoint.has_value()) {
-        if (spec->comm.transport.kind == "can") {
-            std::cerr << "host_main: --comm-endpoint is valid only for Modbus and cannot be used with CAN\n";
-            return 1;
-        }
-        spec->comm.transport.kind = "modbus";
         comm_endpoint = relay_host::ModbusEndpoint{*args->comm_endpoint};
         if (args->comm_unit_id.has_value()) {
             comm_endpoint->unit_id = *args->comm_unit_id;

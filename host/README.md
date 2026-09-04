@@ -142,8 +142,9 @@ host/build/relay_host_main --spec ... --st-blocks ... --out ... --plant-endpoint
 ## Comm transport selection
 
 Inter-PLC delivery still flows through `CommBus`; what moves underneath is
-selectable. The transport is a **deployment** choice made by flag, not a spec
-field — exactly as `--plant-endpoint` overrides `Plant.type` — and it resolves
+selectable. Tag and address specs default to the in-process transport and may
+select Modbus as a **deployment** choice by flag. CAN is a semantic transport
+selected by the resolved task spec because its baud rate affects verdicts. It resolves
 through [comm_transport.cpp](src/comm_transport.cpp)'s `build_comm_transport`,
 mirroring `build_plant`.
 
@@ -155,6 +156,8 @@ mirroring `build_plant`.
   Requires a spec whose comm strategy binds every signal to a coil; the
   `address` strategy does, `tag` does not, and a `tag` spec is rejected at
   startup for carrying no bindings.
+- **CAN** (`comm.transport.kind: can`) — deterministic logical-time arbitration
+  at the task's baud rate. A Modbus endpoint cannot override a CAN task.
 
 Plant routes ride the in-process channel under **both** transports: a sensor
 wired to the input terminals is sampled at scan top, not delivered over a

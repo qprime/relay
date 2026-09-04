@@ -10,6 +10,9 @@ namespace {
 std::uint64_t to_ps(double milliseconds) {
     return static_cast<std::uint64_t>(std::llround(milliseconds * 1000000000.0));
 }
+bool still_names_frame(const SeqSlot* slot, const Message& message) {
+    return slot != nullptr && slot->signal_id == message.signal_id && slot->count == message.seq;
+}
 }
 
 CanTransport::CanTransport(const ResolvedTaskSpec& spec, const SignalTable& table,
@@ -68,7 +71,7 @@ CanTransport::poll(std::uint32_t plc_index, SimClock clock) {
                 deliveries_[consumer].push_back(
                     Delivery{active_->message, active_completion_ps_});
             }
-            if (active_->trace_slot != nullptr) {
+            if (still_names_frame(active_->trace_slot, active_->message)) {
                 active_->trace_slot->completion_ms =
                     static_cast<double>(active_completion_ps_) / 1000000000.0;
             }
@@ -90,9 +93,11 @@ CanTransport::poll(std::uint32_t plc_index, SimClock clock) {
         const std::uint64_t finish = start + duration;
         available_ps_ = finish;
         active_ = *winner;
-        if (active_->trace_slot != nullptr) {
+        if (still_names_frame(active_->trace_slot, active_->message)) {
             active_->trace_slot->arbitration_start_ms =
                 static_cast<double>(start) / 1000000000.0;
+            active_->trace_slot->completion_ms =
+                static_cast<double>(finish) / 1000000000.0;
         }
         active_completion_ps_ = finish;
         pending_.erase(winner);

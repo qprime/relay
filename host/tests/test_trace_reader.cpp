@@ -268,6 +268,27 @@ TEST(TestTraceReader, test_rejects_non_object_sends_entry) {
     EXPECT_NE(trace.error().message.find("sends entry"), std::string::npos);
 }
 
+TEST(TestTraceReader, test_rejects_partial_can_send_metadata) {
+    const auto trace = read(R"({"elapsed_ms": 0.0, "io_snapshot": {}, "outputs": {})"
+                            R"(, "plc_id": "plc_a", "recvs": {}, "sends": {)"
+                            R"("tag": {"count": 1, "value": true, "can_id": 128}})"
+                            R"(, "tick": 0})"
+                            "\n");
+    ASSERT_FALSE(trace.has_value());
+    EXPECT_NE(trace.error().message.find("all CAN metadata"), std::string::npos);
+}
+
+TEST(TestTraceReader, test_rejects_can_completion_before_arbitration) {
+    const auto trace = read(R"({"elapsed_ms": 0.0, "io_snapshot": {}, "outputs": {})"
+                            R"(, "plc_id": "plc_a", "recvs": {}, "sends": {)"
+                            R"("tag": {"count": 1, "value": true, "can_id": 128,)"
+                            R"("frame_bits": 58, "arbitration_start_ms": 10, "completion_ms": 9}})"
+                            R"(, "tick": 0})"
+                            "\n");
+    ASSERT_FALSE(trace.has_value());
+    EXPECT_NE(trace.error().message.find("completes before"), std::string::npos);
+}
+
 TEST(TestTraceReader, test_rejects_non_string_plc_id) {
     const auto trace = read(R"({"elapsed_ms": 0.0, "io_snapshot": {}, "outputs": {})"
                             R"(, "plc_id": 7, "recvs": {}, "sends": {}, "tick": 0})"

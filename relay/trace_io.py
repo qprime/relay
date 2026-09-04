@@ -92,10 +92,18 @@ def _send_from_dict(key: str, data: Any) -> SendRecord:
     _check_values({key: value}, "sends")
     count = data["count"]
     _check_counters({key: count}, "sends")
+    fields = ("can_id", "frame_bits", "arbitration_start_ms", "completion_ms")
+    present = tuple(field in data for field in fields)
+    if any(present) and not all(present):
+        raise ValueError(f"sends entry {key!r} must carry all CAN metadata fields or none")
     metadata = {}
-    for field in ("can_id", "frame_bits", "arbitration_start_ms", "completion_ms"):
+    for field in fields:
         if field in data:
             metadata[field] = _check_can_metadata(field, data[field])
+    if metadata and metadata["completion_ms"] < metadata["arbitration_start_ms"]:
+        raise ValueError(
+            f"sends entry {key!r} completes before its arbitration start"
+        )
     return SendRecord(count=count, value=value, **metadata)
 
 

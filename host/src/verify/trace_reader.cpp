@@ -1,5 +1,7 @@
 #include "relay_host/verify/trace_reader.hpp"
 
+#include <array>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -134,6 +136,14 @@ Read<std::map<std::string, SendEntry, std::less<>>> read_sends(const Json& recor
         if (!count) {
             return std::unexpected(count.error());
         }
+        const std::array<std::string_view, 4> can_fields{
+            "can_id", "frame_bits", "arbitration_start_ms", "completion_ms"};
+        const std::size_t can_field_count = std::ranges::count_if(
+            can_fields, [&](std::string_view field) { return entry.contains(field); });
+        if (can_field_count != 0 && can_field_count != can_fields.size()) {
+            return unreadable("sends entry '" + name +
+                              "' must carry all CAN metadata fields or none");
+        }
         for (const std::string field : {"can_id", "frame_bits"}) {
             if (!entry.contains(field)) continue;
             const Json& metadata = entry[field];
@@ -155,6 +165,11 @@ Read<std::map<std::string, SendEntry, std::less<>>> read_sends(const Json& recor
                 return unreadable("sends entry '" + name + "' field '" + field +
                                   "' must be a finite number");
             }
+        }
+        if (can_field_count != 0 && entry["completion_ms"].get<double>() <
+                                        entry["arbitration_start_ms"].get<double>()) {
+            return unreadable("sends entry '" + name +
+                              "' completes before its arbitration start");
         }
         sends.emplace(name, SendEntry{*count, *cell});
     }
