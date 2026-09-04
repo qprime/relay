@@ -57,11 +57,13 @@ class ConveyorPlant:
     def __init__(self, plant_block: dict | None = None) -> None:
         block = plant_block or {}
         config = block.get("config", {})
-        self._config = ConveyorConfig(**{
-            k: config[k]
-            for k in ("belt_speed_m_per_s", "sensor_trigger_threshold_m", "actuator_latency_ms")
-            if k in config
-        })
+        self._config = ConveyorConfig(
+            **{
+                k: config[k]
+                for k in ("belt_speed_m_per_s", "sensor_trigger_threshold_m", "actuator_latency_ms")
+                if k in config
+            }
+        )
         self._routes: list[dict] = list(block.get("routes") or [])
         self._actuators: list[dict] = list(block.get("actuators") or [])
         self._state = PlantState.initial()
@@ -87,7 +89,9 @@ class ConveyorPlant:
         if state.belt_a_running and state.part.on_belt_a:
             advance = self._config.belt_speed_m_per_s * dt_s
             if not belt_b_running:
-                advance = min(advance, max(0.0, self.BELT_A_LENGTH_M - state.part.position_m - 0.001))
+                advance = min(
+                    advance, max(0.0, self.BELT_A_LENGTH_M - state.part.position_m - 0.001)
+                )
             new_pos += advance
         if belt_b_running and state.part.on_belt_b:
             new_pos += self._config.belt_speed_m_per_s * dt_s
@@ -140,9 +144,7 @@ class ConveyorPlant:
                     emitted.append((to_plc, as_key, current))
         return emitted
 
-    def read_actuators(
-        self, latest_outputs: Mapping[str, IOImage]
-    ) -> Mapping[str, Any]:
+    def read_actuators(self, latest_outputs: Mapping[str, IOImage]) -> Mapping[str, Any]:
         result: dict[str, Any] = {}
         for entry in self._actuators:
             from_plc = entry["from_plc"]
@@ -185,9 +187,7 @@ class ConveyorPlant:
                     )
                 to_plc = r.get("to_plc")
                 if to_plc is not None and to_plc not in plc_ids:
-                    issues.append(
-                        f"Plant.routes[{i}].to_plc {to_plc!r} is not a declared plc_id"
-                    )
+                    issues.append(f"Plant.routes[{i}].to_plc {to_plc!r} is not a declared plc_id")
                 trigger = r.get("trigger")
                 if trigger is not None and trigger not in _VALID_TRIGGERS:
                     issues.append(

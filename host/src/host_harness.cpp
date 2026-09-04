@@ -108,7 +108,7 @@ HostHarness::HostHarness(ResolvedTaskSpec spec, Config cfg, SignalTable table,
       plant_(std::move(plant)),
       bus_(ex, static_cast<std::uint32_t>(spec_.plc_ids.size()), table_.size(),
            kCommChannelCapacity),
-      transport_(InProcessTransport{&bus_}),
+      transport_(InProcessTransport{&bus_, spec_, table_}),
       trace_(trace_capacity),
       plant_send_counts_(table_.size(), 0) {
     const std::uint32_t plc_count = static_cast<std::uint32_t>(spec_.plc_ids.size());

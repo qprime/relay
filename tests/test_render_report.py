@@ -171,9 +171,7 @@ class TestRenderReport:
         assert "290.0ms" in page
         assert "gap" not in page
 
-    def test_failed_lane_renders_failed_header_and_cells(
-        self, conveyor_spec, conveyor_lanes
-    ):
+    def test_failed_lane_renders_failed_header_and_cells(self, conveyor_spec, conveyor_lanes):
         lanes = conveyor_lanes + [Lane("host", None, [])]
         page = render_detail(conveyor_spec, lanes, compile_st_blocks(conveyor_spec))
         assert "<th>host (failed)</th>" in page
@@ -206,9 +204,7 @@ class TestRenderReportMain:
         assert "lane failed to run" in page
         assert (out / "index.html").exists()
 
-    def test_missing_default_binary_renders_sim_only_and_exits_zero(
-        self, tmp_path, monkeypatch
-    ):
+    def test_missing_default_binary_renders_sim_only_and_exits_zero(self, tmp_path, monkeypatch):
         monkeypatch.setattr(render_report, "_DEFAULT_HOST_BINARY", tmp_path / "absent")
         out = tmp_path / "report"
         assert render_report.main([str(CONVEYOR_SPEC), "--out", str(out)]) == 0
@@ -227,9 +223,7 @@ class TestRenderReportMain:
             assert pdf.exists(), f"{name}.pdf was not written"
             assert pdf.read_bytes().startswith(b"%PDF"), f"{name}.pdf is not a PDF"
 
-    def test_pdf_without_weasyprint_reports_the_install_command(
-        self, tmp_path, monkeypatch
-    ):
+    def test_pdf_without_weasyprint_reports_the_install_command(self, tmp_path, monkeypatch):
         monkeypatch.setattr(render_report, "_DEFAULT_HOST_BINARY", tmp_path / "absent")
         monkeypatch.setitem(sys.modules, "weasyprint", None)
         out = tmp_path / "report"
@@ -242,8 +236,13 @@ class TestRenderReportMain:
     def test_explicit_missing_host_binary_is_an_error(self, tmp_path):
         with pytest.raises(SystemExit) as excinfo:
             render_report.main(
-                [str(CONVEYOR_SPEC), "--out", str(tmp_path / "report"),
-                 "--host-binary", str(tmp_path / "typo")]
+                [
+                    str(CONVEYOR_SPEC),
+                    "--out",
+                    str(tmp_path / "report"),
+                    "--host-binary",
+                    str(tmp_path / "typo"),
+                ]
             )
         assert excinfo.value.code == 2
         assert not (tmp_path / "report").exists()

@@ -41,9 +41,7 @@ def _includes(relative: str) -> list[str]:
 
 
 def _link_libraries(target: str) -> list[str]:
-    match = re.search(
-        rf"target_link_libraries\(\s*{target}\s+\w+\s+([^)]*)\)", CMAKE.read_text()
-    )
+    match = re.search(rf"target_link_libraries\(\s*{target}\s+\w+\s+([^)]*)\)", CMAKE.read_text())
     assert match, f"no target_link_libraries entry for {target}"
     return match.group(1).split()
 
@@ -82,17 +80,20 @@ def test_relay_core_depends_on_nothing():
     """The extraction is what lets the verifier reuse `Cell` and
     `format_json_double` without inheriting the runtime's dependency set."""
     assert re.search(r"target_link_libraries\(\s*relay_core\b", CMAKE.read_text()) is None, (
-        "relay_core must link nothing; anything it takes on, relay_verify "
-        "inherits"
+        "relay_core must link nothing; anything it takes on, relay_verify inherits"
     )
 
 
 def test_verify_sources_take_streams_not_paths():
     """Streams keep file-location policy with the caller, the same rule
     wire_format_serialization holds on the Python side."""
-    for relative in PURE_SOURCES + PURE_HEADERS + (
-        "include/relay_host/verify/trace_reader.hpp",
-        "include/relay_host/verify/verdict_writer.hpp",
+    for relative in (
+        PURE_SOURCES
+        + PURE_HEADERS
+        + (
+            "include/relay_host/verify/trace_reader.hpp",
+            "include/relay_host/verify/verdict_writer.hpp",
+        )
     ):
         text = (HOST / relative).read_text()
         assert "filesystem" not in text, f"{relative} names std::filesystem"

@@ -7,13 +7,23 @@ from typing import Any
 from relay.clock import DEFAULT_SCAN_PERIOD_MS
 from relay.generator.st import compile_st_blocks
 from relay.spec.schema import TaskSpec, load_spec
-from relay.strategies.comm import CommSignal, RegisterBinding, comm_bindings, comm_signals
+from relay.strategies.comm import (
+    CanBinding,
+    CommSignal,
+    RegisterBinding,
+    can_bindings,
+    comm_bindings,
+    comm_signals,
+    comm_transport_config,
+)
 
 DEFAULT_MAX_SCANS = 100
 
 
 def _signal_entry(
-    signal: CommSignal, bindings: dict[str, RegisterBinding]
+    signal: CommSignal,
+    bindings: dict[str, RegisterBinding],
+    can: dict[str, CanBinding],
 ) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "name": signal.name,
@@ -24,6 +34,9 @@ def _signal_entry(
     if binding is not None:
         entry["table"] = binding.table
         entry["address"] = binding.address
+    can_binding = can.get(signal.name)
+    if can_binding is not None:
+        entry["can_id"] = can_binding.can_id
     return entry
 
 
@@ -51,6 +64,11 @@ def resolved_spec_dict(
         for actuator in spec.plant_block.get("actuators") or []
     ]
     bindings = comm_bindings(spec)
+    can = can_bindings(spec)
+    transport = comm_transport_config(spec)
+    transport_entry: dict[str, Any] = {"kind": transport.kind}
+    if transport.baud_rate is not None:
+        transport_entry["baud_rate"] = transport.baud_rate
     return {
         "system_name": spec.system_name,
         "plc_ids": list(spec.plc_ids),
@@ -58,9 +76,8 @@ def resolved_spec_dict(
         "max_scans": max_scans,
         "comm": {
             "strategy": spec.comm_strategy,
-            "signals": [
-                _signal_entry(signal, bindings) for signal in comm_signals(spec)
-            ],
+            "transport": transport_entry,
+            "signals": [_signal_entry(signal, bindings, can) for signal in comm_signals(spec)],
         },
         "plant": {
             "type": spec.plant_type,
@@ -91,9 +108,7 @@ def emit_host_inputs(
         )
         + "\n"
     )
-    blocks_path.write_text(
-        json.dumps(compile_st_blocks(spec), indent=2, sort_keys=True) + "\n"
-    )
+    blocks_path.write_text(json.dumps(compile_st_blocks(spec), indent=2, sort_keys=True) + "\n")
     return resolved_path, blocks_path
 
 

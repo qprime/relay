@@ -15,9 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TAG_SPEC = REPO_ROOT / "specs" / "conveyor_handoff.yaml"
 ADDRESS_SPEC = REPO_ROOT / "specs" / "conveyor_handoff_address.yaml"
 TAG_EXPECTED = REPO_ROOT / "specs" / "expectations" / "conveyor_handoff.expected.json"
-ADDRESS_EXPECTED = (
-    REPO_ROOT / "specs" / "expectations" / "conveyor_handoff_address.expected.json"
-)
+ADDRESS_EXPECTED = REPO_ROOT / "specs" / "expectations" / "conveyor_handoff_address.expected.json"
 MAX_SCANS = 100
 
 

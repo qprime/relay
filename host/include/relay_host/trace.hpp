@@ -34,6 +34,10 @@ struct SeqSlot {
     std::uint32_t signal_id;
     std::int64_t count;
     Cell value;
+    std::optional<std::uint16_t> can_id = std::nullopt;
+    std::optional<std::uint32_t> frame_bits = std::nullopt;
+    std::optional<double> arbitration_start_ms = std::nullopt;
+    std::optional<double> completion_ms = std::nullopt;
 };
 
 struct ReceiptSlot {

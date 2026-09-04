@@ -94,7 +94,7 @@ struct FreeRunRig {
             states.emplace_back(index, &blocks[index], table.size());
         }
         bus.emplace(io.get_executor(), 2, table.size(), 64);
-        transport.emplace(InProcessTransport{&*bus});
+        transport.emplace(InProcessTransport{&*bus, spec, table});
     }
 
     PlcExecutionContext context(std::uint32_t index, std::int64_t max_scans,
@@ -146,7 +146,9 @@ TEST(TestScanExecutor, test_plcs_reach_different_ticks) {
 
 TEST(TestScanExecutor, test_send_to_exited_plc_drops_instead_of_hanging) {
     ResolvedTaskSpec spec = testing::minimal_two_plc_spec();
-    FreeRunRig rig(spec, {"_send_plc_b_flag := TRUE;", ""});
+    spec.comm.signals = {
+        ResolvedSignal{"flag", "plc_a", {"plc_b"}, std::nullopt, std::nullopt}};
+    FreeRunRig rig(spec, {"_send_flag := TRUE;", ""});
 
     const std::int64_t sender_scans = 300;
     asio::co_spawn(rig.io, run_plc_scan_loop(rig.context(0, sender_scans, 1.0)),

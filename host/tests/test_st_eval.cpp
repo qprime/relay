@@ -76,7 +76,7 @@ TEST(TestSTEval, ton_timer_done_after_preset_dt_ms) {
 }
 
 TEST(TestSTEval, send_prefix_appears_in_outgoing_not_outputs) {
-    CompiledBlock compiled = compile("_send_plc_b_handoff := TRUE;");
+    CompiledBlock compiled = compile("_send_handoff := TRUE;");
     PlcScanState state(0, &compiled.block, compiled.table.size());
     CommBuffer comm(compiled.table.size());
     ScanTraceEntry entry{};
@@ -86,21 +86,13 @@ TEST(TestSTEval, send_prefix_appears_in_outgoing_not_outputs) {
             .has_value());
     EXPECT_EQ(state.output_count, 0u);
     ASSERT_EQ(outgoing.count, 1u);
-    EXPECT_EQ(outgoing.items[0].target_plc, 1u);
     EXPECT_EQ(compiled.table.name_of(outgoing.items[0].msg.signal_id), "handoff");
 }
 
-TEST(TestSTEval, send_prefix_longest_match) {
-    const std::vector<std::string> plc_ids{"plc_b", "plc_bc"};
-    const auto longest = parse_send_target("_send_plc_bc_signal", plc_ids);
-    ASSERT_TRUE(longest.has_value());
-    EXPECT_EQ(longest->target_plc_index, 1u);
-    EXPECT_EQ(longest->key, "signal");
-    const auto shorter = parse_send_target("_send_plc_b_signal", plc_ids);
-    ASSERT_TRUE(shorter.has_value());
-    EXPECT_EQ(shorter->target_plc_index, 0u);
-    EXPECT_FALSE(parse_send_target("_send_plc_b_", plc_ids).has_value());
-    EXPECT_FALSE(parse_send_target("_send_unknown_x", plc_ids).has_value());
+TEST(TestSTEval, send_prefix_resolves_signal_suffix) {
+    EXPECT_EQ(parse_send_signal("_send_handoff"), "handoff");
+    EXPECT_FALSE(parse_send_signal("_send_").has_value());
+    EXPECT_FALSE(parse_send_signal("unknown").has_value());
 }
 
 TEST(TestSTEval, scratch_prefix_suppressed_from_outputs) {

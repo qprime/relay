@@ -11,8 +11,8 @@
 namespace relay_host {
 namespace {
 
-constexpr const char* kSendsFromPlcA = "_send_plc_b_handoff_signal := TRUE;";
-constexpr const char* kSendsFromPlcB = "_send_plc_a_handoff_signal := TRUE;";
+constexpr const char* kSendsFromPlcA = "_send_handoff_signal := TRUE;";
+constexpr const char* kSendsFromPlcB = "_send_handoff_signal := TRUE;";
 constexpr const char* kReadsOnly = "belt_b_enable := handoff_signal;";
 
 struct CommRig {

@@ -1,0 +1,42 @@
+System:
+  name: can_contention_good
+  plcs:
+    - {id: plc_critical, role: safety producer}
+    - {id: plc_background, role: background producer}
+    - {id: plc_consumer, role: receiver}
+Comm:
+  strategy: can
+  baud_rate: 10000
+  frames:
+    - {name: critical_ready, can_id: 0x080, produced_by: plc_critical, consumed_by: [plc_consumer]}
+    - {name: background_ready, can_id: 0x300, produced_by: plc_background, consumed_by: [plc_consumer]}
+Plant:
+  type: conveyor
+  config:
+    belt_speed_m_per_s: 0.5
+    sensor_trigger_threshold_m: 0.1
+    actuator_latency_ms: 0.0
+  routes:
+    - {sensor: sensor_a_exit_triggered, to_plc: plc_critical, as_key: ready_sensor, trigger: edge}
+    - {sensor: sensor_a_exit_triggered, to_plc: plc_background, as_key: ready_sensor, trigger: edge}
+  actuators: []
+Behavior:
+  plc_critical:
+    triggers:
+      - id: publish_critical
+        when: {signal: ready_sensor, edge: rising}
+        emit: {tag: critical_ready, mode: latched}
+  plc_background:
+    triggers:
+      - id: publish_background
+        when: {signal: ready_sensor, edge: rising}
+        emit: {tag: background_ready, mode: latched}
+  plc_consumer:
+    triggers:
+      - id: observe_critical
+        when: {signal: critical_ready, edge: rising}
+        emit: {output: critical_visible, mode: latched}
+Assertions:
+  - "EVENTUALLY(critical_visible, within: 500ms)"
+  - "PRECEDES(critical_ready, critical_visible, within: 30ms)"
+  - "CAUSES(critical_ready, critical_visible)"

@@ -37,7 +37,7 @@ not, and the split governs what is documented here:
 `System`, `Behavior`, and `Assertions` are identical whichever comm strategy or
 plant type a spec declares, so they have a single authority and it is this file.
 
-`Comm.tags` / `Comm.registers`, `Plant.config`, `Plant.routes`, and `Plant.actuators` are
+`Comm.tags` / `Comm.registers` / `Comm.frames`, `Plant.config`, `Plant.routes`, and `Plant.actuators` are
 **strategy-owned**: their fields are whatever the selected strategy's
 `validate_config` accepts, and a spec carries one strategy's idiom rather than
 the union of every strategy's fields
@@ -278,6 +278,31 @@ then runs on what arrived.
 truth and never sees the signal again; combined with `mode: steady` the output
 is one scan wide. This is a real combination, not a mistake — but it is the
 combination most often written by accident.
+
+## CAN communication
+
+`strategy: can` uses a positive integer `baud_rate` and a non-empty `frames`
+list. Every frame has the generic `name`, `produced_by`, and non-empty
+`consumed_by` fields plus a unique standard 11-bit `can_id` in `0..0x7ff`.
+Each publication carries one Boolean in a classic CAN 2.0A data frame. The
+lowest identifier wins simultaneous arbitration, transmission consumes logical
+`SimClock` time according to the encoded and bit-stuffed frame length, and
+consumers receive completed frames through their declared filters.
+
+```yaml fragment
+Comm:
+  strategy: can
+  baud_rate: 125000
+  frames:
+    - name: emergency_stop
+      can_id: 0x080
+      produced_by: plc_safety
+      consumed_by: [plc_motion, plc_cell]
+```
+
+All strategies generate one `_send_<signal>` assignment per publication. The
+transport, not generated ST, fans that publication out to its consumers; one
+publication therefore increments the signal sequence exactly once.
 
 ## A complete spec
 

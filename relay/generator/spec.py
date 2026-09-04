@@ -151,9 +151,7 @@ def _all_tag_names(spec: TaskSpec) -> set[str]:
     return {s.name for s in comm_signals(spec)}
 
 
-def _validate_behavior(
-    spec: TaskSpec, plc_ids: tuple[str, ...], issues: list[str]
-) -> set[str]:
+def _validate_behavior(spec: TaskSpec, plc_ids: tuple[str, ...], issues: list[str]) -> set[str]:
     emit_targets: set[str] = set()
     behavior = spec.raw.get("Behavior", {})
     if not isinstance(behavior, dict):
@@ -200,8 +198,16 @@ def _validate_behavior(
                 issues.append(f"{where} must be a mapping")
                 continue
             _validate_trigger(
-                raw, where, readable, producible, plant_signals, tag_names,
-                seen_ids, seen_targets, emit_targets, issues,
+                raw,
+                where,
+                readable,
+                producible,
+                plant_signals,
+                tag_names,
+                seen_ids,
+                seen_targets,
+                emit_targets,
+                issues,
             )
 
     return emit_targets
@@ -326,9 +332,7 @@ def _note_target(
     emit_targets.add(target)
 
 
-def _validate_assertion_coverage(
-    spec: TaskSpec, emit_targets: set[str], issues: list[str]
-) -> None:
+def _validate_assertion_coverage(spec: TaskSpec, emit_targets: set[str], issues: list[str]) -> None:
     plant_keys = _all_plant_route_keys(spec)
     tag_names = _all_tag_names(spec)
     for signal in sorted(spec.assertion_signals):

@@ -464,8 +464,7 @@ class TestCausesSemantics:
         )
         result = evaluate_assertion("CAUSES(tag, effect)", trace)
         assert not result.passed, (
-            "a coincidental seq collision with an unrelated sender must not "
-            "manufacture attribution"
+            "a coincidental seq collision with an unrelated sender must not manufacture attribution"
         )
         assert "records no sender" in result.reason
 

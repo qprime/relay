@@ -255,13 +255,22 @@ def _eval_expr(expr: str, ctx: STContext) -> Any:
 
 
 def _compare(lhs: Any, rhs: Any, op: str) -> bool:
-    ops = {">=": lambda a, b: a >= b, "<=": lambda a, b: a <= b,
-           "<>": lambda a, b: a != b, ">": lambda a, b: a > b,
-           "<": lambda a, b: a < b, "=": lambda a, b: a == b}
+    ops = {
+        ">=": lambda a, b: a >= b,
+        "<=": lambda a, b: a <= b,
+        "<>": lambda a, b: a != b,
+        ">": lambda a, b: a > b,
+        "<": lambda a, b: a < b,
+        "=": lambda a, b: a == b,
+    }
     return ops[op](lhs, rhs)
 
 
 def _arith(lhs: Any, rhs: Any, op: str) -> Any:
-    ops = {"+": lambda a, b: a + b, "-": lambda a, b: a - b,
-           "*": lambda a, b: a * b, "/": lambda a, b: a / b}
+    ops = {
+        "+": lambda a, b: a + b,
+        "-": lambda a, b: a - b,
+        "*": lambda a, b: a * b,
+        "/": lambda a, b: a / b,
+    }
     return ops[op](lhs, rhs)

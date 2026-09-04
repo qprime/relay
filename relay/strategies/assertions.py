@@ -24,9 +24,7 @@ class ParsedAssertion:
     within_ms: float | None = None
 
 
-def causes_issues(
-    assertions: list, signals: tuple[CommSignal, ...]
-) -> list[str]:
+def causes_issues(assertions: list, signals: tuple[CommSignal, ...]) -> list[str]:
     """Rules CAUSES needs beyond grammar: the cause must be a declared comm
     signal, and a signal cannot cause itself.
 
@@ -87,9 +85,7 @@ def parse_assertion(s: str) -> ParsedAssertion | None:
         return (
             None
             if budget is None
-            else ParsedAssertion(
-                form="EVENTUALLY", signals=(m.group(1),), within_ms=budget
-            )
+            else ParsedAssertion(form="EVENTUALLY", signals=(m.group(1),), within_ms=budget)
         )
     m = PRECEDES_RE.fullmatch(s)
     if m:

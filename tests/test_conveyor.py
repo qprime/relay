@@ -33,9 +33,7 @@ class TestConveyorHandoff:
     def test_handoff_signal_precedes_belt_b_enable(self):
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        result = evaluate_assertion(
-            "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace
-        )
+        result = evaluate_assertion("PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace)
         assert result.passed, result.reason
 
     def test_conveyor_precedes_gap_is_one_consumer_scan(self):
@@ -43,9 +41,7 @@ class TestConveyorHandoff:
         handoff costs exactly the 10ms scan period rather than nothing."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        result = evaluate_assertion(
-            "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace
-        )
+        result = evaluate_assertion("PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace)
         assert result.observed_gap_ms == 10.0, result.reason
 
     def test_part_never_arrives_when_sensor_a_never_triggers(self):
@@ -83,15 +79,11 @@ class TestCausesConveyor:
         Attribution must land on the activating message, not scan 0's False one."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        first_send = next(
-            r for r in trace.for_plc("plc_a") if "handoff_signal" in r.sends
-        )
+        first_send = next(r for r in trace.for_plc("plc_a") if "handoff_signal" in r.sends)
         assert first_send.clock.tick == 0, "expected a send on the very first scan"
         assert not first_send.io.get("handoff_signal"), "scan 0 send should be False"
 
-        acting = next(
-            r for r in trace.for_plc("plc_b") if r.outputs.get("belt_b_enable")
-        )
+        acting = next(r for r in trace.for_plc("plc_b") if r.outputs.get("belt_b_enable"))
         receipt = acting.recvs["handoff_signal"]
         result = evaluate_assertion("CAUSES(handoff_signal, belt_b_enable)", trace)
         assert result.passed, result.reason
@@ -153,10 +145,7 @@ class TestCausesDeterminism:
         spec, blocks = _load_spec_and_blocks()
         runs = [asyncio.run(simulate(spec, blocks)) for _ in range(2)]
         counters = [
-            [
-                (r.plc_id, r.clock.tick, dict(r.sends), dict(r.recvs))
-                for r in trace.records
-            ]
+            [(r.plc_id, r.clock.tick, dict(r.sends), dict(r.recvs)) for r in trace.records]
             for trace in runs
         ]
         assert counters[0] == counters[1]
@@ -230,9 +219,7 @@ class TestCausesSpecValidation:
         assert "not a declared comm signal" in str(exc.value)
 
     def test_causes_self_reference_rejected_at_load(self, tmp_path):
-        path = self._spec_text_with(
-            "CAUSES(handoff_signal, handoff_signal)", tmp_path
-        )
+        path = self._spec_text_with("CAUSES(handoff_signal, handoff_signal)", tmp_path)
         with pytest.raises(ValueError) as exc:
             load_spec(path)
         assert "cannot cause itself" in str(exc.value)
@@ -256,8 +243,7 @@ class TestCommTagLatencyIsMeasurable:
         import yaml
 
         raw = yaml.safe_load(
-            (Path(__file__).parent.parent / "specs" / "conveyor_pulse_release.yaml")
-            .read_text()
+            (Path(__file__).parent.parent / "specs" / "conveyor_pulse_release.yaml").read_text()
         )
         raw["System"]["name"] = f"consumer_debounced_{debounce_ms}"
         raw["Behavior"]["plc_a"]["triggers"][0]["when"].pop("debounce_ms", None)
@@ -286,18 +272,14 @@ class TestCommTagLatencyIsMeasurable:
         said nothing happened."""
         spec = self._consumer_debounced(tmp_path, 30)
         trace = asyncio.run(simulate(spec, compile_st_blocks(spec)))
-        sends = [
-            r for r in trace.for_plc("plc_a") if "release_request" in r.sends
-        ]
+        sends = [r for r in trace.for_plc("plc_a") if "release_request" in r.sends]
         assert not sends[0].sends["release_request"].value, (
             "fixture must include false sends before the real event"
         )
         result = evaluate_assertion(
             "PRECEDES(release_request, belt_b_enable, within: 500ms)", trace
         )
-        assert result.observed_gap_ms != 130.0, (
-            "gap anchored to the producer's first False send"
-        )
+        assert result.observed_gap_ms != 130.0, "gap anchored to the producer's first False send"
         assert result.observed_gap_ms == 30.0
 
     def test_conveyor_handoff_gap_is_the_charged_delivery_latency(self):
@@ -306,12 +288,11 @@ class TestCommTagLatencyIsMeasurable:
         Before #16 this read 0.0 because the bus charged nothing."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        result = evaluate_assertion(
-            "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace
-        )
+        result = evaluate_assertion("PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace)
         assert result.observed_gap_ms == 10.0
         first_truthy = next(
-            r for r in trace.for_plc("plc_a")
+            r
+            for r in trace.for_plc("plc_a")
             if "handoff_signal" in r.sends and r.sends["handoff_signal"].value
         )
         assert first_truthy.clock.elapsed_ms == 100.0
@@ -323,12 +304,8 @@ class TestCommTagLatencyIsMeasurable:
         The endpoint must come from the producer's sends instead."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        assert all(
-            "handoff_signal" not in r.outputs.values for r in trace.for_plc("plc_a")
-        )
-        assert any(
-            "handoff_signal" in r.sends for r in trace.for_plc("plc_a")
-        )
+        assert all("handoff_signal" not in r.outputs.values for r in trace.for_plc("plc_a"))
+        assert any("handoff_signal" in r.sends for r in trace.for_plc("plc_a"))
         assert all("handoff_signal" not in r.sends for r in trace.for_plc("plc_b"))
 
     def test_producer_side_pair_no_longer_resolves_cross_plc(self):
@@ -338,22 +315,17 @@ class TestCommTagLatencyIsMeasurable:
         cross-PLC delivery instead."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        result = evaluate_assertion(
-            "PRECEDES(sensor_a_exit, handoff_signal, within: 500ms)", trace
-        )
-        arrival = next(
-            r for r in trace.for_plc("plc_a") if r.io.get("sensor_a_exit")
-        )
+        result = evaluate_assertion("PRECEDES(sensor_a_exit, handoff_signal, within: 500ms)", trace)
+        arrival = next(r for r in trace.for_plc("plc_a") if r.io.get("sensor_a_exit"))
         emission = next(
-            r for r in trace.for_plc("plc_a")
+            r
+            for r in trace.for_plc("plc_a")
             if "handoff_signal" in r.sends and r.sends["handoff_signal"].value
         )
         assert arrival.clock.elapsed_ms == emission.clock.elapsed_ms
         assert result.observed_gap_ms == 0.0
 
-    def test_multi_consumer_send_stores_high_water_count_and_last_value(
-        self, tmp_path
-    ):
+    def test_multi_consumer_send_stores_high_water_count_and_last_value(self, tmp_path):
         """A tag with two consumers emits two messages of one key per scan, and
         `sends` holds one entry: the scan's high-water count and the last value
         written. Pinned rather than inherited from CAUSES's comment, since the
@@ -383,11 +355,9 @@ class TestCommTagLatencyIsMeasurable:
             for r in trace.for_plc("plc_a")
             if "handoff_signal" in r.sends
         ]
-        assert counts[:2] == [2, 4], "two consumers means two sends per scan"
+        assert counts[:2] == [1, 2], "one publication increments once per scan"
 
-        result = evaluate_assertion(
-            "PRECEDES(handoff_signal, c_belt_enable, within: 500ms)", trace
-        )
+        result = evaluate_assertion("PRECEDES(handoff_signal, c_belt_enable, within: 500ms)", trace)
         assert result.passed, result.reason
         assert result.observed_gap_ms == 10.0
 
@@ -398,15 +368,14 @@ class TestCommTagLatencyIsMeasurable:
         divergence becomes observable once the bus charges delivery latency."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        eventually = evaluate_assertion(
-            "EVENTUALLY(handoff_signal, within: 500ms)", trace
-        )
+        eventually = evaluate_assertion("EVENTUALLY(handoff_signal, within: 500ms)", trace)
         precedes = evaluate_assertion(
             "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", trace
         )
         assert eventually.passed and precedes.passed
         emission = next(
-            r for r in trace.for_plc("plc_a")
+            r
+            for r in trace.for_plc("plc_a")
             if "handoff_signal" in r.sends and r.sends["handoff_signal"].value
         )
         assert f"true at {emission.clock.elapsed_ms:.1f}ms" in eventually.reason
@@ -434,8 +403,7 @@ class TestBusChargesDeliveryLatency:
         lags = [
             r.clock.tick - sends[r.recvs["handoff_signal"].seq]
             for r in trace.for_plc("plc_b")
-            if "handoff_signal" in r.recvs
-            and r.recvs["handoff_signal"].seq in sends
+            if "handoff_signal" in r.recvs and r.recvs["handoff_signal"].seq in sends
         ]
         assert lags, "no receipt was matched to a send"
         return set(lags)
@@ -466,9 +434,7 @@ class TestBusChargesDeliveryLatency:
         assertion = "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)"
 
         forward_spec, forward_blocks = _load_spec_and_blocks()
-        forward = evaluate_assertion(
-            assertion, asyncio.run(simulate(forward_spec, forward_blocks))
-        )
+        forward = evaluate_assertion(assertion, asyncio.run(simulate(forward_spec, forward_blocks)))
         rev_spec = TaskSpec(raw=raw)
         rev = evaluate_assertion(
             assertion,
@@ -483,9 +449,7 @@ class TestBusChargesDeliveryLatency:
         deliver at the consumer's next drain, as before."""
         spec, blocks = _load_spec_and_blocks()
         trace = asyncio.run(simulate(spec, blocks))
-        first_sensor = next(
-            r for r in trace.for_plc("plc_a") if r.io.get("sensor_a_exit")
-        )
+        first_sensor = next(r for r in trace.for_plc("plc_a") if r.io.get("sensor_a_exit"))
         assert first_sensor.clock.tick == 10, (
             "a charged plant route would push the sensor a scan later"
         )

@@ -111,9 +111,7 @@ def load_jsonl(stream: TextIO) -> dict[str, list[Trigger]]:
         except json.JSONDecodeError as exc:
             raise ValueError(f"malformed JSON on line {lineno}: {exc.msg}") from exc
         if not isinstance(data, dict):
-            raise ValueError(
-                f"line {lineno} is a JSON {type(data).__name__}, not an object"
-            )
+            raise ValueError(f"line {lineno} is a JSON {type(data).__name__}, not an object")
         try:
             plc_id, trigger = trigger_from_dict(data)
         except KeyError as exc:

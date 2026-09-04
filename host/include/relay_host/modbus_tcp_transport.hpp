@@ -30,9 +30,9 @@ class ModbusTcpTransport {
         const SignalTable& table, CommBus& bus, Executor ex);
 
     [[nodiscard]] asio::awaitable<std::expected<void, TransportError>> emit(
-        const OutgoingMessage& message);
+        const OutgoingMessage& message, SimClock clock = SimClock::zero());
     [[nodiscard]] asio::awaitable<std::expected<std::vector<PolledValue>, TransportError>>
-    poll(std::uint32_t plc_index);
+    poll(std::uint32_t plc_index, SimClock clock = SimClock::zero());
 
  private:
     struct Binding {

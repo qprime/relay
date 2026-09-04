@@ -31,6 +31,8 @@ line-length = 100
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
 exclude = ["**/node_modules", "**/__pycache__", "**/.*", "host/build"]
 
 [dependency-groups]

@@ -49,9 +49,7 @@ class TestPlantSession:
                 "prior": None,
             },
         )
-        assert result == {
-            "routed": [{"to_plc": "plc_a", "as_key": "sensor_a_exit", "value": True}]
-        }
+        assert result == {"routed": [{"to_plc": "plc_a", "as_key": "sensor_a_exit", "value": True}]}
 
     def test_route_to_plcs_edge_suppressed_when_prior_already_true(self):
         session = _conveyor_session()
@@ -99,21 +97,31 @@ class TestPlantServerWire:
         return asyncio.run(scenario())
 
     def test_responses_echo_request_ids(self):
-        responses = self._run_exchange([
-            json.dumps({"id": 7, "method": "step", "params": {"dt_ms": 10.0, "actuators": {}}}),
-            json.dumps({"id": 9, "method": "route_to_plcs", "params": {
-                "current": {"sensor_a_exit_triggered": False, "part_at_b": False},
-                "prior": None,
-            }}),
-        ])
+        responses = self._run_exchange(
+            [
+                json.dumps({"id": 7, "method": "step", "params": {"dt_ms": 10.0, "actuators": {}}}),
+                json.dumps(
+                    {
+                        "id": 9,
+                        "method": "route_to_plcs",
+                        "params": {
+                            "current": {"sensor_a_exit_triggered": False, "part_at_b": False},
+                            "prior": None,
+                        },
+                    }
+                ),
+            ]
+        )
         assert [json.loads(r)["id"] for r in responses] == [7, 9]
         assert all("result" in json.loads(r) for r in responses)
 
     def test_dispatch_error_is_error_response_not_disconnect(self):
-        responses = self._run_exchange([
-            json.dumps({"id": 3, "method": "reboot", "params": {}}),
-            json.dumps({"id": 4, "method": "step", "params": {"dt_ms": 10.0, "actuators": {}}}),
-        ])
+        responses = self._run_exchange(
+            [
+                json.dumps({"id": 3, "method": "reboot", "params": {}}),
+                json.dumps({"id": 4, "method": "step", "params": {"dt_ms": 10.0, "actuators": {}}}),
+            ]
+        )
         first = json.loads(responses[0])
         assert first["id"] == 3
         assert "unknown method" in first["error"]["message"]
@@ -183,9 +191,12 @@ class TestHostAgainstPythonPlantServer:
             subprocess.run(
                 [
                     str(HOST_BINARY),
-                    "--spec", str(resolved_path),
-                    "--st-blocks", str(blocks_path),
-                    "--out", str(trace_path),
+                    "--spec",
+                    str(resolved_path),
+                    "--st-blocks",
+                    str(blocks_path),
+                    "--out",
+                    str(trace_path),
                 ],
                 check=True,
                 capture_output=True,

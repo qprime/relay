@@ -13,9 +13,7 @@ ALLOWED_VALUE_TYPES = (bool, int, float)
 
 def _check_values(values: Any, where: str) -> dict[str, Any]:
     if not isinstance(values, dict):
-        raise TypeError(
-            f"{where} is a {type(values).__name__}, not an object of signal values"
-        )
+        raise TypeError(f"{where} is a {type(values).__name__}, not an object of signal values")
     for key, value in values.items():
         if not isinstance(value, ALLOWED_VALUE_TYPES):
             raise TypeError(
@@ -33,17 +31,14 @@ def _check_values(values: Any, where: str) -> dict[str, Any]:
 def _check_str(value: Any, field: str) -> Any:
     if not isinstance(value, str):
         raise TypeError(
-            f"field {field!r} has unserializable type {type(value).__name__}; "
-            "expected str"
+            f"field {field!r} has unserializable type {type(value).__name__}; expected str"
         )
     return value
 
 
 def _check_counters(counters: Any, where: str) -> dict[str, Any]:
     if not isinstance(counters, dict):
-        raise TypeError(
-            f"{where} is a {type(counters).__name__}, not an object of send counts"
-        )
+        raise TypeError(f"{where} is a {type(counters).__name__}, not an object of send counts")
     for key, value in counters.items():
         if isinstance(value, bool) or not isinstance(value, int):
             raise TypeError(
@@ -56,7 +51,35 @@ def _check_counters(counters: Any, where: str) -> dict[str, Any]:
 def _send_to_dict(key: str, send: SendRecord) -> dict[str, Any]:
     _check_values({key: send.value}, "sends")
     _check_counters({key: send.count}, "sends")
-    return {"count": send.count, "value": send.value}
+    result = {"count": send.count, "value": send.value}
+    metadata = {
+        "can_id": send.can_id,
+        "frame_bits": send.frame_bits,
+        "arbitration_start_ms": send.arbitration_start_ms,
+        "completion_ms": send.completion_ms,
+    }
+    for field, value in metadata.items():
+        if value is not None:
+            _check_can_metadata(field, value)
+            result[field] = value
+    return result
+
+
+def _check_can_metadata(field: str, value: Any) -> Any:
+    if field in ("can_id", "frame_bits"):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"field {field!r} must be an integer")
+        if (
+            value < 0
+            or (field == "can_id" and value > 0x7FF)
+            or (field == "frame_bits" and value == 0)
+        ):
+            raise ValueError(f"field {field!r} is out of range: {value!r}")
+    elif isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"field {field!r} must be a finite number")
+    elif not math.isfinite(value):
+        raise ValueError(f"field {field!r} must be finite")
+    return value
 
 
 def _send_from_dict(key: str, data: Any) -> SendRecord:
@@ -69,14 +92,16 @@ def _send_from_dict(key: str, data: Any) -> SendRecord:
     _check_values({key: value}, "sends")
     count = data["count"]
     _check_counters({key: count}, "sends")
-    return SendRecord(count=count, value=value)
+    metadata = {}
+    for field in ("can_id", "frame_bits", "arbitration_start_ms", "completion_ms"):
+        if field in data:
+            metadata[field] = _check_can_metadata(field, data[field])
+    return SendRecord(count=count, value=value, **metadata)
 
 
 def _check_object(data: Any, where: str) -> dict[str, Any]:
     if not isinstance(data, dict):
-        raise TypeError(
-            f"{where} is a {type(data).__name__}, not an object keyed by signal name"
-        )
+        raise TypeError(f"{where} is a {type(data).__name__}, not an object keyed by signal name")
     return data
 
 
@@ -87,13 +112,8 @@ def record_to_dict(record: ScanRecord) -> dict[str, Any]:
         "elapsed_ms": record.clock.elapsed_ms,
         "io_snapshot": _check_values(dict(record.io.values), "io_snapshot"),
         "outputs": _check_values(dict(record.outputs.values), "outputs"),
-        "sends": {
-            key: _send_to_dict(key, send) for key, send in record.sends.items()
-        },
-        "recvs": {
-            key: _receipt_to_dict(key, receipt)
-            for key, receipt in record.recvs.items()
-        },
+        "sends": {key: _send_to_dict(key, send) for key, send in record.sends.items()},
+        "recvs": {key: _receipt_to_dict(key, receipt) for key, receipt in record.recvs.items()},
     }
 
 
@@ -128,13 +148,9 @@ def record_from_dict(data: dict[str, Any]) -> ScanRecord:
         clock=SimClock(tick=int(data["tick"]), elapsed_ms=float(data["elapsed_ms"])),
         io=IOImage(values=_check_values(data["io_snapshot"], "io_snapshot")),
         outputs=IOImage(values=_check_values(data["outputs"], "outputs")),
-        sends={
-            k: _send_from_dict(k, v)
-            for k, v in _check_object(data["sends"], "sends").items()
-        },
+        sends={k: _send_from_dict(k, v) for k, v in _check_object(data["sends"], "sends").items()},
         recvs={
-            k: _receipt_from_dict(k, v)
-            for k, v in _check_object(data["recvs"], "recvs").items()
+            k: _receipt_from_dict(k, v) for k, v in _check_object(data["recvs"], "recvs").items()
         },
     )
 
@@ -154,9 +170,7 @@ def load_jsonl(stream: TextIO) -> TraceLog:
         except json.JSONDecodeError as exc:
             raise ValueError(f"malformed JSON on line {lineno}: {exc.msg}") from exc
         if not isinstance(data, dict):
-            raise ValueError(
-                f"line {lineno} is a JSON {type(data).__name__}, not an object"
-            )
+            raise ValueError(f"line {lineno} is a JSON {type(data).__name__}, not an object")
         try:
             trace.record(record_from_dict(data))
         except KeyError as exc:

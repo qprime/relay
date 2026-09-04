@@ -52,7 +52,7 @@ TEST(TestHostHarness, test_fb_outgoing_send_is_delivered) {
     spec.comm.signals = {
         ResolvedSignal{"flag", "plc_a", {"plc_b"}, std::nullopt, std::nullopt}};
     const auto harness = run_harness(
-        std::move(spec), {{"plc_a", "_send_plc_b_flag := TRUE;"}, {"plc_b", ""}},
+        std::move(spec), {{"plc_a", "_send_flag := TRUE;"}, {"plc_b", ""}},
         fast_config(4));
     ASSERT_FALSE(harness->run_error().has_value());
     EXPECT_TRUE(ever_delivered(harness->trace(), harness->signal_table(), 1, "flag"));
@@ -136,6 +136,7 @@ TEST(HostHarnessTest, RejectsResolvedSpecWithLegacyTagsKey) {
         {"max_scans", 10},
         {"comm",
          {{"strategy", "tag"},
+          {"transport", {{"kind", "in_process"}}},
           {"tags",
            {{{"name", "handoff_signal"},
              {"produced_by", "plc_a"},

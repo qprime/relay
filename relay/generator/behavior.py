@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from relay.spec.schema import TaskSpec
-from relay.strategies.comm import comm_signals
 from relay.strategies.st_syntax import SCRATCH_PREFIX, SEND_PREFIX
 
 
@@ -34,20 +33,15 @@ class Trigger:
 
 
 def compile_plc(triggers: list[Trigger], spec: TaskSpec) -> str:
-    consumers = _tag_consumers(spec)
-    stanzas = [_compile_trigger(t, consumers) for t in triggers]
+    stanzas = [_compile_trigger(t) for t in triggers]
     return "\n".join(stanzas)
 
 
-def _tag_consumers(spec: TaskSpec) -> dict[str, list[str]]:
-    return {s.name: list(s.consumed_by) for s in comm_signals(spec)}
-
-
-def _compile_trigger(trigger: Trigger, consumers: dict[str, list[str]]) -> str:
+def _compile_trigger(trigger: Trigger) -> str:
     lines: list[str] = [f"(* trigger: {trigger.id} *)"]
     source = _emit_debounce(trigger, lines)
     condition = _emit_edge(trigger, source, lines)
-    _emit_target(trigger, condition, consumers, lines)
+    _emit_target(trigger, condition, lines)
     return "\n".join(lines)
 
 
@@ -77,9 +71,7 @@ def _emit_edge(trigger: Trigger, source: str, lines: list[str]) -> str:
     return detected
 
 
-def _emit_target(
-    trigger: Trigger, condition: str, consumers: dict[str, list[str]], lines: list[str]
-) -> None:
+def _emit_target(trigger: Trigger, condition: str, lines: list[str]) -> None:
     mode = trigger.emit.mode
     tid = trigger.id
 
@@ -103,15 +95,14 @@ def _emit_target(
         lines.append("END_IF;")
         value = pulse
 
-    for name in _target_names(trigger, consumers):
+    for name in _target_names(trigger):
         lines.append(f"{name} := {value};")
 
 
-def _target_names(trigger: Trigger, consumers: dict[str, list[str]]) -> list[str]:
+def _target_names(trigger: Trigger) -> list[str]:
     if trigger.emit.target_kind == "output":
         return [trigger.emit.target]
-    tag = trigger.emit.target
-    return [f"{SEND_PREFIX}{consumer}_{tag}" for consumer in consumers.get(tag, [])]
+    return [f"{SEND_PREFIX}{trigger.emit.target}"]
 
 
 def parse_triggers(behavior_entry: dict[str, Any]) -> list[Trigger]:

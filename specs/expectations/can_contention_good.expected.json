@@ -1,0 +1,29 @@
+{
+  "assertions": [
+    {
+      "observed_gap_ms": null,
+      "passed": true,
+      "text": "EVENTUALLY(critical_visible, within: 500ms)",
+      "witness": "signal 'critical_visible' true at 120.0ms",
+      "witness_ms": 120.0
+    },
+    {
+      "observed_gap_ms": 20.0,
+      "passed": true,
+      "text": "PRECEDES(critical_ready, critical_visible, within: 30ms)",
+      "witness": "'critical_ready' at 100.0ms precedes 'critical_visible' at 120.0ms (gap 20.0ms, budget 30.0ms)",
+      "witness_ms": null
+    },
+    {
+      "observed_gap_ms": null,
+      "passed": true,
+      "text": "CAUSES(critical_ready, critical_visible)",
+      "witness": "'critical_visible' true on 'plc_consumer' at tick 12 is caused by 'critical_ready' seq 12 sent by 'plc_critical' at tick 11 and received at tick 12",
+      "witness_ms": null
+    }
+  ],
+  "generated_from": "specs/can_contention_good.yaml",
+  "max_scans": 100,
+  "scan_period_ms": 10.0,
+  "system_name": "can_contention_good"
+}

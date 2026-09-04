@@ -94,7 +94,7 @@ Assertions:
   - "CAUSES(handoff_signal, belt_b_enable)"
 ```
 
-The `Comm` block selects a comm strategy (`tag` or `address`; see below) and declares the inter-PLC signals it routes in that strategy's idiom. The `Plant` block selects a plant model (`conveyor` is the only one the Python registry holds today) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching. The C++ host keeps its own plant registry, which adds `remote_socket` for a plant in another process; that is a host-side selection, not a `Plant.type` a task spec can declare (see [host/README.md](host/README.md)).
+The `Comm` block selects a comm strategy (`tag`, `address`, or `can`; see below) and declares the inter-PLC signals it routes in that strategy's idiom. The `Plant` block selects a plant model (`conveyor` is the only one the Python registry holds today) and wires named plant sensors to PLC input keys and PLC output keys to plant actuators. Both `Comm.strategy` and `Plant.type` are registry lookups, so adding a new variant is additive — no framework branching. The C++ host keeps its own plant registry, which adds `remote_socket` for a plant in another process; that is a host-side selection, not a `Plant.type` a task spec can declare (see [host/README.md](host/README.md)).
 
 Full field-by-field syntax, including the rules the validator enforces and the ones it can't, is in [docs/task_spec_syntax.md](docs/task_spec_syntax.md); the tables below are the summary.
 
@@ -120,7 +120,7 @@ _scratch_prev_handoff_on_exit := sensor_a_exit;
 IF _scratch_edge_handoff_on_exit THEN
 _scratch_latched_handoff_on_exit := TRUE;
 END_IF;
-_send_plc_b_handoff_signal := _scratch_latched_handoff_on_exit;
+_send_handoff_signal := _scratch_latched_handoff_on_exit;
 ```
 
 `_scratch_*` variables are compiler bookkeeping for edge and latch state. They are suppressed from the output image, so they never reach the trace or the verifier.
@@ -157,7 +157,7 @@ Four invariants make the simulation deterministic and the verification trustwort
 |-----------|-----------|
 | External clock | `SimClock` is injected into every scan. No PLC reads the wall clock. |
 | Immutable I/O image | The snapshot taken at scan-top is frozen for the duration of execution — inputs can't shift mid-scan. |
-| No shared PLC state | All coordination flows through `CommBus` via a pluggable comm strategy with per-scan message promotion. Both strategies (`tag`, `address`) project their comm block to the same producer/consumer signals; under `address`, the host can put real Modbus TCP beneath the register map without either strategy changing. |
+| No shared PLC state | All coordination flows through a pluggable transport with scan-top promotion. `tag`, `address`, and `can` project to the same producer/consumer signals; CAN adds deterministic shared-bandwidth arbitration, while `address` can deploy over Modbus TCP. |
 | Trace-based verification | Every scan's I/O snapshot, outputs, sends, and receipts are recorded. Assertions evaluate against the log, not a live system. |
 
 If a handoff works in the trace, it works because the messages actually moved through the comm bus at the right scan boundaries.

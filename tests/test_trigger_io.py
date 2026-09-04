@@ -279,9 +279,7 @@ class TestTriggerIOLoadGuard:
             _load_from_text(text + "\n")
 
     def test_int_valued_fields_are_not_coerced_on_load(self):
-        loaded = _load_from_text(
-            json.dumps({**_MINIMAL_LINE, "debounce_ms": 30}) + "\n"
-        )
+        loaded = _load_from_text(json.dumps({**_MINIMAL_LINE, "debounce_ms": 30}) + "\n")
         restored = loaded["plc_a"][0].when.debounce_ms
         assert restored == 30
         assert isinstance(restored, int) and not isinstance(restored, bool)

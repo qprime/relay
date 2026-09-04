@@ -281,7 +281,7 @@ ModbusTcpTransport::call(std::uint8_t function, std::uint16_t address,
 }
 
 asio::awaitable<std::expected<void, TransportError>> ModbusTcpTransport::emit(
-    const OutgoingMessage& message) {
+    const OutgoingMessage& message, SimClock) {
     const std::shared_ptr<State> state = state_;
     const std::uint32_t signal_id = message.msg.signal_id;
     const auto binding = state->bindings.find(signal_id);
@@ -313,7 +313,7 @@ asio::awaitable<std::expected<void, TransportError>> ModbusTcpTransport::emit(
 }
 
 asio::awaitable<std::expected<std::vector<PolledValue>, TransportError>>
-ModbusTcpTransport::poll(std::uint32_t plc_index) {
+ModbusTcpTransport::poll(std::uint32_t plc_index, SimClock) {
     const std::shared_ptr<State> state = state_;
     std::vector<PolledValue> polled;
     while (true) {

@@ -4,11 +4,14 @@
 #include <optional>
 #include <span>
 #include <vector>
+#include <utility>
 
 #include "relay_host/async.hpp"
 #include "relay_host/io_image.hpp"
 
 namespace relay_host {
+
+struct SeqSlot;
 
 struct Message {
     std::uint32_t signal_id;
@@ -23,8 +26,12 @@ struct Receipt {
 };
 
 struct OutgoingMessage {
-    std::uint32_t target_plc;
     Message msg;
+    SeqSlot* trace_slot = nullptr;
+
+    OutgoingMessage() : msg{} {}
+    explicit OutgoingMessage(Message message) : msg(std::move(message)) {}
+    OutgoingMessage(std::uint32_t, Message message) : msg(std::move(message)) {}
 };
 
 class CommBuffer {

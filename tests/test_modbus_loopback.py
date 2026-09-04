@@ -60,9 +60,7 @@ class _ModbusServer:
 
     def requests(self) -> list[dict]:
         return [
-            json.loads(line)
-            for line in self._log_path.read_text().splitlines()
-            if line.strip()
+            json.loads(line) for line in self._log_path.read_text().splitlines() if line.strip()
         ]
 
     def close(self) -> None:
@@ -76,9 +74,12 @@ def _run_host(
     resolved_path, blocks_path = _emit(spec_path, out_dir)
     command = [
         str(HOST_BINARY),
-        "--spec", str(resolved_path),
-        "--st-blocks", str(blocks_path),
-        "--out", str(out_dir / f"trace_{tag}.jsonl"),
+        "--spec",
+        str(resolved_path),
+        "--st-blocks",
+        str(blocks_path),
+        "--out",
+        str(out_dir / f"trace_{tag}.jsonl"),
     ]
     if comm_port is not None:
         command += ["--comm-endpoint", f"127.0.0.1:{comm_port}"]

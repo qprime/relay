@@ -43,9 +43,12 @@ def cpp_trace(spec_path, tmp_path_factory):
     subprocess.run(
         [
             str(HOST_BINARY),
-            "--spec", str(resolved_path),
-            "--st-blocks", str(blocks_path),
-            "--out", str(trace_path),
+            "--spec",
+            str(resolved_path),
+            "--st-blocks",
+            str(blocks_path),
+            "--out",
+            str(trace_path),
         ],
         check=True,
         capture_output=True,
@@ -74,14 +77,12 @@ def _spawn_plant_server(spec_path: Path) -> tuple[subprocess.Popen, int]:
     return server, int(ready[1])
 
 
-def _delay_signal_activation(trace: TraceLog, plc_id: str, signal: str, delay_scans: int) -> TraceLog:
-    per_plc = sorted(
-        (r for r in trace.records if r.plc_id == plc_id), key=lambda r: r.clock.tick
-    )
+def _delay_signal_activation(
+    trace: TraceLog, plc_id: str, signal: str, delay_scans: int
+) -> TraceLog:
+    per_plc = sorted((r for r in trace.records if r.plc_id == plc_id), key=lambda r: r.clock.tick)
     io_history = {r.clock.tick: bool(r.io.get(signal, False)) for r in per_plc}
-    out_history = {
-        r.clock.tick: bool(r.outputs.values.get(signal, False)) for r in per_plc
-    }
+    out_history = {r.clock.tick: bool(r.outputs.values.get(signal, False)) for r in per_plc}
 
     def shifted(record):
         tick = record.clock.tick
@@ -91,13 +92,9 @@ def _delay_signal_activation(trace: TraceLog, plc_id: str, signal: str, delay_sc
             io_values[signal] = io_history.get(tick - delay_scans, False)
         if signal in out_values:
             out_values[signal] = out_history.get(tick - delay_scans, False)
-        return replace(
-            record, io=IOImage(values=io_values), outputs=IOImage(values=out_values)
-        )
+        return replace(record, io=IOImage(values=io_values), outputs=IOImage(values=out_values))
 
-    return TraceLog([
-        shifted(r) if r.plc_id == plc_id else r for r in trace.records
-    ])
+    return TraceLog([shifted(r) if r.plc_id == plc_id else r for r in trace.records])
 
 
 class TestHostSatisfiesExpectations:
@@ -120,9 +117,12 @@ class TestHostSatisfiesExpectations:
             trace_path = tmp_path / f"cpp_trace_{plant_mode}_{attempt}.jsonl"
             command = [
                 str(HOST_BINARY),
-                "--spec", str(resolved_path),
-                "--st-blocks", str(blocks_path),
-                "--out", str(trace_path),
+                "--spec",
+                str(resolved_path),
+                "--st-blocks",
+                str(blocks_path),
+                "--out",
+                str(trace_path),
             ]
             server = None
             if plant_mode == "remote_socket":
@@ -152,9 +152,7 @@ class TestHostSatisfiesExpectations:
                 )
 
     def test_causes_holds_under_injected_skew(self, cpp_trace):
-        skewed = _delay_signal_activation(
-            cpp_trace, "plc_b", "belt_b_enable", delay_scans=60
-        )
+        skewed = _delay_signal_activation(cpp_trace, "plc_b", "belt_b_enable", delay_scans=60)
         precedes = evaluate_assertion(
             "PRECEDES(handoff_signal, belt_b_enable, within: 50ms)", skewed
         )

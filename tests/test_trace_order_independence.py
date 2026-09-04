@@ -28,8 +28,7 @@ def _interleave_preserving_per_plc_order(records, seed: int):
 
 def _outcome(results):
     return [
-        (r.assertion, r.passed, r.witness_ms, r.observed_gap_ms, r.attribution)
-        for r in results
+        (r.assertion, r.passed, r.witness_ms, r.observed_gap_ms, r.attribution) for r in results
     ]
 
 
@@ -41,9 +40,7 @@ class TestTraceOrderIndependence:
         baseline = _outcome(evaluate_all(spec.assertions, trace))
         assert baseline, "conveyor spec must declare assertions"
         for seed in range(25):
-            shuffled = TraceLog(
-                _interleave_preserving_per_plc_order(trace.records, seed)
-            )
+            shuffled = TraceLog(_interleave_preserving_per_plc_order(trace.records, seed))
             outcome = _outcome(evaluate_all(spec.assertions, shuffled))
             assert outcome == baseline, (
                 f"seed {seed}: verdicts changed under record interleaving; "

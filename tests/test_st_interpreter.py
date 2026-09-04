@@ -72,9 +72,7 @@ def _drive(edge, mode, sequence, *, debounce_ms=0, duration_ms=None) -> list[boo
     trigger = Trigger(
         id="t",
         when=TriggerWhen(signal=_SIGNAL, edge=edge, debounce_ms=debounce_ms),
-        emit=TriggerEmit(
-            target=_OUTPUT, target_kind="output", mode=mode, duration_ms=duration_ms
-        ),
+        emit=TriggerEmit(target=_OUTPUT, target_kind="output", mode=mode, duration_ms=duration_ms),
     )
     source = compile_plc([trigger], TaskSpec(raw={}))
     ctx = STContext()
@@ -110,15 +108,11 @@ class TestTriggerSemantics:
         assert _bits(_drive("level", "steady", [0, 0, 1, 1, 1, 0, 0, 0])) == "00111000"
 
     def test_pulse_deasserts_after_duration(self):
-        emitted = _drive(
-            "rising", "pulse", [0, 1, 1, 1, 1, 1, 1, 1], duration_ms=30
-        )
+        emitted = _drive("rising", "pulse", [0, 1, 1, 1, 1, 1, 1, 1], duration_ms=30)
         assert _bits(emitted) == "01100000"
 
     def test_pulse_width_scales_with_duration(self):
-        emitted = _drive(
-            "rising", "pulse", [0, 1, 1, 1, 1, 1, 1, 1], duration_ms=50
-        )
+        emitted = _drive("rising", "pulse", [0, 1, 1, 1, 1, 1, 1, 1], duration_ms=50)
         assert _bits(emitted) == "01111000"
 
     def test_debounce_rejects_glitch_shorter_than_window(self):
@@ -126,7 +120,5 @@ class TestTriggerSemantics:
         assert _bits(emitted) == "000000"
 
     def test_debounce_passes_sustained_signal(self):
-        emitted = _drive(
-            "rising", "latched", [0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0], debounce_ms=30
-        )
+        emitted = _drive("rising", "latched", [0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0], debounce_ms=30)
         assert _bits(emitted) == "00000001111"

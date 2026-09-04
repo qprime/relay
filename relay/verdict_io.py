@@ -132,26 +132,18 @@ def load_json(stream: TextIO) -> list[dict[str, Any]]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"malformed verdict JSON: {exc.msg}") from exc
     if not isinstance(document, dict):
-        raise ValueError(
-            f"verdict is a JSON {type(document).__name__}, not an object"
-        )
+        raise ValueError(f"verdict is a JSON {type(document).__name__}, not an object")
     results = document.get("results")
     if not isinstance(results, list):
         raise ValueError("verdict is missing a 'results' list")
     loaded: list[dict[str, Any]] = []
     for index, entry in enumerate(results):
         if not isinstance(entry, dict):
-            raise ValueError(
-                f"results[{index}] is a JSON {type(entry).__name__}, not an object"
-            )
+            raise ValueError(f"results[{index}] is a JSON {type(entry).__name__}, not an object")
         try:
             loaded.append(verdict_from_dict(entry))
         except KeyError as exc:
-            raise KeyError(
-                f"results[{index}] missing required key {exc.args[0]!r}"
-            ) from exc
+            raise KeyError(f"results[{index}] missing required key {exc.args[0]!r}") from exc
         except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"results[{index}] has an unreadable field: {exc}"
-            ) from exc
+            raise ValueError(f"results[{index}] has an unreadable field: {exc}") from exc
     return loaded

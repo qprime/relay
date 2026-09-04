@@ -138,9 +138,12 @@ def _host_lane(
 ) -> Lane:
     command = [
         str(host_binary),
-        "--spec", str(resolved_path),
-        "--st-blocks", str(blocks_path),
-        "--out", str(trace_path),
+        "--spec",
+        str(resolved_path),
+        "--st-blocks",
+        str(blocks_path),
+        "--out",
+        str(trace_path),
     ]
     server = None
     if plant_spec is not None:
@@ -213,10 +216,7 @@ def _is_event(record: ScanRecord, prior: ScanRecord) -> bool:
 
 def plain_words(parsed: ParsedAssertion) -> str | None:
     if parsed.form == "EVENTUALLY":
-        return (
-            f"{parsed.signals[0]} becomes true within {parsed.within_ms:g}ms "
-            "of simulation start"
-        )
+        return f"{parsed.signals[0]} becomes true within {parsed.within_ms:g}ms of simulation start"
     if parsed.form == "PRECEDES":
         first, second = parsed.signals
         return (
@@ -297,8 +297,7 @@ def _verdict_cell(result: AssertionResult, parsed: ParsedAssertion | None) -> st
 
 def _verdict_table(spec: TaskSpec, lanes: list[Lane]) -> str:
     header = "".join(
-        f"<th>{_h(lane.name)}{' (failed)' if lane.trace is None else ''}</th>"
-        for lane in lanes
+        f"<th>{_h(lane.name)}{' (failed)' if lane.trace is None else ''}</th>" for lane in lanes
     )
     rows: list[str] = []
     for index, text in enumerate(spec.assertions):
@@ -312,9 +311,7 @@ def _verdict_table(spec: TaskSpec, lanes: list[Lane]) -> str:
                 cells.append(_verdict_cell(lane.results[index], parsed))
         head = f'<span class="plain">{_h(label)}</span>' if label else ""
         rows.append(
-            "<tr><td>"
-            f'{head}<code class="formal">{_h(text)}</code>'
-            "</td>" + "".join(cells) + "</tr>"
+            f'<tr><td>{head}<code class="formal">{_h(text)}</code></td>' + "".join(cells) + "</tr>"
         )
     if not rows:
         rows.append(f'<tr><td colspan="{1 + len(lanes)}">no assertions</td></tr>')
@@ -416,6 +413,16 @@ def _values_cell(values: Mapping[str, Any]) -> str:
 def _record_row(record: ScanRecord) -> str:
     sends = " ".join(
         f"{key}#{send.count}={send.value}"
+        + (
+            f" [CAN {send.can_id:#05x}, {send.frame_bits} bits, "
+            f"start {send.arbitration_start_ms:g}ms, complete {send.completion_ms:g}ms, "
+            f"wait {send.arbitration_start_ms - record.clock.elapsed_ms:g}ms]"
+            if send.can_id is not None
+            and send.frame_bits is not None
+            and send.arbitration_start_ms is not None
+            and send.completion_ms is not None
+            else ""
+        )
         for key, send in sorted(record.sends.items())
     )
     recvs = " ".join(
@@ -460,9 +467,7 @@ def _evidence_section(lanes: list[Lane]) -> str:
             parts.append("</ul>")
         events = event_records(lane.trace)
         total = len(lane.trace.records)
-        parts.append(
-            f"<p>{len(events)} event scans of {total} recorded; idle scans elided</p>"
-        )
+        parts.append(f"<p>{len(events)} event scans of {total} recorded; idle scans elided</p>")
         parts.append(_trace_table(events))
         parts.append(
             f"<details><summary>full trace ({total} records)</summary>"
@@ -568,9 +573,7 @@ def main(argv: list[str] | None = None) -> int:
     spec_paths = list(args.specs) or sorted((_REPO_ROOT / "specs").glob("*.yaml"))
     loaded = [(path, load_spec(path)) for path in spec_paths]
     try:
-        check_unique_system_names(
-            [(path, spec.system_name) for path, spec in loaded], ".html"
-        )
+        check_unique_system_names([(path, spec.system_name) for path, spec in loaded], ".html")
     except DuplicateSystemName as e:
         print(e)
         return 1

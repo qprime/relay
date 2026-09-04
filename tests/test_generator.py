@@ -35,9 +35,7 @@ def _minimal_spec(**overrides) -> TaskSpec:
         },
         "Comm": {
             "strategy": "tag",
-            "tags": [
-                {"name": "t", "produced_by": "plc_a", "consumed_by": ["plc_b"]}
-            ],
+            "tags": [{"name": "t", "produced_by": "plc_a", "consumed_by": ["plc_b"]}],
         },
         "Plant": {
             "type": "conveyor",
@@ -47,8 +45,18 @@ def _minimal_spec(**overrides) -> TaskSpec:
                 "actuator_latency_ms": 50.0,
             },
             "routes": [
-                {"sensor": "sensor_a_exit_triggered", "to_plc": "plc_a", "as_key": "sensor_a_exit", "trigger": "edge"},
-                {"sensor": "part_at_b", "to_plc": "plc_b", "as_key": "part_at_b", "trigger": "level"},
+                {
+                    "sensor": "sensor_a_exit_triggered",
+                    "to_plc": "plc_a",
+                    "as_key": "sensor_a_exit",
+                    "trigger": "edge",
+                },
+                {
+                    "sensor": "part_at_b",
+                    "to_plc": "plc_b",
+                    "as_key": "part_at_b",
+                    "trigger": "level",
+                },
             ],
             "actuators": [
                 {"from_plc": "plc_b", "key": "belt_b_enable", "as": "belt_b_enable_signal"},
@@ -113,13 +121,9 @@ def _issues_for(spec: TaskSpec) -> list[str]:
 
 class TestCausesValidationIndependentOfLoadSpec:
     def test_rejects_causes_on_a_plant_routed_cause(self):
-        spec = _minimal_spec(
-            **{"Assertions": ["CAUSES(part_at_b, belt_b_enable)"]}
-        )
+        spec = _minimal_spec(**{"Assertions": ["CAUSES(part_at_b, belt_b_enable)"]})
         issues = _issues_for(spec)
-        assert any(
-            "part_at_b" in i and "not a declared comm signal" in i for i in issues
-        ), issues
+        assert any("part_at_b" in i and "not a declared comm signal" in i for i in issues), issues
 
     def test_rejects_self_causing_assertion(self):
         spec = _minimal_spec(**{"Assertions": ["CAUSES(t, t)"]})
@@ -190,9 +194,7 @@ class TestBehaviorSchema:
 
     def test_rejects_emit_tag_not_produced_by_this_plc(self):
         spec = _spec_with_trigger({"emit": {"tag": "t", "mode": "latched"}}, plc_id="plc_b")
-        assert any(
-            "not a comm signal produced by this PLC" in i for i in _issues_for(spec)
-        )
+        assert any("not a comm signal produced by this PLC" in i for i in _issues_for(spec))
 
     def test_rejects_both_tag_and_output_in_emit(self):
         spec = _spec_with_trigger({"emit.output": "belt_a"})
@@ -230,9 +232,7 @@ class TestBehaviorSchema:
                 "emit": {"output": "t", "mode": "latched"},
             }
         )
-        assert any(
-            "collides with a declared comm signal" in i for i in _issues_for(spec)
-        )
+        assert any("collides with a declared comm signal" in i for i in _issues_for(spec))
 
     def test_rejects_plant_route_collision_from_a_plc_that_never_reads_it(self):
         spec = _minimal_spec()
@@ -296,9 +296,7 @@ class TestBehaviorSchema:
         assert any("must match" in i for i in _issues_for(spec))
 
     def test_collects_multiple_trigger_issues(self):
-        spec = _spec_with_trigger(
-            {"id": "BAD ID", "when.signal": "nope", "when.edge": "sideways"}
-        )
+        spec = _spec_with_trigger({"id": "BAD ID", "when.signal": "nope", "when.edge": "sideways"})
         assert len(_issues_for(spec)) >= 3
 
     def test_uncovered_assertion_signal_is_rejected_at_spec_time(self):
@@ -392,7 +390,7 @@ class TestCompiler:
             "IF _scratch_edge_emit_t THEN\n"
             "_scratch_latched_emit_t := TRUE;\n"
             "END_IF;\n"
-            "_send_plc_b_t := _scratch_latched_emit_t;"
+            "_send_t := _scratch_latched_emit_t;"
         )
 
     def test_compiles_falling_latched_to_known_st(self):
@@ -404,7 +402,7 @@ class TestCompiler:
             "IF _scratch_edge_emit_t THEN\n"
             "_scratch_latched_emit_t := TRUE;\n"
             "END_IF;\n"
-            "_send_plc_b_t := _scratch_latched_emit_t;"
+            "_send_t := _scratch_latched_emit_t;"
         )
 
     def test_compiles_level_latched_to_known_st(self):
@@ -414,14 +412,13 @@ class TestCompiler:
             "IF sensor_a_exit THEN\n"
             "_scratch_latched_emit_t := TRUE;\n"
             "END_IF;\n"
-            "_send_plc_b_t := _scratch_latched_emit_t;"
+            "_send_t := _scratch_latched_emit_t;"
         )
 
     def test_compiles_steady_to_known_st(self):
         spec = _spec_with_trigger({"when.edge": "level", "emit.mode": "steady"})
         assert compile_st_blocks(spec)["plc_a"] == (
-            "(* trigger: emit_t *)\n"
-            "_send_plc_b_t := sensor_a_exit;"
+            "(* trigger: emit_t *)\n_send_t := sensor_a_exit;"
         )
 
     def test_compiles_rising_pulse_with_ton(self):
@@ -439,7 +436,7 @@ class TestCompiler:
             "IF _scratch_ton_emit_t.Q THEN\n"
             "_scratch_pulse_emit_t := FALSE;\n"
             "END_IF;\n"
-            "_send_plc_b_t := _scratch_pulse_emit_t;"
+            "_send_t := _scratch_pulse_emit_t;"
         )
 
     def test_compiles_with_debounce_emits_stability_ton(self):
@@ -450,7 +447,7 @@ class TestCompiler:
             "(* trigger: emit_t *)\n"
             "_scratch_debounce_emit_t(IN := sensor_a_exit, PT := T#30ms);\n"
             "_scratch_stable_emit_t := _scratch_debounce_emit_t.Q;\n"
-            "_send_plc_b_t := _scratch_stable_emit_t;"
+            "_send_t := _scratch_stable_emit_t;"
         )
 
     def test_debounce_and_pulse_compose_in_one_trigger(self):
@@ -463,18 +460,21 @@ class TestCompiler:
             }
         )
         source = compile_st_blocks(spec)["plc_a"]
-        assert source.splitlines()[1] == "_scratch_debounce_emit_t(IN := sensor_a_exit, PT := T#20ms);"
-        assert "_scratch_edge_emit_t := _scratch_stable_emit_t AND NOT _scratch_prev_emit_t;" in source
+        assert (
+            source.splitlines()[1] == "_scratch_debounce_emit_t(IN := sensor_a_exit, PT := T#20ms);"
+        )
+        assert (
+            "_scratch_edge_emit_t := _scratch_stable_emit_t AND NOT _scratch_prev_emit_t;" in source
+        )
         assert "_scratch_ton_emit_t(IN := _scratch_pulse_emit_t, PT := T#30ms);" in source
         assert not static_parse_errors(source)
 
-    def test_emits_one_send_per_declared_consumer(self):
+    def test_emits_one_publication_for_all_consumers(self):
         spec = _minimal_spec()
         spec.raw["Comm"]["tags"][0]["consumed_by"] = ["plc_b", "plc_c"]
         spec.raw["System"]["plcs"].append({"id": "plc_c", "role": "z"})
         source = compile_st_blocks(spec)["plc_a"]
-        assert "_send_plc_b_t := _scratch_latched_emit_t;" in source
-        assert "_send_plc_c_t := _scratch_latched_emit_t;" in source
+        assert source.count("_send_t := _scratch_latched_emit_t;") == 1
 
     def test_zero_trigger_plc_compiles_to_empty_body(self):
         spec = _minimal_spec()
@@ -533,8 +533,7 @@ class TestTriggerMarkers:
         blocks = compile_st_blocks(spec)
         for plc_id, entry in spec.behavior.items():
             markers = [
-                line for line in blocks[plc_id].splitlines()
-                if line.startswith("(* trigger:")
+                line for line in blocks[plc_id].splitlines() if line.startswith("(* trigger:")
             ]
             assert len(markers) == len(entry["triggers"])
 
@@ -546,7 +545,7 @@ class TestTriggerMarkers:
         source = compile_st_blocks(spec)["plc_a"]
         assert source.splitlines() == [
             "(* trigger: emit_t *)",
-            "_send_plc_b_t := sensor_a_exit;",
+            "_send_t := sensor_a_exit;",
         ]
 
     def test_markers_use_iec_comment_syntax(self):
@@ -669,7 +668,7 @@ class TestHarnessIntegration:
     def test_simulate_propagates_send_routing_error(self):
         spec = load_spec(_SPEC_PATH)
         blocks = compile_st_blocks(spec)
-        blocks["plc_a"] = "_send_plc_unknown_x := TRUE;"
+        blocks["plc_a"] = "_send_unknown_x := TRUE;"
         with pytest.raises(ValueError, match="_send_"):
             asyncio.run(simulate(spec, blocks, max_scans=1))
 

@@ -15,12 +15,12 @@ def _scan(fb: FunctionBlock) -> tuple[IOImage, list]:
 class TestSendRouting:
     def test_send_assignment_routes_to_outgoing(self):
         fb = FunctionBlock(
-            source="_send_plc_b_handoff_signal := TRUE;",
+            source="_send_handoff_signal := TRUE;",
             plc_ids=("plc_a", "plc_b"),
         )
         outputs, outgoing = _scan(fb)
-        assert outgoing == [("plc_b", "handoff_signal", True)]
-        assert "_send_plc_b_handoff_signal" not in outputs.values
+        assert outgoing == [("handoff_signal", True)]
+        assert "_send_handoff_signal" not in outputs.values
 
     def test_non_send_assignment_stays_as_output(self):
         fb = FunctionBlock(
@@ -31,30 +31,28 @@ class TestSendRouting:
         assert outgoing == []
         assert outputs.get("belt_a_running") is True
 
-    def test_send_to_unknown_plc_raises(self):
+    def test_send_suffix_is_the_signal(self):
         fb = FunctionBlock(
-            source="_send_plc_z_signal := TRUE;",
+            source="_send_signal := TRUE;",
             plc_ids=("plc_a", "plc_b"),
         )
-        with pytest.raises(ValueError, match="_send_"):
-            _scan(fb)
+        assert _scan(fb)[1] == [("signal", True)]
 
-    def test_send_with_no_plc_ids_raises(self):
-        fb = FunctionBlock(source="_send_plc_b_x := TRUE;")
-        with pytest.raises(ValueError, match="none registered"):
-            _scan(fb)
+    def test_send_needs_no_plc_ids(self):
+        fb = FunctionBlock(source="_send_x := TRUE;")
+        assert _scan(fb)[1] == [("x", True)]
 
-    def test_longest_plc_id_prefix_wins(self):
+    def test_underscores_remain_in_signal_name(self):
         fb = FunctionBlock(
-            source="_send_plc_a_b_signal := TRUE;",
+            source="_send_a_b_signal := TRUE;",
             plc_ids=("plc_a", "plc_a_b"),
         )
         _, outgoing = _scan(fb)
-        assert outgoing == [("plc_a_b", "signal", True)]
+        assert outgoing == [("a_b_signal", True)]
 
     def test_send_with_empty_key_raises(self):
         fb = FunctionBlock(
-            source="_send_plc_b_ := TRUE;",
+            source="_send_ := TRUE;",
             plc_ids=("plc_a", "plc_b"),
         )
         with pytest.raises(ValueError, match="_send_"):
@@ -105,7 +103,7 @@ class TestScratchSuppression:
                 "IF _scratch_edge_h THEN\n"
                 "_scratch_latched_h := TRUE;\n"
                 "END_IF;\n"
-                "_send_plc_b_handoff_signal := _scratch_latched_h;"
+                "_send_handoff_signal := _scratch_latched_h;"
             ),
             "plc_b": "belt_b_enable := handoff_signal;",
         }

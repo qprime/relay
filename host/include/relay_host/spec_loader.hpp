@@ -21,10 +21,17 @@ struct ResolvedSignal {
     std::vector<std::string> consumed_by;
     std::optional<std::string> table;
     std::optional<std::uint32_t> address;
+    std::optional<std::uint16_t> can_id = std::nullopt;
+};
+
+struct ResolvedTransport {
+    std::string kind = "in_process";
+    std::optional<std::uint32_t> baud_rate = std::nullopt;
 };
 
 struct ResolvedComm {
     std::string strategy;
+    ResolvedTransport transport;
     std::vector<ResolvedSignal> signals;
 };
 

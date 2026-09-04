@@ -17,7 +17,7 @@ TEST(TestSTParser, parses_conveyor_plc_a) {
     EXPECT_NE(std::get_if<IfBlock>(&program->statements[2]), nullptr);
     const Assignment* send = std::get_if<Assignment>(&program->statements[3]);
     ASSERT_NE(send, nullptr);
-    EXPECT_EQ(send->target, "_send_plc_b_handoff_signal");
+    EXPECT_EQ(send->target, "_send_handoff_signal");
 }
 
 TEST(TestSTParser, parses_conveyor_plc_b) {

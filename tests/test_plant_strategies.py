@@ -54,7 +54,12 @@ class TestConveyorValidation:
         block = _conveyor_block(
             routes=[
                 {"sensor": "part_at_b", "to_plc": "plc_a", "as_key": "k", "trigger": "level"},
-                {"sensor": "sensor_a_exit_triggered", "to_plc": "plc_a", "as_key": "j", "trigger": "edge"},
+                {
+                    "sensor": "sensor_a_exit_triggered",
+                    "to_plc": "plc_a",
+                    "as_key": "j",
+                    "trigger": "edge",
+                },
             ],
         )
         issues = ConveyorPlant(block).validate_config(block, self._spec())
@@ -66,7 +71,12 @@ class TestConveyorRoutingTriggers:
         plant = ConveyorPlant(
             _conveyor_block(
                 routes=[
-                    {"sensor": "part_at_b", "to_plc": "plc_b", "as_key": "part_at_b", "trigger": "level"}
+                    {
+                        "sensor": "part_at_b",
+                        "to_plc": "plc_b",
+                        "as_key": "part_at_b",
+                        "trigger": "level",
+                    }
                 ]
             )
         )
@@ -80,7 +90,12 @@ class TestConveyorRoutingTriggers:
         plant = ConveyorPlant(
             _conveyor_block(
                 routes=[
-                    {"sensor": "sensor_a_exit_triggered", "to_plc": "plc_a", "as_key": "sensor_a_exit", "trigger": "edge"}
+                    {
+                        "sensor": "sensor_a_exit_triggered",
+                        "to_plc": "plc_a",
+                        "as_key": "sensor_a_exit",
+                        "trigger": "edge",
+                    }
                 ]
             )
         )
@@ -94,7 +109,12 @@ class TestConveyorRoutingTriggers:
         plant = ConveyorPlant(
             _conveyor_block(
                 routes=[
-                    {"sensor": "sensor_a_exit_triggered", "to_plc": "plc_a", "as_key": "sensor_a_exit", "trigger": "edge"}
+                    {
+                        "sensor": "sensor_a_exit_triggered",
+                        "to_plc": "plc_a",
+                        "as_key": "sensor_a_exit",
+                        "trigger": "edge",
+                    }
                 ]
             )
         )

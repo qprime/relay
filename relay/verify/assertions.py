@@ -41,15 +41,11 @@ def evaluate_assertion(assertion: str, trace: TraceLog) -> AssertionResult:
             reason=f"unrecognized assertion form: {assertion.strip()}",
         )
     if parsed.form == "CAUSES":
-        return _check_causes(
-            assertion.strip(), parsed.signals[0], parsed.signals[1], trace
-        )
+        return _check_causes(assertion.strip(), parsed.signals[0], parsed.signals[1], trace)
     if parsed.within_ms is None:
         raise ValueError(f"{parsed.form} parsed without a budget: {assertion!r}")
     if parsed.form == "EVENTUALLY":
-        return _check_eventually(
-            assertion.strip(), parsed.signals[0], parsed.within_ms, trace
-        )
+        return _check_eventually(assertion.strip(), parsed.signals[0], parsed.within_ms, trace)
     return _check_precedes(
         assertion.strip(), parsed.signals[0], parsed.signals[1], parsed.within_ms, trace
     )
@@ -94,9 +90,7 @@ def _first_true_ms(name: str, trace: TraceLog) -> float | None:
     nothing happened.
     """
     if _is_comm_tag(name, trace):
-        matching = (
-            r for r in trace.records if name in r.sends and r.sends[name].value
-        )
+        matching = (r for r in trace.records if name in r.sends and r.sends[name].value)
     else:
         matching = (r for r in trace.records if _signal_value(r, name))
     earliest = _earliest(matching)
@@ -163,9 +157,13 @@ def _check_precedes(
     second_ms = _first_true_ms(second, trace)
 
     if first_ms is None:
-        return AssertionResult(assertion=assertion, passed=False, reason=f"signal '{first}' never became true")
+        return AssertionResult(
+            assertion=assertion, passed=False, reason=f"signal '{first}' never became true"
+        )
     if second_ms is None:
-        return AssertionResult(assertion=assertion, passed=False, reason=f"signal '{second}' never became true")
+        return AssertionResult(
+            assertion=assertion, passed=False, reason=f"signal '{second}' never became true"
+        )
 
     gap = second_ms - first_ms
     if gap < 0:
@@ -190,9 +188,7 @@ def _check_precedes(
     )
 
 
-def _check_causes(
-    assertion: str, cause: str, effect: str, trace: TraceLog
-) -> AssertionResult:
+def _check_causes(assertion: str, cause: str, effect: str, trace: TraceLog) -> AssertionResult:
     """CAUSES asserts attribution, not timing: `effect`'s first activation must be
     explainable by a message carrying `cause` that the acting PLC actually received.
 
@@ -237,9 +233,7 @@ def _check_causes(
         (r for r in on_plc if cause in r.recvs and r.recvs[cause].value),
         key=lambda r: r.clock.tick,
     )
-    activating = next(
-        (r for r in receipts if r.clock.tick <= acting.clock.tick), None
-    )
+    activating = next((r for r in receipts if r.clock.tick <= acting.clock.tick), None)
     if activating is None:
         if not any(cause in r.recvs for r in on_plc):
             reason = (

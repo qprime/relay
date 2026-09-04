@@ -1,16 +1,17 @@
 from __future__ import annotations
 import asyncio
 import warnings
+from dataclasses import replace
 from typing import Any
 
 import relay.plant  # noqa: F401  -- ensure plant registrations are loaded
 from relay.clock import DEFAULT_SCAN_PERIOD_MS, SimClock
 from relay.io_image import IOImage
-from relay.runtime.comm import CommBus
+from relay.runtime.comm import CommBus, build_transport
 from relay.runtime.fb import FunctionBlock
 from relay.runtime.plc import PLCCoroutine
 from relay.spec.schema import TaskSpec
-from relay.strategies.comm import get_comm_strategy
+from relay.strategies.comm import can_bindings, comm_signals, comm_transport_config
 from relay.strategies.plant import get_plant
 from relay.trace import TraceLog
 
@@ -58,12 +59,13 @@ async def simulate(
 
     plant_factory = get_plant(spec.plant_type)
     plant = plant_factory(spec.plant_block)
-    get_comm_strategy(spec.comm_strategy)
-
     bus = CommBus()
     trace = TraceLog()
     for pid in plc_ids:
         bus.register(pid)
+    transport = build_transport(
+        comm_transport_config(spec), bus, comm_signals(spec), can_bindings(spec)
+    )
 
     function_blocks: dict[str, FunctionBlock] = {
         pid: FunctionBlock(source=st_blocks[pid], plc_ids=plc_ids) for pid in plc_ids
@@ -71,9 +73,7 @@ async def simulate(
 
     latest_outputs: dict[str, IOImage] = {pid: IOImage.empty() for pid in plc_ids}
 
-    clock_queues: dict[str, asyncio.Queue[SimClock]] = {
-        pid: asyncio.Queue() for pid in plc_ids
-    }
+    clock_queues: dict[str, asyncio.Queue[SimClock]] = {pid: asyncio.Queue() for pid in plc_ids}
     done_queue: asyncio.Queue[None] = asyncio.Queue()
 
     def _capturing_executor(plc_id: str):
@@ -92,7 +92,7 @@ async def simulate(
                 plc_id=pid,
                 executor=_capturing_executor(pid),
                 scan_period_ms=scan_period_ms,
-            ).run(clock_queues[pid], bus, trace, max_scans, done_queue)
+            ).run(clock_queues[pid], bus, transport, trace, max_scans, done_queue)
         )
         for pid in plc_ids
     ]
@@ -131,6 +131,24 @@ async def simulate(
 
             for target, key, value in plant.route_to_plcs(plant_out, prior_plant_out):
                 await _harness_send(target, key, value)
+
+            for completed in transport.settle(clock):
+                frame = completed.frame
+                for index, record in enumerate(trace.records):
+                    send = record.sends.get(frame.signal)
+                    if (
+                        record.plc_id == frame.sender
+                        and send is not None
+                        and send.count == frame.seq
+                    ):
+                        sends = dict(record.sends)
+                        sends[frame.signal] = replace(
+                            send,
+                            arbitration_start_ms=float(completed.arbitration_start_ms),
+                            completion_ms=float(completed.completion_ms),
+                        )
+                        trace.records[index] = replace(record, sends=sends)
+                        break
 
             for q in clock_queues.values():
                 await q.put(clock)

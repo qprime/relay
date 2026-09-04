@@ -3,6 +3,8 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <cmath>
+#include <cstdint>
 
 #include <nlohmann/json.hpp>
 
@@ -131,6 +133,28 @@ Read<std::map<std::string, SendEntry, std::less<>>> read_sends(const Json& recor
         const auto count = read_counter(**count_node, "sends", name);
         if (!count) {
             return std::unexpected(count.error());
+        }
+        for (const std::string field : {"can_id", "frame_bits"}) {
+            if (!entry.contains(field)) continue;
+            const Json& metadata = entry[field];
+            if (metadata.is_boolean() || !metadata.is_number_unsigned()) {
+                return unreadable("sends entry '" + name + "' field '" + field +
+                                  "' must be an unsigned integer");
+            }
+            const std::uint64_t number = metadata.get<std::uint64_t>();
+            if ((field == "can_id" && number > 0x7ff) ||
+                (field == "frame_bits" && number == 0)) {
+                return unreadable("sends entry '" + name + "' field '" + field +
+                                  "' is out of range");
+            }
+        }
+        for (const std::string field : {"arbitration_start_ms", "completion_ms"}) {
+            if (!entry.contains(field)) continue;
+            const Json& metadata = entry[field];
+            if (!metadata.is_number() || !std::isfinite(metadata.get<double>())) {
+                return unreadable("sends entry '" + name + "' field '" + field +
+                                  "' must be a finite number");
+            }
         }
         sends.emplace(name, SendEntry{*count, *cell});
     }

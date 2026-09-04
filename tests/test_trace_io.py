@@ -83,14 +83,16 @@ class TestTraceIORoundTrip:
         assert _round_trip(TraceLog()).records == []
 
     def test_empty_io_image_round_trips(self):
-        trace = TraceLog([
-            ScanRecord(
-                plc_id="plc_a",
-                clock=SimClock(tick=0, elapsed_ms=0.0),
-                io=IOImage.empty(),
-                outputs=IOImage.empty(),
-            )
-        ])
+        trace = TraceLog(
+            [
+                ScanRecord(
+                    plc_id="plc_a",
+                    clock=SimClock(tick=0, elapsed_ms=0.0),
+                    io=IOImage.empty(),
+                    outputs=IOImage.empty(),
+                )
+            ]
+        )
         restored = _round_trip(trace).records[0]
         assert dict(restored.io.values) == {}
         assert dict(restored.outputs.values) == {}
@@ -143,8 +145,7 @@ class TestTraceIOFormat:
         merged signal view cannot say who sent it or what it delivered."""
         _, trace = _conveyor_spec_and_trace()
         acting = next(
-            r for r in _round_trip(trace).for_plc("plc_b")
-            if r.outputs.get("belt_b_enable")
+            r for r in _round_trip(trace).for_plc("plc_b") if r.outputs.get("belt_b_enable")
         )
         receipt = acting.recvs["handoff_signal"]
         assert receipt.sender == "plc_a"
@@ -185,14 +186,16 @@ class TestTraceIOFormat:
 
 class TestTraceIOTypes:
     def _round_trip_value(self, value):
-        trace = TraceLog([
-            ScanRecord(
-                plc_id="plc_a",
-                clock=SimClock(tick=0, elapsed_ms=0.0),
-                io=IOImage(values={"signal": value}),
-                outputs=IOImage.empty(),
-            )
-        ])
+        trace = TraceLog(
+            [
+                ScanRecord(
+                    plc_id="plc_a",
+                    clock=SimClock(tick=0, elapsed_ms=0.0),
+                    io=IOImage(values={"signal": value}),
+                    outputs=IOImage.empty(),
+                )
+            ]
+        )
         return _round_trip(trace).records[0].io.get("signal")
 
     def test_bool_survives_as_bool(self):
@@ -212,14 +215,16 @@ class TestTraceIOTypes:
 
     @pytest.mark.parametrize("value", ["running", None])
     def test_disallowed_value_type_raises_at_dump(self, value):
-        trace = TraceLog([
-            ScanRecord(
-                plc_id="plc_a",
-                clock=SimClock(tick=0, elapsed_ms=0.0),
-                io=IOImage(values={"mode": value}),
-                outputs=IOImage.empty(),
-            )
-        ])
+        trace = TraceLog(
+            [
+                ScanRecord(
+                    plc_id="plc_a",
+                    clock=SimClock(tick=0, elapsed_ms=0.0),
+                    io=IOImage(values={"mode": value}),
+                    outputs=IOImage.empty(),
+                )
+            ]
+        )
         with pytest.raises(TypeError) as exc:
             _dump_to_text(trace)
         assert "mode" in str(exc.value)
@@ -229,14 +234,16 @@ class TestTraceIOTypes:
         "value", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
     )
     def test_non_finite_float_raises_at_dump(self, value):
-        trace = TraceLog([
-            ScanRecord(
-                plc_id="plc_a",
-                clock=SimClock(tick=0, elapsed_ms=0.0),
-                io=IOImage(values={"level": value}),
-                outputs=IOImage.empty(),
-            )
-        ])
+        trace = TraceLog(
+            [
+                ScanRecord(
+                    plc_id="plc_a",
+                    clock=SimClock(tick=0, elapsed_ms=0.0),
+                    io=IOImage(values={"level": value}),
+                    outputs=IOImage.empty(),
+                )
+            ]
+        )
         with pytest.raises(ValueError) as exc:
             _dump_to_text(trace)
         assert "level" in str(exc.value)
@@ -331,15 +338,17 @@ class TestTraceIOTypes:
 
     @pytest.mark.parametrize("value", [True, 0.9])
     def test_non_int_send_counter_rejected_at_dump(self, value):
-        trace = TraceLog([
-            ScanRecord(
-                plc_id="plc_a",
-                clock=SimClock(tick=0, elapsed_ms=0.0),
-                io=IOImage.empty(),
-                outputs=IOImage.empty(),
-                sends={"handoff_signal": SendRecord(count=value, value=True)},
-            )
-        ])
+        trace = TraceLog(
+            [
+                ScanRecord(
+                    plc_id="plc_a",
+                    clock=SimClock(tick=0, elapsed_ms=0.0),
+                    io=IOImage.empty(),
+                    outputs=IOImage.empty(),
+                    sends={"handoff_signal": SendRecord(count=value, value=True)},
+                )
+            ]
+        )
         with pytest.raises(TypeError) as exc:
             _dump_to_text(trace)
         assert "handoff_signal" in str(exc.value)
@@ -352,9 +361,7 @@ class TestTraceIOTypes:
                 json.dumps(
                     {
                         **_MINIMAL_RECORD,
-                        "recvs": {
-                            "tag": {k: v for k, v in full.items() if k != missing}
-                        },
+                        "recvs": {"tag": {k: v for k, v in full.items() if k != missing}},
                     }
                 )
                 + "\n"
@@ -365,9 +372,7 @@ class TestTraceIOTypes:
         """The counter-only shape carries no sender or delivered value, so a
         trace written to it cannot support attribution — reject, don't coerce."""
         with pytest.raises(ValueError) as exc:
-            _load_from_text(
-                json.dumps({**_MINIMAL_RECORD, "recvs": {"tag": 3}}) + "\n"
-            )
+            _load_from_text(json.dumps({**_MINIMAL_RECORD, "recvs": {"tag": 3}}) + "\n")
         assert "not an object" in str(exc.value)
 
     def test_non_string_sender_is_rejected(self):
@@ -384,15 +389,17 @@ class TestTraceIOTypes:
         assert "sender" in str(exc.value)
 
     def test_unserializable_delivered_value_raises_at_dump(self):
-        trace = TraceLog([
-            ScanRecord(
-                plc_id="plc_b",
-                clock=SimClock(tick=0, elapsed_ms=0.0),
-                io=IOImage.empty(),
-                outputs=IOImage.empty(),
-                recvs={"tag": Receipt(sender="plc_a", seq=1, value="running")},
-            )
-        ])
+        trace = TraceLog(
+            [
+                ScanRecord(
+                    plc_id="plc_b",
+                    clock=SimClock(tick=0, elapsed_ms=0.0),
+                    io=IOImage.empty(),
+                    outputs=IOImage.empty(),
+                    recvs={"tag": Receipt(sender="plc_a", seq=1, value="running")},
+                )
+            ]
+        )
         with pytest.raises(TypeError) as exc:
             _dump_to_text(trace)
         assert "tag" in str(exc.value)
@@ -407,9 +414,7 @@ class TestTraceIOLoadGuards:
     @pytest.mark.parametrize("value", ["true", None, [1], {"a": 1}])
     def test_disallowed_signal_value_rejected_at_load(self, where, value):
         with pytest.raises(ValueError) as exc:
-            _load_from_text(
-                json.dumps({**_MINIMAL_RECORD, where: {"part_at_b": value}}) + "\n"
-            )
+            _load_from_text(json.dumps({**_MINIMAL_RECORD, where: {"part_at_b": value}}) + "\n")
         assert "part_at_b" in str(exc.value)
         assert type(value).__name__ in str(exc.value)
 
@@ -447,8 +452,7 @@ class TestTraceIOLoadGuards:
         string, so 'false' would read as a satisfied signal."""
         with pytest.raises(ValueError):
             _load_from_text(
-                json.dumps({**_MINIMAL_RECORD, "io_snapshot": {"part_at_b": "false"}})
-                + "\n"
+                json.dumps({**_MINIMAL_RECORD, "io_snapshot": {"part_at_b": "false"}}) + "\n"
             )
 
     @pytest.mark.parametrize("where", ["sends", "recvs"])
@@ -470,14 +474,16 @@ class TestTraceIOLoadGuards:
         assert "plc_id" in str(exc.value)
 
     def test_non_string_plc_id_rejected_at_dump(self):
-        trace = TraceLog([
-            ScanRecord(
-                plc_id=7,  # pyright: ignore[reportArgumentType]
-                clock=SimClock(tick=0, elapsed_ms=0.0),
-                io=IOImage.empty(),
-                outputs=IOImage.empty(),
-            )
-        ])
+        trace = TraceLog(
+            [
+                ScanRecord(
+                    plc_id=7,  # pyright: ignore[reportArgumentType]
+                    clock=SimClock(tick=0, elapsed_ms=0.0),
+                    io=IOImage.empty(),
+                    outputs=IOImage.empty(),
+                )
+            ]
+        )
         with pytest.raises(TypeError) as exc:
             _dump_to_text(trace)
         assert "plc_id" in str(exc.value)
@@ -552,9 +558,7 @@ class TestTraceIOErrors:
     def test_counterless_line_is_rejected_not_tolerated(self):
         """A five-key trace carries no attribution, so CAUSES on it would fail
         with 'never received' — a wrong-reason verdict. Loud KeyError instead."""
-        legacy = {
-            k: v for k, v in _MINIMAL_RECORD.items() if k not in ("sends", "recvs")
-        }
+        legacy = {k: v for k, v in _MINIMAL_RECORD.items() if k not in ("sends", "recvs")}
         with pytest.raises(KeyError) as exc:
             _load_from_text(json.dumps(legacy) + "\n")
         assert "sends" in str(exc.value)
@@ -592,9 +596,7 @@ class TestIOSnapshotIsLoadBearing:
 
     def test_handoff_signal_absent_from_plc_b_outputs(self):
         _, trace = _conveyor_spec_and_trace()
-        assert all(
-            "handoff_signal" not in r.outputs.values for r in trace.for_plc("plc_b")
-        )
+        assert all("handoff_signal" not in r.outputs.values for r in trace.for_plc("plc_b"))
 
     def test_handoff_signal_present_in_plc_b_io(self):
         _, trace = _conveyor_spec_and_trace()

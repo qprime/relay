@@ -85,7 +85,22 @@ std::expected<std::string, DumpError> format_seqs_object(std::span<const SeqSlot
         }
         first = false;
         out += escape_json_string(name) + ": {\"count\": " + std::to_string(slot->count) +
-               ", \"value\": " + formatted.text + "}";
+               ", \"value\": " + formatted.text;
+        if (slot->can_id) {
+            out += ", \"can_id\": " + std::to_string(*slot->can_id);
+        }
+        if (slot->frame_bits) {
+            out += ", \"frame_bits\": " + std::to_string(*slot->frame_bits);
+        }
+        if (slot->arbitration_start_ms) {
+            out += ", \"arbitration_start_ms\": " +
+                   format_json_double(*slot->arbitration_start_ms);
+        }
+        if (slot->completion_ms) {
+            out += ", \"completion_ms\": " +
+                   format_json_double(*slot->completion_ms);
+        }
+        out += "}";
     }
     out += "}";
     return out;

@@ -89,11 +89,13 @@ std::optional<ScanError> execute_one_scan(PlcScanState& state, const CommBuffer&
                 }
                 const std::int64_t seq = ++state.send_counts[binding.signal_id];
                 outgoing.items[outgoing.count] = OutgoingMessage{
-                    binding.send_target_plc,
                     Message{binding.signal_id, value, state.plc_index, seq}};
-                ++outgoing.count;
                 entry.send_slots[entry.send_count] =
-                    SeqSlot{binding.signal_id, seq, value};
+                    SeqSlot{binding.signal_id, seq, value, std::nullopt, std::nullopt,
+                            std::nullopt, std::nullopt};
+                outgoing.items[outgoing.count].trace_slot =
+                    &entry.send_slots[entry.send_count];
+                ++outgoing.count;
                 ++entry.send_count;
                 break;
             }
@@ -145,7 +147,7 @@ Task run_plc_scan_loop(PlcExecutionContext ctx) {
 
         ctx.bus->begin_drain(ctx.plc_index);
         auto polled = co_await std::visit(
-            [&](auto& transport) { return transport.poll(ctx.plc_index); },
+            [&](auto& transport) { return transport.poll(ctx.plc_index, clock); },
             *ctx.transport);
         if (!polled) {
             ctx.run->error = RunError{RunErrorKind::CommFailed, ctx.plc_index,
@@ -172,7 +174,8 @@ Task run_plc_scan_loop(PlcExecutionContext ctx) {
         for (std::uint32_t index = 0; index < outgoing.count; ++index) {
             const OutgoingMessage& message = outgoing.items[index];
             auto emitted = co_await std::visit(
-                [&](auto& transport) { return transport.emit(message); }, *ctx.transport);
+                [&](auto& transport) { return transport.emit(message, clock); },
+                *ctx.transport);
             if (!emitted) {
                 emit_error = emitted.error();
                 break;

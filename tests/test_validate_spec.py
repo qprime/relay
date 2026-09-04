@@ -73,9 +73,7 @@ class TestValidateSpecCLI:
         raw = copy.deepcopy(yaml.safe_load(_ADDRESS_SPEC_PATH.read_text()))
         raw["Assertions"].append("CAUSES(part_at_b, belt_b_enable)")
         issues = validate_spec_file(_write(tmp_path, raw))
-        assert any(
-            "part_at_b" in i and "not a declared comm signal" in i for i in issues
-        ), issues
+        assert any("part_at_b" in i and "not a declared comm signal" in i for i in issues), issues
 
     def test_malformed_yaml_reports_issue(self, tmp_path):
         path = tmp_path / "spec.yaml"
@@ -141,8 +139,7 @@ class TestNoModelClientDependency:
         offenders = [
             path.relative_to(_REPO_ROOT).as_posix()
             for path in _RELAY_SOURCES
-            if "import anthropic" in path.read_text()
-            or "from anthropic" in path.read_text()
+            if "import anthropic" in path.read_text() or "from anthropic" in path.read_text()
         ]
         assert offenders == []
 

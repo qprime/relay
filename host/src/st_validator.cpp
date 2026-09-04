@@ -30,27 +30,10 @@ std::optional<TimerField> timer_field_of(std::string_view attr) {
     return std::nullopt;
 }
 
-std::string known_plc_ids(std::span<const std::string> plc_ids) {
-    if (plc_ids.empty()) {
-        return "(none registered)";
-    }
-    std::vector<std::string> sorted(plc_ids.begin(), plc_ids.end());
-    std::sort(sorted.begin(), sorted.end());
-    std::string joined;
-    for (const std::string& id : sorted) {
-        if (!joined.empty()) {
-            joined += ", ";
-        }
-        joined += id;
-    }
-    return joined;
-}
-
 class SlotResolver {
  public:
-    SlotResolver(StProgram& program, const SignalTable& table,
-                 std::span<const std::string> plc_ids)
-        : program_(program), table_(table), plc_ids_(plc_ids) {}
+    SlotResolver(StProgram& program, const SignalTable& table)
+        : program_(program), table_(table) {}
 
     std::expected<void, ValidateError> run() {
         for (Statement& stmt : program_.statements) {
@@ -127,27 +110,25 @@ class SlotResolver {
         if (it != slot_ids_.end()) {
             return it->second;
         }
-        SlotBinding binding{name, SlotKind::Output, kNoSignal, 0};
+        SlotBinding binding{name, SlotKind::Output, kNoSignal};
         if (starts_with(name, kScratchPrefix)) {
             binding.kind = SlotKind::Scratch;
         } else if (starts_with(name, kSendPrefix)) {
-            const auto target = parse_send_target(name, plc_ids_);
-            if (!target) {
+            const auto signal = parse_send_signal(name);
+            if (!signal) {
                 return std::unexpected(ValidateError{
                     "st_validator: _send_* assignment '" + name +
-                    "' does not resolve to a registered plc_id; known plc_ids: " +
-                    known_plc_ids(plc_ids_)});
+                    "' has an empty signal suffix"});
             }
-            const auto key_id = table_.find_id(target->key);
+            const auto key_id = table_.find_id(*signal);
             if (!key_id) {
                 return std::unexpected(ValidateError{
-                    "st_validator: send key '" + target->key + "' from '" + name +
+                    "st_validator: send key '" + *signal + "' from '" + name +
                     "' is not in the signal table; the table must be built from the same "
                     "parsed blocks"});
             }
             binding.kind = SlotKind::Send;
             binding.signal_id = *key_id;
-            binding.send_target_plc = target->target_plc_index;
         } else {
             const auto id = table_.find_id(name);
             binding.signal_id = id ? *id : kNoSignal;
@@ -171,23 +152,21 @@ class SlotResolver {
 
     StProgram& program_;
     const SignalTable& table_;
-    std::span<const std::string> plc_ids_;
     std::vector<SlotBinding> slots_;
     std::vector<TimerDef> timers_;
     std::unordered_map<std::string, std::uint32_t> slot_ids_;
     std::unordered_map<std::string, std::uint32_t> timer_slots_;
 };
 
-void collect_targets(const Statement& stmt, std::span<const std::string> plc_ids,
-                     SignalTable& table) {
+void collect_targets(const Statement& stmt, SignalTable& table) {
     if (const Assignment* assignment = std::get_if<Assignment>(&stmt)) {
         const std::string& name = assignment->target;
         if (starts_with(name, kScratchPrefix)) {
             return;
         }
         if (starts_with(name, kSendPrefix)) {
-            if (const auto target = parse_send_target(name, plc_ids)) {
-                table.add(target->key);
+            if (const auto signal = parse_send_signal(name)) {
+                table.add(*signal);
             }
             return;
         }
@@ -196,40 +175,29 @@ void collect_targets(const Statement& stmt, std::span<const std::string> plc_ids
     }
     if (const IfBlock* block = std::get_if<IfBlock>(&stmt)) {
         for (const Statement& inner : block->body) {
-            collect_targets(inner, plc_ids, table);
+            collect_targets(inner, table);
         }
     }
 }
 
 }  // namespace
 
-std::optional<SendTarget> parse_send_target(std::string_view name,
-                                            std::span<const std::string> plc_ids) {
+std::optional<std::string> parse_send_signal(std::string_view name) {
     if (!starts_with(name, kSendPrefix)) {
         return std::nullopt;
     }
     const std::string_view rest = name.substr(kSendPrefix.size());
-    std::optional<std::uint32_t> match;
-    std::size_t match_len = 0;
-    for (std::uint32_t index = 0; index < plc_ids.size(); ++index) {
-        const std::string& plc_id = plc_ids[index];
-        if (rest.size() > plc_id.size() && starts_with(rest, plc_id) &&
-            rest[plc_id.size()] == '_' && plc_id.size() > match_len) {
-            match = index;
-            match_len = plc_id.size();
-        }
-    }
-    if (!match || rest.size() <= match_len + 1) {
+    if (rest.empty()) {
         return std::nullopt;
     }
-    return SendTarget{*match, std::string(rest.substr(match_len + 1))};
+    return std::string(rest);
 }
 
 std::expected<ValidatedSt, ValidateError> ValidatedSt::try_from(
-    StProgram program, const SignalTable& table, std::span<const std::string> plc_ids) {
+    StProgram program, const SignalTable& table, std::span<const std::string>) {
     ValidatedSt validated;
     validated.program_ = std::move(program);
-    SlotResolver resolver(validated.program_, table, plc_ids);
+    SlotResolver resolver(validated.program_, table);
     if (auto resolved = resolver.run(); !resolved) {
         return std::unexpected(resolved.error());
     }
@@ -267,7 +235,7 @@ SignalTable build_signal_table(const ResolvedTaskSpec& spec,
     }
     for (const StProgram& program : programs) {
         for (const Statement& stmt : program.statements) {
-            collect_targets(stmt, spec.plc_ids, table);
+            collect_targets(stmt, table);
         }
     }
     return table;

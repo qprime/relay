@@ -23,13 +23,7 @@ struct ValidateError {
     std::string message;
 };
 
-struct SendTarget {
-    std::uint32_t target_plc_index;
-    std::string key;
-};
-
-[[nodiscard]] std::optional<SendTarget> parse_send_target(
-    std::string_view name, std::span<const std::string> plc_ids);
+[[nodiscard]] std::optional<std::string> parse_send_signal(std::string_view name);
 
 enum class SlotKind {
     Output,
@@ -41,7 +35,6 @@ struct SlotBinding {
     std::string name;
     SlotKind kind;
     std::uint32_t signal_id;
-    std::uint32_t send_target_plc;
 };
 
 struct TimerDef {

@@ -35,11 +35,7 @@ class PlantSession:
             return {"outputs": _outputs_to_dict(outputs)}
         if method == "route_to_plcs":
             current = SimpleNamespace(**params["current"])
-            prior = (
-                SimpleNamespace(**params["prior"])
-                if params.get("prior") is not None
-                else None
-            )
+            prior = SimpleNamespace(**params["prior"]) if params.get("prior") is not None else None
             emitted = self._plant.route_to_plcs(current, prior)
             return {
                 "routed": [

@@ -58,9 +58,12 @@ def _run_cpp_verifier(resolved_path: Path, trace_path: Path, out_path: Path):
     completed = subprocess.run(
         [
             str(VERIFY_BINARY),
-            "--spec", str(resolved_path),
-            "--trace", str(trace_path),
-            "--out", str(out_path),
+            "--spec",
+            str(resolved_path),
+            "--trace",
+            str(trace_path),
+            "--out",
+            str(out_path),
         ],
         capture_output=True,
         text=True,
@@ -114,9 +117,12 @@ class TestCrossVerifierAgreement:
         subprocess.run(
             [
                 str(HOST_BINARY),
-                "--spec", str(resolved_path),
-                "--st-blocks", str(blocks_path),
-                "--out", str(trace_path),
+                "--spec",
+                str(resolved_path),
+                "--st-blocks",
+                str(blocks_path),
+                "--out",
+                str(trace_path),
             ],
             check=True,
             capture_output=True,
@@ -127,9 +133,7 @@ class TestCrossVerifierAgreement:
             trace = load_jsonl(stream)
         python_results = evaluate_all(_assertions(resolved_path), trace)
 
-        code, cpp_entries = _run_cpp_verifier(
-            resolved_path, trace_path, tmp_path / "verdict.json"
-        )
+        code, cpp_entries = _run_cpp_verifier(resolved_path, trace_path, tmp_path / "verdict.json")
         _agree(python_results, cpp_entries)
         assert code == 0
 
@@ -140,9 +144,7 @@ class TestCrossVerifierAgreement:
         resolved_path, _ = host_inputs
         with GOLDEN_TRACE.open() as stream:
             trace = load_jsonl(stream)
-        skewed = _delay_signal_activation(
-            trace, "plc_b", "belt_b_enable", delay_scans=60
-        )
+        skewed = _delay_signal_activation(trace, "plc_b", "belt_b_enable", delay_scans=60)
         trace_path = tmp_path / "skewed_trace.jsonl"
         with trace_path.open("w") as stream:
             dump_jsonl(skewed, stream)
@@ -154,9 +156,7 @@ class TestCrossVerifierAgreement:
             f"be measuring anything: {precedes[0].reason if precedes else 'absent'}"
         )
 
-        code, cpp_entries = _run_cpp_verifier(
-            resolved_path, trace_path, tmp_path / "verdict.json"
-        )
+        code, cpp_entries = _run_cpp_verifier(resolved_path, trace_path, tmp_path / "verdict.json")
         _agree(python_results, cpp_entries)
         assert code == 1, "relay_host_verify exits 1 when any assertion fails"
 
@@ -169,10 +169,14 @@ class TestCrossVerifierAgreement:
         completed = subprocess.run(
             [
                 str(HOST_BINARY),
-                "--spec", str(resolved_path),
-                "--st-blocks", str(blocks_path),
-                "--out", str(trace_path),
-                "--trace-capacity", "8",
+                "--spec",
+                str(resolved_path),
+                "--st-blocks",
+                str(blocks_path),
+                "--out",
+                str(trace_path),
+                "--trace-capacity",
+                "8",
             ],
             capture_output=True,
             text=True,
@@ -185,16 +189,17 @@ class TestCrossVerifierAgreement:
         assert "trace ring dropped" in completed.stderr
         assert trace_path.exists(), "the partial trace is still written"
 
-    def test_verify_binary_rejects_a_missing_trace_with_exit_two(
-        self, host_inputs, tmp_path
-    ):
+    def test_verify_binary_rejects_a_missing_trace_with_exit_two(self, host_inputs, tmp_path):
         resolved_path, _ = host_inputs
         completed = subprocess.run(
             [
                 str(VERIFY_BINARY),
-                "--spec", str(resolved_path),
-                "--trace", str(tmp_path / "absent.jsonl"),
-                "--out", str(tmp_path / "verdict.json"),
+                "--spec",
+                str(resolved_path),
+                "--trace",
+                str(tmp_path / "absent.jsonl"),
+                "--out",
+                str(tmp_path / "verdict.json"),
             ],
             capture_output=True,
             text=True,

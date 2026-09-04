@@ -106,9 +106,7 @@ class TestTagStrategy:
         )
 
     def test_signals_reads_the_passed_block_not_self(self):
-        block = {
-            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]
-        }
+        block = {"tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_b"]}]}
         strat = TagStrategy()
         assert strat.signals(block) == (
             CommSignal(name="x", produced_by="plc_a", consumed_by=("plc_b",)),
@@ -123,9 +121,7 @@ class TestAddressStrategy:
     def test_signals_projects_registers(self):
         block = _address_block()
         assert AddressStrategy().signals(block) == (
-            CommSignal(
-                name="handoff_signal", produced_by="plc_a", consumed_by=("plc_b",)
-            ),
+            CommSignal(name="handoff_signal", produced_by="plc_a", consumed_by=("plc_b",)),
         )
 
     def test_rejects_missing_registers_block(self):
@@ -170,9 +166,7 @@ class TestAddressStrategy:
         assert any("address must be an integer" in i for i in issues), issues
 
     def test_rejects_duplicate_table_address_pair(self):
-        block = _address_block(
-            _register(), _register(name="other_signal")
-        )
+        block = _address_block(_register(), _register(name="other_signal"))
         issues = AddressStrategy().validate_config(block, _spec())
         assert any("another entry already binds" in i for i in issues), issues
 
@@ -187,9 +181,7 @@ class TestAddressTableRules:
     def _table_issues(self, table: str) -> list[str]:
         block = _address_block(_register(table=table))
         return [
-            issue
-            for issue in AddressStrategy().validate_config(block, _spec())
-            if "table" in issue
+            issue for issue in AddressStrategy().validate_config(block, _spec()) if "table" in issue
         ]
 
     def test_discrete_input_rejected_as_read_only(self):
@@ -243,9 +235,7 @@ class TestRegisterBindings:
             _register(name="bool_address", address=True),
             _register(name="ok", address=3),
         )
-        assert AddressStrategy().bindings(block) == {
-            "ok": RegisterBinding(table="coil", address=3)
-        }
+        assert AddressStrategy().bindings(block) == {"ok": RegisterBinding(table="coil", address=3)}
 
     def test_bindings_read_the_passed_block_not_self(self):
         block = {"registers": [_register()]}
@@ -266,9 +256,7 @@ class TestStrategyRegistry:
             get_comm_strategy("nonsense")
 
     def test_resolved_strategy_validates_the_passed_block(self):
-        block = {
-            "tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_z"]}]
-        }
+        block = {"tags": [{"name": "x", "produced_by": "plc_a", "consumed_by": ["plc_z"]}]}
         strat = get_comm_strategy("tag")
         issues = strat.validate_config(block, _spec())
         assert any("plc_z" in i for i in issues), issues

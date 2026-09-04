@@ -145,9 +145,7 @@ async def handle_client(
         writer.close()
 
 
-async def serve(
-    spec_path: Path, host: str, port: int, unit_id: int, log_path: Path | None
-) -> None:
+async def serve(spec_path: Path, host: str, port: int, unit_id: int, log_path: Path | None) -> None:
     addresses = coil_addresses(spec_path)
     log = log_path.open("w") if log_path is not None else None
     run_over = asyncio.Event()

@@ -42,6 +42,10 @@ class SendRecord:
 
     count: int
     value: Any
+    can_id: int | None = None
+    frame_bits: int | None = None
+    arbitration_start_ms: float | None = None
+    completion_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -71,7 +75,4 @@ class TraceLog:
         return [r for r in self.records if r.plc_id == plc_id]
 
     def values_at(self, plc_id: str, key: str) -> list[tuple[float, Any]]:
-        return [
-            (r.clock.elapsed_ms, r.outputs.get(key))
-            for r in self.for_plc(plc_id)
-        ]
+        return [(r.clock.elapsed_ms, r.outputs.get(key)) for r in self.for_plc(plc_id)]

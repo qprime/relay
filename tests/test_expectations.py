@@ -17,8 +17,7 @@ PULSE_SPEC = REPO_ROOT / "specs" / "conveyor_pulse_release.yaml"
 def _without_witnesses(artifact: dict) -> dict:
     stripped = {k: v for k, v in artifact.items() if k != "assertions"}
     stripped["assertions"] = [
-        {k: v for k, v in entry.items() if k != "witness"}
-        for entry in artifact["assertions"]
+        {k: v for k, v in entry.items() if k != "witness"} for entry in artifact["assertions"]
     ]
     return stripped
 
@@ -96,9 +95,7 @@ class TestDuplicateSystemName:
         }
         assert {p.name for p in out_dir.iterdir()} == {p.name for p in written}
 
-    def test_main_reports_collision_without_a_traceback(
-        self, tmp_path, monkeypatch, capsys
-    ):
+    def test_main_reports_collision_without_a_traceback(self, tmp_path, monkeypatch, capsys):
         self._stage(
             tmp_path,
             monkeypatch,

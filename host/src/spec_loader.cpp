@@ -2,6 +2,9 @@
 
 #include <fstream>
 #include <sstream>
+#include <algorithm>
+#include <climits>
+#include <set>
 
 #include <nlohmann/json.hpp>
 
@@ -112,12 +115,29 @@ std::expected<ResolvedTaskSpec, LoadError> try_load(const std::filesystem::path&
     auto strategy = require_string(comm, "strategy", path);
     if (!strategy) return std::unexpected(strategy.error());
     spec.comm.strategy = *strategy;
+    if (!comm.contains("transport") || !comm["transport"].is_object()) {
+        return fail(path, "field 'comm.transport' must be an object");
+    }
+    const json& transport = comm["transport"];
+    auto transport_kind = require_string(transport, "kind", path);
+    if (!transport_kind) return std::unexpected(transport_kind.error());
+    spec.comm.transport.kind = *transport_kind;
+    if (transport.contains("baud_rate")) {
+        if (!transport["baud_rate"].is_number_unsigned() ||
+            transport["baud_rate"].get<std::uint64_t>() == 0 ||
+            transport["baud_rate"].get<std::uint64_t>() > UINT32_MAX) {
+            return fail(path, "field 'comm.transport.baud_rate' must be a positive integer");
+        }
+        spec.comm.transport.baud_rate = transport["baud_rate"].get<std::uint32_t>();
+    }
     if (!comm.contains("signals") || !comm["signals"].is_array()) {
         return fail(path, "field 'comm.signals' must be an array, got " +
                               (comm.contains("signals")
                                    ? std::string(comm["signals"].type_name())
                                    : std::string("nothing")));
     }
+    std::set<std::string> signal_names;
+    std::set<std::uint16_t> can_ids;
     for (const json& signal : comm["signals"]) {
         if (!signal.is_object()) {
             return fail(path, "field 'comm.signals' entries must be objects");
@@ -126,12 +146,39 @@ std::expected<ResolvedTaskSpec, LoadError> try_load(const std::filesystem::path&
         auto name = require_string(signal, "name", path);
         if (!name) return std::unexpected(name.error());
         resolved.name = *name;
+        if (!signal_names.insert(resolved.name).second) {
+            return fail(path, "comm signal name '" + resolved.name + "' is duplicated");
+        }
         auto produced_by = require_string(signal, "produced_by", path);
         if (!produced_by) return std::unexpected(produced_by.error());
         resolved.produced_by = *produced_by;
+        if (std::find(spec.plc_ids.begin(), spec.plc_ids.end(), resolved.produced_by) ==
+            spec.plc_ids.end()) {
+            return fail(path, "comm signal '" + resolved.name +
+                                  "' has unknown produced_by '" + resolved.produced_by + "'");
+        }
         auto consumed_by = require_string_array(signal, "consumed_by", path);
         if (!consumed_by) return std::unexpected(consumed_by.error());
         resolved.consumed_by = *consumed_by;
+        if (resolved.consumed_by.empty()) {
+            return fail(path, "comm signal '" + resolved.name + "' consumed_by must be non-empty");
+        }
+        std::set<std::string> consumers;
+        for (const std::string& consumer : resolved.consumed_by) {
+            if (consumer == resolved.produced_by) {
+                return fail(path, "comm signal '" + resolved.name +
+                                      "' producer cannot consume its own signal");
+            }
+            if (std::find(spec.plc_ids.begin(), spec.plc_ids.end(), consumer) ==
+                spec.plc_ids.end()) {
+                return fail(path, "comm signal '" + resolved.name +
+                                      "' has unknown consumer '" + consumer + "'");
+            }
+            if (!consumers.insert(consumer).second) {
+                return fail(path, "comm signal '" + resolved.name +
+                                      "' duplicates consumer '" + consumer + "'");
+            }
+        }
         const bool has_table = signal.contains("table");
         const bool has_address = signal.contains("address");
         if (has_table != has_address) {
@@ -154,7 +201,30 @@ std::expected<ResolvedTaskSpec, LoadError> try_load(const std::filesystem::path&
             resolved.table = *table;
             resolved.address = signal["address"].get<std::uint32_t>();
         }
+        if (signal.contains("can_id")) {
+            if (!signal["can_id"].is_number_unsigned() ||
+                signal["can_id"].get<std::uint64_t>() > 0x7ff) {
+                return fail(path, "comm signal '" + resolved.name +
+                                      "' field 'can_id' must be an integer in [0, 2047]");
+            }
+            resolved.can_id = signal["can_id"].get<std::uint16_t>();
+            if (!can_ids.insert(*resolved.can_id).second) {
+                return fail(path, "comm signal '" + resolved.name +
+                                      "' duplicates can_id " +
+                                      std::to_string(*resolved.can_id));
+            }
+        }
         spec.comm.signals.push_back(std::move(resolved));
+    }
+    if (spec.comm.transport.kind == "can") {
+        if (!spec.comm.transport.baud_rate) {
+            return fail(path, "CAN transport requires field 'comm.transport.baud_rate'");
+        }
+        for (const ResolvedSignal& signal : spec.comm.signals) {
+            if (!signal.can_id) {
+                return fail(path, "CAN comm signal '" + signal.name + "' requires can_id");
+            }
+        }
     }
 
     if (!root.contains("plant") || !root["plant"].is_object()) {

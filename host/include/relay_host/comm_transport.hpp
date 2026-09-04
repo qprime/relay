@@ -8,7 +8,10 @@
 
 #include "relay_host/async.hpp"
 #include "relay_host/comm_bus.hpp"
+#include "relay_host/clock.hpp"
 #include "relay_host/io_image.hpp"
+#include "relay_host/signal_table.hpp"
+#include "relay_host/spec_loader.hpp"
 
 namespace relay_host {
 
@@ -25,27 +28,29 @@ struct PolledValue {
 
 template <typename T>
 concept CommTransport = requires(T transport, const OutgoingMessage& message,
-                                 std::uint32_t plc_index) {
+                                 std::uint32_t plc_index, SimClock clock) {
     {
-        transport.emit(message)
+        transport.emit(message, clock)
     } -> std::same_as<asio::awaitable<std::expected<void, TransportError>>>;
     {
-        transport.poll(plc_index)
+        transport.poll(plc_index, clock)
     } -> std::same_as<
         asio::awaitable<std::expected<std::vector<PolledValue>, TransportError>>>;
 };
 
 class InProcessTransport {
  public:
-    explicit InProcessTransport(CommBus* bus) noexcept;
+    InProcessTransport(CommBus* bus, const ResolvedTaskSpec& spec,
+                       const SignalTable& table);
 
     [[nodiscard]] asio::awaitable<std::expected<void, TransportError>> emit(
-        const OutgoingMessage& message);
+        const OutgoingMessage& message, SimClock clock);
     [[nodiscard]] asio::awaitable<std::expected<std::vector<PolledValue>, TransportError>>
-    poll(std::uint32_t plc_index);
+    poll(std::uint32_t plc_index, SimClock clock);
 
  private:
     CommBus* bus_;
+    std::vector<std::vector<std::uint32_t>> consumers_;
 };
 
 static_assert(CommTransport<InProcessTransport>);

@@ -168,9 +168,7 @@ class TestVerdictFormat:
         assert document["counts"] == {"total": 0, "passed": 0, "failed": 0}
 
     def test_counts_match_results(self):
-        document = json.loads(
-            _dump_to_text([_result(), _result(passed=False), _result()])
-        )
+        document = json.loads(_dump_to_text([_result(), _result(passed=False), _result()]))
         assert document["counts"] == {"total": 3, "passed": 2, "failed": 1}
 
     def test_every_result_has_six_keys(self):
@@ -318,9 +316,7 @@ class TestVerdictLoadGuards:
         assert loaded == [_entry(attribution=_attribution_dict())]
 
     def test_guard_failure_names_the_result_index(self):
-        text = json.dumps(
-            {"results": [_entry(), _entry(passed="yes")], "passed": True}
-        )
+        text = json.dumps({"results": [_entry(), _entry(passed="yes")], "passed": True})
         with pytest.raises(ValueError) as exc:
             _load_from_text(text)
         assert "results[1]" in str(exc.value)
@@ -376,9 +372,7 @@ class TestVerdictIOErrors:
         assert "results" in str(exc.value)
 
     def test_missing_required_key_raises_naming_key_and_index(self):
-        text = json.dumps(
-            {"results": [{"assertion": "x", "passed": True}], "passed": True}
-        )
+        text = json.dumps({"results": [{"assertion": "x", "passed": True}], "passed": True})
         with pytest.raises(KeyError) as exc:
             _load_from_text(text)
         assert "reason" in str(exc.value)
