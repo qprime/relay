@@ -99,6 +99,7 @@ add_executable(relay_host_tests
     tests/test_st_eval.cpp
     tests/test_comm_bus.cpp
     tests/test_can_codec.cpp
+    tests/test_can_transport.cpp
     tests/test_comm_strategy.cpp
     tests/test_modbus_codec.cpp
     tests/test_modbus_transport.cpp

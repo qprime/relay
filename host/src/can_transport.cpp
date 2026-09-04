@@ -81,6 +81,9 @@ CanTransport::poll(std::uint32_t plc_index, SimClock clock) {
         const auto earliest = std::min_element(pending_.begin(), pending_.end(),
             [](const Frame& a, const Frame& b) { return a.ready_ps < b.ready_ps; })->ready_ps;
         const std::uint64_t start = std::max(available_ps_, earliest);
+        // A poll at T may run between PLC coroutines that will all emit at T.
+        // Wait until logical time advances so every same-instant contender is queued.
+        if (start >= limit) break;
         auto winner = pending_.end();
         for (auto it = pending_.begin(); it != pending_.end(); ++it) {
             if (it->ready_ps > start) continue;
@@ -103,11 +106,16 @@ CanTransport::poll(std::uint32_t plc_index, SimClock clock) {
         pending_.erase(winner);
     }
     std::vector<Delivery>& ready = deliveries_.at(plc_index);
+    std::vector<Delivery> future;
     for (const Delivery& delivery : ready) {
-        result.push_back(PolledValue{delivery.message.signal_id, delivery.message.value,
-                                     delivery.message.sender_plc, delivery.message.seq});
+        if (delivery.completion_ps <= limit) {
+            result.push_back(PolledValue{delivery.message.signal_id, delivery.message.value,
+                                         delivery.message.sender_plc, delivery.message.seq});
+        } else {
+            future.push_back(delivery);
+        }
     }
-    ready.clear();
+    ready = std::move(future);
     co_return result;
 }
 
